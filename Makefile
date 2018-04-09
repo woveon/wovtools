@@ -1,7 +1,7 @@
 
 
 BINS=wov-env wov-stagecompare wov-env wov-build wov-compile \
-		 wov-push-check wov-push-containers
+		 wov-push-check wov-push-containers wov-push-env wov-push-secrets
 
 install : 
 

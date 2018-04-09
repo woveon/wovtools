@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+DOFORCE=0
+FOLD=80
+
+# --------------------------------------------------------------------- 
+# Import Env 
+# --------------------------------------------------------------------- 
+pushenvargs=( "$@" )
+set ""
+. wov-env
+. wov-stagecompare
+set -- "${pushenvargs[@]}"
+#set -x
+
+
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Copies the env files (conf and k8s), into an Archive, from which we can deploy. This works with pushing secrets and containers into the Archive (which is actually several storage mediusm).
+
+  -f : force push
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-f" ]; then
+    shift
+    DOFORCE=1
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+ARCHBASE=${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}
+
+#echo "ECHO: aws s3 sync ${WOV_BASEDIR}/wovtools/cache/k8s  ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s  --delete"
+aws s3 sync ${WOV_BASEDIR}/wovtools/cache/k8s  ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s  --delete
+
+#echo "ECHO: aws s3 sync ${WOV_BASEDIR}/wovtools/cache/conf ${WOV_ARCHIVEENV}/${ARCHBASE}/conf --delete"
+aws s3 sync ${WOV_BASEDIR}/wovtools/cache/conf ${WOV_ARCHIVEENV}/${ARCHBASE}/conf --delete
+
