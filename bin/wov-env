@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+
+WOV_VERSION=0
+WOV_BASEDIR=$(git rev-parse --show-toplevel)
+export WOV_BASEDIR
+
+if [ "$WOV_BASEDIR" == "" ]; then
+  echo "ERROR: not in wovtools project."
+  exit 1
+elif [ ! -e "$WOV_BASEDIR/wovtools" ]; then
+  echo "ERROR: not in wovtools project."
+  exit 1
+fi
+
+# TODO: optimize so that only certain variables are grabbed, as they are asked for
+
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+  Export the context as variables for scripts or export specific variables.
+
+  -e           : echo the output
+  --var X      : only operate on this variable X
+  -h/--help    : display these options
+  -v/--version : version of wovtools
+
+Example Usage:
+  `basename $0`    : sets all environment variables
+  `basename $0` -e : set and echo all environment variables
+  `basename $0` --var X : set the env variable
+  `basename $0` -e --var X : set and echo the env variable
+
+EOF
+}
+
+
+
+ECHOMODE=0
+DOALL=1
+
+# Standard Bash breakdown of context
+K8S_CONTEXT=$(kubectl config current-context)
+OLDIFS=$IFS
+IFS='-'
+array=( $K8S_CONTEXT )
+IFS=$OLDIFS
+#echo "value = ${array[2]}"
+#echo ${array[*]}
+WOV_KSTAGE=${array[5]}
+WOV_AIM=${array[4]}
+WOV_NS=${WOV_AIM}-${WOV_KSTAGE}
+export WOV_BASEDIR
+WOV_FLAVOR=${array[3]}
+WOV_REGION=${array[2]}
+WOV_PROVIDER=${array[1]}
+WOV_CLTYPE=${array[0]}
+WOV_CLUSTER=${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}
+
+# vars from git, if in project directory
+if [ -e "${WOV_BASEDIR}/wovtools/config.json" ]; then
+  RANGIT=1
+  WOV_PVER=$(git rev-list --count $(git rev-parse --abbrev-ref HEAD))
+  WOV_SVER=$(cd ${WOV_BASEDIR}/wovtools/secrets && git rev-list --count $(git rev-parse --abbrev-ref HEAD))
+  # WOV_USER=$(git config user.email | cut -d@ -f1)
+  WOV_USERNAME=$(git config user.name)
+  WOV_USEREMAIL=$(git config user.email)
+  export WOV_PVER
+  export WOV_SVER
+#  export WOV_USER
+  export WOV_USERNAME
+  export WOV_USEREMAIL
+
+  # TODO:  optimize the jq calls into one, returning an array
+  #A=( `jq -r ". | ( .rootdir, .srcdir, .secretsdir, .compileddir, .containerdir, .registry, .wovtools )" ${dir_wovtools_rc}/.wovtools.json` )
+  #echo "A:${A[*]}:A"
+  #dir_root="${A[0]}"
+
+  WOV_PROJECT=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.project') 
+  WOV_PROJECTTYPE=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.type') 
+  WOV_PROJECTTITLE=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.title') 
+  WOV_PROJECTDESCRIPTION=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.description') 
+  export WOV_PROJECT
+  export WOV_PROJECTTYPE
+  export WOV_PROJECTTITLE
+  export WOV_PROJECTDESCRIPTION
+
+  WOV_GSTAGE=$(git rev-parse --abbrev-ref HEAD)
+  WOV_STAGE=$WOV_GSTAGE
+  export WOV_GSTAGE
+  export WOV_STAGE
+fi
+
+export K8S_CONTEXT
+export WOV_CLUSTER
+export WOV_NS
+export WOV_CLTYPE
+export WOV_PROVIDER
+export WOV_REGION
+export WOV_FLAVOR
+export WOV_AIM 
+export WOV_KSTAGE
+
+# --------------------------------------------------------------------- 
+# Functions
+# --------------------------------------------------------------------- 
+
+function fDoEcho() 
+{
+  echo WOV_BASEDIR="${WOV_BASEDIR}"
+  echo K8S_CONTEXT="$K8S_CONTEXT"
+  echo WOV_CLUSTER="$WOV_CLUSTER"
+  echo WOV_NS="$WOV_NS"
+  echo WOV_CLTYPE="$WOV_CLTYPE"
+  echo WOV_PROVIDER="$WOV_PROVIDER"
+  echo WOV_REGION="$WOV_REGION"
+  echo WOV_FLAVOR="$WOV_FLAVOR"
+  echo WOV_AIM="$WOV_AIM"
+  echo WOV_KSTAGE="$WOV_KSTAGE"
+  if [ "$RANGIT" == "1" ]; then
+    echo WOV_GSTAGE="$WOV_GSTAGE"
+    echo WOV_STAGE="$WOV_STAGE"
+  fi
+  if [ "$RANCLUSTER" == "1" ]; then
+    echo CL_REGION="$CL_REGION"
+    echo CL_ZONES="${CL_ZONES}"
+  fi
+  if [ "$RANGIT" == "1" ]; then
+    echo WOV_PVER="$WOV_PVER"
+    echo WOV_SVER="$WOV_SVER"
+#    echo WOV_USER="$WOV_USER"
+    echo WOV_USERNAME="$WOV_USERNAME"
+    echo WOV_USEREMAIL="$WOV_USEREMAIL"
+    echo WOV_PROJECT="$WOV_PROJECT"
+    echo WOV_PROJECTTYPE="$WOV_PROJECTTYPE"
+    echo WOV_PROJECTTITLE="$WOV_PROJECTTITLE"
+    echo WOV_PROJECTDESCRIPTION="$WOV_PROJECTDESCRIPTION"
+  fi
+}
+
+# TODO: fill this function in, and remove from WIAAS
+function fDoCluster()
+{
+  RANCLUSTER=1
+  CL_REGION=`wovtools --rcAWS ${WOV_REGION}`
+  CL_ZONES="c d"
+  export CL_REGION
+  export CL_ZONES
+}
+
+
+# --------------------------------------------------------------------- 
+# Command line processing
+while [[ $1 =~ ^- ]]; do
+  if [ "$1" == '-e' ] || [ "$1" == '--echo' ]; then
+    ECHOMODE=1
+  elif [ "$1" == '-c' ] || [ "$1" == '--cluster' ]; then
+    fDoCluster
+  elif [ "$1" == '--var' ]; then
+    shift 
+    if [ "$ECHOMODE" == "1" ]; then
+      echo "$1=${!1}"
+    else
+      echo ${!1}
+    fi
+    DOALL=0
+  elif [ "$1" == '-v' ] || [ "$1" == '--version' ]; then
+    echo $WOV_VERSION
+  elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
+    fDisplayOptions
+    exit 0
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    exit 1
+  fi
+  shift
+done
+
+# if user never asked to show any individual variables, show all
+if [ "$DOALL" == "1" ] && [ "$ECHOMODE" == "1" ]; then
+  fDoEcho
+fi

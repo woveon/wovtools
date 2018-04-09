@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+. ./testutil.sh
+
+TestSetEcho
+
+bash ./wov-env.test

@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+
+compileargs=( "$@" )
+set ""
+. wov-env
+set -- "${compileargs[@]}"
+
+#set -x
+
+SED=sed
+if [ "`uname`" == "Darwin" ]; then
+  SED=`which gsed`
+  if [ $? -ne 0 ]; then
+    echo 
+    echo "ERROR: gsed needs to be installed with Homebrew as MacOS's sed is non-standard."
+    echo
+    echo "  `brew install gnu-sed`"
+    echo
+  fi
+fi
+
+VERBOSE=0
+#SCF=$WOVT_CONF_SECRETS/.tmp
+SCF=
+TEMPLATEFILE=
+CMTCHR='//'
+CMT_PRE=""
+CMT_POST=""
+WARNINGLINE=1   # line number to insert message
+
+alloptions=$*
+
+fDisplayOptions()
+{
+  echo 
+  echo "Usage : `basename $0` [-v] [-h|--help] [comment_character] secret_file template_file"
+  echo
+  echo "   This is a simple handlebars running script, with some headings."
+  echo
+}
+
+showverbose() 
+{
+  echo
+  echo " Secret file      : '$SCF'"
+  echo " Template file    : '$TEMPLATEFILE'"
+  echo " Temp file        : '$TMPFILE'"
+  echo " Comment character: '$CMTCHR'"
+  echo " Comment pre      : '$CMT_PRE'"
+  echo " Comment post     : '$CMT_POST'"
+  echo " Warning Line     :  $WARNINGLINE "
+  echo " Verbose          :  $VERBOSE"
+  echo " SED              :  $SED"
+  echo
+}
+
+
+# Manage all arguments starting with '-'
+# NOTE: currently, these are overwritten by file extension... bummer... need to swap order
+while [[ $1 =~ ^- ]]; do
+  echo "param '$1'"
+  if [ "$1" == "-v" ]; then
+    VERBOSE=1
+    shift
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+  elif [ "$1" == "--cmt-pre" ]; then
+    shift
+    CMT_PRE="$1"
+    shift
+  elif [ "$1" == "--cmt-post" ]; then
+    shift
+    CMT_POST="$1"
+    shift
+  elif [ "$1" == "-l" ]; then
+    shift
+    WARNINGLINE=$1
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+# Handle non switch arguments
+#echo "SDF $#"
+if [ "$#" != "2" ] ;
+then
+  echo
+  echo "$#"
+  echo "$*"
+  echo "ERROR: Bad params to '$0'"
+  echo
+  fDisplayOptions
+  exit 1
+fi
+
+SCF=$1
+TEMPLATEFILE=$2
+TMPFILE=${WOV_BASEDIR}/wovtools/cache/.$(basename ${TEMPLATEFILE}).$$
+
+
+
+# --------------------------------------------------------------------- 
+# Handle files by suffix type ex. app.ini.hhandlebars, use 'ini'
+TEMPLATEFILE_SANSSUFFIX=${TEMPLATEFILE%.wov}
+TEMPLATEFILE_REALSUFFIX=${TEMPLATEFILE_SANSSUFFIX##*.}
+case $TEMPLATEFILE_REALSUFFIX in 
+  ini) 
+    CMTCHR=";"
+    ;;
+  html)
+    CMT_PRE="<!--"
+    CMT_POST="-->"
+    WARNINGLINE=2
+    ;;
+  yaml)
+    CMTCHR="#"
+    ;;
+  js)
+    CMTCHR="//"
+    ;;
+  [cs]k8s)
+    CMTCHR="#"
+    ;;
+  mk)
+    CMTCHR="#"
+    ;;
+  sh)
+    CMTCHR="#"
+    ;;
+  inc)
+    CMTCHR="#"
+    ;;
+esac
+    
+
+
+[ "$VERBOSE" == "1" ] && showverbose
+
+
+WARNING="$CMT_PRE\
+$CMTCHR ---------------------------------------------------------------------\n\
+$CMTCHR  WARNING: AUTOMATICALLY GENERATED CONFIG FILE\n\
+$CMTCHR    If you edit this, it will be overwritten. Edit the Template file.\n\
+$CMTCHR ---------------------------------------------------------------------\n$CMT_POST\n"
+
+
+rm -Rf $TMPFILE
+touch $TMPFILE
+chmod 600 $TMPFILE
+SEDCMD=''$WARNINGLINE"i$WARNING"
+
+# 1stpass (stage)
+#echo "ECHO: handlebars $SCF  < $TEMPLATEFILE  >> $TMPFILE"
+handlebars $SCF  < $TEMPLATEFILE  >> $TMPFILE
+
+# 2ndpass
+#echo "ECHO: handlebars $SCF  < $TMPFILE  | $SED \"$SEDCMD\""
+handlebars $SCF  < $TMPFILE  | $SED "$SEDCMD"
+
+rm $TMPFILE
