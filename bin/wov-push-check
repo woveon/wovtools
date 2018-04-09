@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+
+# grab it if not defined
+if [ "${WOV_BASEDIR}" == "" ]; then
+  WOV_BASEDIR=$(git rev-parse --show-toplevel)
+fi
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Check that all git files are checked in, regular and secret.
+
+  -q : quiet, no output
+  -v : verbose output
+
+EOF
+}
+
+
+#git diff-index --quiet HEAD || echo "local diffs" && echo "no local diffs"
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+# check current repo
+if [ "$(git status -s)" != "" ]; then
+  if [ "$DOECHO" == "1" ]; then
+    echo "WARNING: failed code/env push-check. Check in your archive."
+  elif [ "$DOECHO" == "2" ]; then
+    echo "WARNING: failed code/env push-check. Check in your archive."
+    git status
+  fi
+  exit 1
+else
+  if [ "$DOECHO" == "2" ]; then
+    echo "SUCCESS: wov-push-check code/env"
+  fi
+fi
+
+
+# check secrets repo
+if [ "$(cd ${WOV_BASEDIR}/wovtools/secrets && git status -s)" != "" ]; then
+  if [ "$DOECHO" == "1" ]; then
+    echo "WARNING: failed secrets push-check. Check in your secrets archives."
+  elif [ "$DOECHO" == "2" ]; then
+    echo "WARNING: failed secrets push-check. Check in your secrets archives."
+    cd ${WOV_BASEDIR}/wovtools/secrets && git status
+  fi
+  exit 1
+else
+  if [ "$DOECHO" == "2" ]; then
+    echo "SUCCESS: wov-push-check secrets"
+  fi
+fi
+

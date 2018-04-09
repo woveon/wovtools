@@ -1,6 +1,6 @@
 
 
-BINS=wov-env wov-stagecompare wov-env wov-build wov-compile
+BINS=wov-env wov-stagecompare wov-env wov-build wov-compile wov-push-check
 
 install : 
 
