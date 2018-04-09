@@ -31,7 +31,7 @@ usage: `basename $0` [options]
 Builds the environment information of a WovTools distribution. Specifically, the environment variables and K8s ConfigMap and Secrets.
 
   -s  : build the secret file
-  -e  : build the environment files
+  -e  : build the environment files (-s assumed)
 
 EOF
 }
@@ -63,7 +63,7 @@ function fBuildSecret()
   # Build secret file
   # --------------------------------------------------------------------- 
   mkdir -p ${SECRET_CACHE_DIR}
-  echo "SECRETFILE=${SECRETFILE}"
+  if [ "$DOECHO" == "2" ]; then echo "SECRETFILE=${SECRETFILE}"; fi
   cat > ${SECRETFILE} <<EOF
 {
   "CONTEXT"  : "${K8S_CONTEXT}",
@@ -98,7 +98,7 @@ EOF
 
   # merge files in order
   for sf in ${SECRETFILES[*]}; do
-    if [ "$DOECHO" == "1" ]; then echo "  ... adding secret file $sf"; fi
+    if [ "$DOECHO" == "2" ]; then echo "  ... adding secret file $sf"; fi
     jq -s ".[0] * .[1]" ${SECRETFILE} ${WOV_BASEDIR}/wovtools/secrets/$sf >> ${SECRETFILE}.1
     mv ${SECRETFILE}.1 ${SECRETFILE}
   done
@@ -113,10 +113,14 @@ EOF
   fi
 
 
-
   # mark as secret being updated
   HAS_SECRET=1
-#  echo "SECRETDIFF=${SECRETDIFF}"
+
+  if [ "$DOECHO" == "2" ]; then 
+    echo "SECRETDIFF=${SECRETDIFF}"; 
+  elif [ "$DOECHO" == "1" ] && [ "$SECRETDIFF" == "1" ]; then 
+    echo "SECRETDIFF=${SECRETDIFF}"
+  fi
 }
 
 
@@ -161,12 +165,12 @@ fBuildEnvDir()
 
     # check if need to compile
     if [ "${SRC}" -nt "${DEST}" ] || [ "$SECRETDIFF" == "1" ]; then
-      if [ "$DOECHO" == "1" ]; then echo "  ... build ${SRC}"; fi
+      if [ "$DOECHO" == "1" ] || [ "$DOECHO" == "2" ]; then echo "  ... build ${SRC}"; fi
       #echo " --- `basename ${DEST}` needs to be built"
-      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
+#      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
       wov-compile ${SECRETFILE} ${SRC} > ${DEST}
-#    else
-      # echo " --- `basename ${DEST}` does not need to be built"
+    else
+      if [ "$DOECHO" == "2" ]; then echo "  ... skipping ${SRC}"; fi
     fi
   done
 }
@@ -182,6 +186,10 @@ while [[ $1 =~ ^- ]]; do
   if [ "$1" == "-q" ]; then
     shift
     DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
 
   elif [ "$1" == "-s" ]; then
     shift
