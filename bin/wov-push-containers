@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+DOFORCE=0
+FOLD=80
+
+# --------------------------------------------------------------------- 
+# Import Env 
+# --------------------------------------------------------------------- 
+pushcontainersargs=( "$@" )
+set ""
+. wov-env
+. wov-stagecompare
+set -- "${pushcontainersargs[@]}"
+#set -x
+
+
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function fDisplayOptions()
+{ 
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Runs the recipe scripts and if there is a change, build the containers.
+
+  -f : force build
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-f" ]; then
+    shift
+    DOFORCE=1
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+
+
+
+# Find the recipes
+RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers; ls *.sh)
+
+
+# Build containers if needed
+for f in ${RECIPES}; do
+
+  SRCDIR=${WOV_BASEDIR}
+  DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${f%.sh}
+  ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${f%.sh}
+  CONTAINER=${WOV_PROJECT}-${WOV_AIM}${f%.sh}
+#  echo "CONTAINER=${CONTAINER}"
+#  echo "SRCDIR=${SRCDIR}"
+#  echo "DESTDIR=${DESTDIR} # more like a 'content' dir as this is all copied in here"
+#  echo "ARCHDIR=${ARCHDIR} # location of archive of DESTDIR"
+
+  # build the content in wovtools/cache/containers/$f
+  mkdir -p ${DESTDIR}
+  echo "  ... recipe $f"
+  cd ${WOV_BASEDIR} && SRCDIR=${SRCDIR} DESTDIR=${DESTDIR} ${WOV_BASEDIR}/wovtools/containers/$f
+
+  # determine if need to build container
+  NEEDSBUILD=0
+
+  if [ "$(docker images -q ${CONTAINER})" == "" ]; then 
+    docker images -q ${CONTAINER}
+    echo "    ... no existing container, building"
+    NEEDSBUILD=1
+
+  elif [ ! -e ${ARCHDIR} ]; then 
+    echo "    ... no ${ARCHDIR}, building"
+    NEEDSBUILD=1; 
+
+  elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then 
+    echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"
+    NEEDSBUILD=1; 
+  fi
+
+  # do actions 
+  if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then
+
+    echo "    ... creating container '${CONTAINER}'"
+    docker build -f ${DESTDIR}/Dockerfile -t ${CONTAINER}:latest ${DESTDIR} || exit 1
+
+    echo "    ... archiving build of container '${CONTAINER}'"
+    mkdir -p ${ARCHDIR}
+    rsync -ai --delete ${DESTDIR}/ ${ARCHDIR} &> /dev/null
+
+    echo "    ... tag and push to repo"
+    docker tag ${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
+
+    echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+    docker push ${WOV_ARCHIVEREPOSITORY}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 
+
+  else
+    echo "    ... skipping build of container '${CONTAINER}'"
+  fi
+
+
+done
+
+

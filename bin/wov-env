@@ -88,6 +88,9 @@ if [ -e "${WOV_BASEDIR}/wovtools/config.json" ]; then
   export WOV_PROJECTTITLE
   export WOV_PROJECTDESCRIPTION
 
+  WOV_ARCHIVEREPOSITORY=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.archive.repository') 
+  export WOV_ARCHIVEREPOSITORY
+
   WOV_GSTAGE=$(git rev-parse --abbrev-ref HEAD)
   WOV_STAGE=$WOV_GSTAGE
   export WOV_GSTAGE
@@ -111,6 +114,7 @@ export WOV_KSTAGE
 function fDoEcho() 
 {
   echo WOV_BASEDIR="${WOV_BASEDIR}"
+  echo WOV_ARCHIVEREPOSITORY="${WOV_ARCHIVEREPOSITORY}"
   echo K8S_CONTEXT="$K8S_CONTEXT"
   echo WOV_CLUSTER="$WOV_CLUSTER"
   echo WOV_NS="$WOV_NS"
