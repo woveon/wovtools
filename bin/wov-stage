@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+DOFORCE=0
+FOLD=80
+
+
+# --------------------------------------------------------------------- 
+# Import Env 
+# --------------------------------------------------------------------- 
+wovstageargs=( "$@" )
+set ""
+. wov-env
+. wov-stagecompare
+set -- "${wovstageargs[@]}"
+
+
+#set -x
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{ 
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options] stage
+
+Push the WovTools system to a new stage. This involves changing the git branch and Kubernetes context. Fails if either switches do not work. Can leave system in an error state.
+
+  stage - name of the stage to switch to. Predefined stages are 'dev' and 'prod'.
+
+  -f : force push
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-f" ]; then
+    shift
+    DOFORCE=1
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+if [ "$#" != "1" ]; then
+  echo 
+  echo 
+  echo "ERROR: bad number of arguments."
+  echo 
+  fDisplayOptions
+  exit 1
+fi
+
+NEWSTAGE=$1
+
+
+# echo "NEWSTAGE: ${NEWSTAGE}"
+
+
+if [ ${DOECHO} -ge 2 ]; then echo "... checking for Kubernetes namespace '${WOV_AIM}-${NEWSTAGE}'."; fi
+FAILURE=0
+ISNS=$(kubectl get namespaces --no-headers=true ${WOV_AIM}-${NEWSTAGE} &> /dev/null ; echo "$?")
+# echo "ISNS: ${ISNS}"
+if [ "$ISNS" != "0" ]; then
+  echo "ERROR: failed to set stage to '${NEWSTAGE}' due to missing Kubernetes namespace '${WOV_AIM}-${NEWSTAGE}'."
+  FAILURE=1
+else
+  if [ ${DOECHO} -ge 2 ]; then echo "  ... success."; fi
+fi
+
+if [ ${DOECHO} -ge 2 ]; then echo "... checking for Kubernetes context '${WOV_CLUSTER}-${WOV_AIM}-${NEWSTAGE}'."; fi
+ISCONTEXT=$(kubectl config get-contexts --no-headers=true -o name | grep ${WOV_CLUSTER}-${WOV_AIM}-${NEWSTAGE})
+# echo "ISCONTEXT=${ISCONTEXT}"
+if [ "$ISCONTEXT" != "${WOV_CLUSTER}-${WOV_AIM}-${NEWSTAGE}" ]; then
+  echo "ERROR: failed to set stage to '${NEWSTAGE}' due to missing Kubernetes context '${WOV_CLUSTER}-${WOV_AIM}-${NEWSTAGE}'."
+  FAILURE=1
+else
+  if [ ${DOECHO} -ge 2 ]; then echo "  ... success."; fi
+fi
+
+if [ ${DOECHO} -ge 2 ]; then echo "... checking for git branch '${NEWSTAGE}'."; fi
+ISBRANCH=$(git rev-parse --verify ${NEWSTAGE} &> /dev/null ; echo "$?")
+# echo "ISBRANCH: ${ISBRANCH}"
+if [ "${ISBRANCH}" != "0" ]; then
+  echo "ERROR: failed to set stage to '${NEWSTAGE}' due to missing git branch '${NEWSTAGE}'."
+  FAILURE=1
+else
+  if [ ${DOECHO} -ge 2 ]; then echo "  ... success."; fi
+fi
+
+# If no failure, switch stage
+if [ "$FAILURE" == "0" ]; then
+
+  if [ ${DOECHO} -ge 1 ]; then echo "... switching Kubernetes context to '${WOV_CLUSTER}-${WOV_AIM}-${NEWSTAGE}'."; fi
+  kubectl config use-context ${WOV_CLUSTER}-${WOV_AIM}-${NEWSTAGE}
+  if [ "$?" != "0" ]; then
+    echo "ERROR: failed to switch to Kubernetes context '${WOV_CLUSTER}-${WOV_AIM}-${NEWSTAGE}'."
+  else
+    if [ ${DOECHO} -ge 2 ]; then echo "  ... success."; fi
+  fi
+
+  if [ ${DOECHO} -ge 1 ]; then echo "... switching git branch to '${NEWSTAGE}'."; fi
+  git checkout ${NEWSTAGE} 
+  if [ "$?" != "0" ]; then
+    echo "ERROR: failed to switch to git branch '${NEWSTAGE}'."
+  else
+    if [ ${DOECHO} -ge 2 ]; then echo "  ... success."; fi
+  fi
+
+  # Run this again in case this is included in a script
+  set ""
+  . wov-env
+  . wov-stagecompare
+fi

@@ -4,6 +4,7 @@ DOECHO=1
 DOFORCE=0
 FOLD=80
 
+
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
@@ -11,10 +12,11 @@ pushenvargs=( "$@" )
 set ""
 . wov-env
 . wov-stagecompare
+. wov-push-check
 set -- "${pushenvargs[@]}"
+
+
 #set -x
-
-
 
 
 # ---------------------------------------------------------------------
@@ -70,8 +72,14 @@ done
 ARCHBASE=${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}
 
 #echo "ECHO: aws s3 sync ${WOV_BASEDIR}/wovtools/cache/k8s  ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s  --delete"
+if [ $DOECHO -ge 1 ]; then echo "... pushing ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s"; fi
+if [ $DOECHO -ge 2 ]; then ls ${WOV_BASEDIR}/wovtools/cache/k8s; fi
 aws s3 sync ${WOV_BASEDIR}/wovtools/cache/k8s  ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s  --delete
 
 #echo "ECHO: aws s3 sync ${WOV_BASEDIR}/wovtools/cache/conf ${WOV_ARCHIVEENV}/${ARCHBASE}/conf --delete"
+if [ $DOECHO -ge 1 ]; then echo "... pushing ${WOV_ARCHIVEENV}/${ARCHBASE}/conf"; fi
+if [ $DOECHO -ge 2 ]; then ls ${WOV_BASEDIR}/wovtools/cache/conf; fi
 aws s3 sync ${WOV_BASEDIR}/wovtools/cache/conf ${WOV_ARCHIVEENV}/${ARCHBASE}/conf --delete
+
+if [ $DOECHO -ge 1 ]; then echo "... success"; fi
 

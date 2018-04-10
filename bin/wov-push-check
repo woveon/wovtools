@@ -125,6 +125,6 @@ fi
 
 
 
-if [ "$DOECHO" == "1" ] || [ "$DOECHO" == "2" ]; then
+if [ "$DOECHO" == "2" ]; then
   echo "SUCCESS: wov-push-check"
 fi
