@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+DOFORCE=0
+FOLD=80
+
+
+# --------------------------------------------------------------------- 
+# Import Env 
+# --------------------------------------------------------------------- 
+pushenvargs=( "$@" )
+set ""
+. wov-env
+. wov-stagecompare
+set -- "${pushenvargs[@]}"
+
+
+#set -x
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{ 
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Deploys a running kubernetes project from an archive.
+
+  -f : force push
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-f" ]; then
+    shift
+    DOFORCE=1
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+ARCHBASE=${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}
+
+
+# --------------------------------------------------------------------- 
+# Make directory to put files
+DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache/.deployments/${WOV_PVER}_${WOV_STAGE}_${WOV_SVER}.$$
+mkdir -p ${DEPLOYDIR}/conf
+mkdir -p ${DEPLOYDIR}/k8s
+chmod -R 700 ${DEPLOYDIR}
+
+
+# --------------------------------------------------------------------- 
+# Pull env files
+aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/conf ${DEPLOYDIR}/conf  --delete
+aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s ${DEPLOYDIR}/k8s  --delete
+
+# --------------------------------------------------------------------- 
+# Add labels
+if [ $DOECHO -ge 1 ]; then echo "  ... labeling namespace"; fi
+kubectl label namespace ${WOV_NS} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+
+# --------------------------------------------------------------------- 
+# Deploy the conf ConfigMap files
+FILES=$(cd ${DEPLOYDIR}/conf; ls *.ck8s)
+for F in ${FILES}; do
+  f=${F%.ck8s}
+  if [ $DOECHO -ge 1 ]; then echo "  ... creating ConfigMap ${f} from ${F}"; fi
+  DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[:space:]*#)/ { print "    --from-literal=" $0 , "\\" }')
+  kubectl delete configmap ${f} #2> /dev/null
+  kubectl create configmap ${f} ${DATA}
+  kubectl label  configmap ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+
+done
+
+# --------------------------------------------------------------------- 
+# Deploy the conf secret files
+FILES=$(cd ${DEPLOYDIR}/conf; ls *.sk8s)
+for F in ${FILES}; do
+  f=${F%.sk8s}
+  if [ $DOECHO -ge 1 ]; then echo "  ... creating Secret ${f} from ${F}"; fi
+  DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[:space:]*#)/ { print "    --from-literal=" $0 , "\\" }')
+  kubectl delete secret ${f} #2> /dev/null
+  kubectl create secret generic ${f} ${DATA}
+  kubectl label  secret ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+done
+
+# --------------------------------------------------------------------- 
+# Deploy the k8s files
+kubectl apply -f ${DEPLOYDIR}/k8s
+#FILES=$(cd ${DEPLOYDIR}/k8s; ls *.yaml)
+#for F in ${FILES}; do
+#  f=${F%.yaml}
+#  if [ $DOECHO -ge 1 ]; then echo "  ... apply k8s: ${F}"; fi
+#  kubectl apply -f ${DEPLOYDIR}/k8s/${F}
+#  # kubectl label secret ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+#done
+
+
+# --------------------------------------------------------------------- 
+# Cleanup
+#echo "... skipping cleanup"
+rm -Rf ${DEPLOYDIR}

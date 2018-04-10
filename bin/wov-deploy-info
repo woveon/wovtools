@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+DOFORCE=0
+FOLD=80
+
+
+# --------------------------------------------------------------------- 
+# Import Env 
+# --------------------------------------------------------------------- 
+pushenvargs=( "$@" )
+set ""
+. wov-env
+. wov-stagecompare
+set -- "${pushenvargs[@]}"
+
+
+#set -x
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{ 
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Deploys a running kubernetes project from an archive.
+
+  --pver :
+  --sver :
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "--pver" ]; then
+    shift
+    kubectl get namespace ${WOV_NS} -o json | jq -r '.metadata.labels.WOV_PVER'
+
+  elif [ "$1" == "--sver" ]; then
+    shift
+    kubectl get namespace ${WOV_NS} -o json | jq -r '.metadata.labels.WOV_SVER'
+
+  elif [ "$1" == "--deployed" ]; then
+    shift
+    kubectl get namespace ${WOV_NS} -o json | jq -r '.metadata.labels.WOV_DEPLOYED'
+
+  elif [ "$1" == "--deployed-hr" ]; then
+    shift
+    date -j -r $(kubectl get namespace ${WOV_NS} -o json | jq -r '.metadata.labels.WOV_DEPLOYED')
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-f" ]; then
+    shift
+    DOFORCE=1
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
