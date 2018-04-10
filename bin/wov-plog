@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+
+plogargs=( "$@" )
+set ""
+. wov-env
+set -- "${plogargs[@]}"
+
+function fDisplayOptions
+{
+  cat <<EOF
+
+usage : `basename $0` [-f|--follow] [-n|--namespace] podstem
+
+Connects to a running pod (via podstem) and logs its data, with a -f to follow it.
+
+  -f      - follows the output and does not close
+  -n      - select namespace to look in
+  podstem - this finds the pod with just the stem
+            ex. apirest is stem, apirest-asdldj3j is full name
+  --tail X - number of lines on end
+
+EOF
+}
+
+
+NAMESPACE=${WOV_NS}
+F=
+TAIL=
+
+while [[ $1 =~ ^- ]]
+do
+  if [ "$1" == '-n' ] || [ "$1" == '--namespace' ]; then
+    shift
+    NAMESPACE="$1"
+    echo "set NAMESPACE: $NAMESPACE $1"
+    shift
+  elif [ "$1" == '-f' ] || [ "$1" == '--follow' ]; then
+    F=-f
+    shift
+  elif [ "$1" == '--tail' ]; then
+    shift
+    TAIL=" --tail ${1} "
+    shift
+  elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
+    fDisplayOptions
+    exit 0
+  fi
+done
+
+
+if [[ $# < 1 ]]; then
+  echo "\nERROR: You need to give the base name of a pod.\n"
+  exit 1
+fi
+
+STEM=$1
+# remove any other commands
+shift
+
+echo "TAIL ${TAIL}"
+
+
+#kubectl get pods -n "$NAMESPACE" --no-headers --show-all=true
+#POD=`kubectl get pods --namespace "$NAMESPACE" --no-headers --show-all=true | grep ${STEM} | awk '{print $1}'`
+POD=`wovp -n "$NAMESPACE" "${STEM}"`
+echo "POD: ${POD}"
+if [[ "$?" != "0" ]] || [[ "$POD" == "" ]] ; then 
+  echo ""
+  echo "ERROR: Failed to find pod '${STEM}' to log."
+  echo ""
+  exit 1
+fi
+
+echo ""
+echo "- Pod Events: ${POD} ---------------------------------------------------"
+kubectl describe pod --namespace "$NAMESPACE" "$POD"
+
+echo ""
+echo "- Pod Log: ${POD} ---------------------------------------------------"
+x=1
+if [ -z "${F+x}" ]; then
+  kubectl --namespace $NAMESPACE ${TAIL} logs $POD
+else
+  echo "kubectl --namespace $NAMESPACE logs $F ${TAIL} $POD"
+  kubectl --namespace $NAMESPACE logs $F ${TAIL} $POD
+fi
+echo ""

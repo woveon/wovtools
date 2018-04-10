@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+
+
+# Load env settings
+nsargs=( "$@" )
+set ""
+. wov-env
+set -- "${nsargs[@]}"
+
+
+DAEMON=0
+UPDATE=10
+  # updates every 10s if in daemon mode
+
+#  NOTE: ku get -w [resource] could be useful
+
+function DoDisplay {
+
+  echo 
+  echo "= ${WOV_NS} = ${WOV_PVER}:${WOV_SVER} ==============================="
+  echo
+  echo "- namespaces - (of stage -${WOV_STAGE}) -----------------------------------------------"
+  kubectl get namespaces | grep "\-${WOV_STAGE}" | awk '{print $1}' | tr '\n' ' '
+  echo 
+  echo 
+  echo "- ingress -----------------------------------------------------------"
+  kubectl get --no-headers -n "$WOV_NS" -o wide ingress
+  echo 
+  echo "- deployments -------------------------------------------------------"
+  kubectl get --no-headers -n "$WOV_NS" deployments
+  echo 
+  echo "- services ----------------------------------------------------------"
+  kubectl get --no-headers -n "$WOV_NS" services
+  echo 
+  echo "- pods --------------------------------------------------------------"
+  kubectl get --no-headers -n "$WOV_NS" pods
+  echo 
+  echo "- endpoints ---------------------------------------------------------"
+  kubectl get --no-headers -n "$WOV_NS" endpoints
+  echo 
+  echo "- secrets and configmaps --------------------------------------------"
+  kubectl get --no-headers -n "$WOV_NS" secrets
+  kubectl get --no-headers -n "$WOV_NS" configmaps
+}
+
+
+while [[ $1 =~ ^- ]]
+do
+    if [ "$1" == "-n" ] || [ "$1" == "--namespace" ]; then
+        shift
+        WOV_NS=$1
+        shift
+    elif [ "$1" == '-d' ] || [ "$1" == '--daemon' ]; then
+        shift
+        DAEMON=1
+    elif [ "$1" == '-u' ] || [ "$1" == '--update' ]; then
+        shift
+        UPDATE=$1
+        shift
+    elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
+        DisplayOptions
+        exit 0
+    fi
+done
+
+if [ "$DAEMON" == "1" ]; then
+  while [ 1 ]; do
+    clear
+    DoDisplay
+    sleep "$UPDATE"
+  done
+else
+  DoDisplay
+fi
+
+echo 

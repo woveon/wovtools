@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+
+#set -x
+#set -e
+
+function DisplayOptions
+{
+  cat <<EOF
+
+usage : `basename $0` [-n|--namespace] [-i|--ith] podstem
+
+Takes a stem and returns the name of the matching pod in a namespace (--ith n, to match *nth* pod).
+
+   -h|--help : this output
+   -n|--namespace X : get in the namespace of X
+   -i|--ith X : select the ith pod if multiple
+        NOTE: (1 is 1st, 2 is 2nd, etc) (i.e. counting numbers)
+
+EOF
+}
+
+
+NAMESPACE=
+ITH=1
+
+while [[ $1 =~ ^- ]]
+do
+    if [ $1 == '-n' -o $1 == '--namespace' ]; then
+        shift
+        NAMESPACE=" -n $1 "
+        shift
+    elif [ $1 == '-i' -o $1 == '--ith' ]; then
+        shift
+        ITH=$1
+        shift
+    elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
+        DisplayOptions
+        exit 0
+    fi
+done
+
+PODSTEM=$1
+PODNAME=`kubectl --no-headers=true ${NAMESPACE} get pods | \grep "^${PODSTEM}" | sed -n "${ITH}p" | awk '{print $1}'`
+
+
+if [ "${PODNAME}" == "" ]; then
+  if [ "${ITH}" != "1" ]; then
+    (>&2 echo "ERROR: Either no pod of that name, or none at the position '${ITH}'.")
+  else
+    (>&2 echo "ERROR: No pod of that name.")
+  fi
+  exit 1
+else
+  echo ${PODNAME}
+fi

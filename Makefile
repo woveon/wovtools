@@ -1,8 +1,11 @@
 
 
+BINS-UTIL=wov-ns wov-p wov-plog
 BINS=wov-env wov-stagecompare wov-stage wov-env wov-build wov-compile \
 		 wov-push-check wov-push-containers wov-push-env wov-push-secrets \
-		 wov-deploy-apply wov-deploy-info
+		 wov-deploy-apply wov-deploy-info \
+		 $(BINS-UTIL)
+
 
 install : 
 
