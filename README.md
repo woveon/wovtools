@@ -27,6 +27,19 @@ WovTools tightly integrates git, Docker and Kubernetes, trying to create as litt
   
   * **Deploy Step** is about running your code.
 
+
+### Workflow
+
+1. **Project Creation** - Run *wov-init* to transform your existing project into a WovTools project. This will make changes to your git setup, and create a wovtools directory. 
+
+2. **Secrets** - You need to start moving configuration information into json files in wovtools/secrets. These files are merged together according to the order in wovtools/secrets/config.json. Also, secrets need to be managed in a safe way. They are stored in a git repository, so we can version the secrets, but you need to ensure the repo is hosted in a secure/encryped location. NOTE: GitHub is not encrypted by default.
+
+3. **Env: variables** - Using environment variables is the safe way to run containers and Kubernetes, as you add them at runtime and do not store them in the repo. Create `.wov` files in 'wovtools/conf' which are compiled for use in bash shells, Makefiles, Kubernetes ConfigMaps and Secrets, etc.  Use `.ck8s.wov` for non-secret data and `.sk8s.wov` for data that needs to remain encryped (passwords, keys, etc). See *wov File Format* below.
+
+4. **Env: Kubernetes Yaml** - Move your Kubernetes yaml files into the `wovtools/k8s` directory and append the `wov` extension. Then modify the files to use the secrets you compile from the Env files. NOTE: follows the *wov File Format* as shown below.
+
+5.
+
 ## Development Step
 
 ### Commands
@@ -70,3 +83,8 @@ These are just darn useful...
 **wov-p** - Takes a stem and returns the name of the matching pod in a namespace (--ith n, to match *nth* pod).
 
 **wov-plog** - Connects to a running pod (via podstem) and logs its data, with a -f to follow it.
+
+
+## Wov File Format
+
+## Naming Conventions
