@@ -14,7 +14,7 @@ SECRETDIFF=1
 buildargs=( "$@" )
 set ""
 . wov-env
-. wov-stagecompare
+. wov-ns-check
 set -- "${buildargs[@]}"
 #set -x
 
@@ -30,10 +30,11 @@ usage: `basename $0` [options]
 
 Builds the environment information of a WovTools distribution. Specifically, the environment variables and K8s ConfigMap and Secrets.
 
-  -q  : quiet
-  -v  : verbose
-  -s  : build the secret file
-  -e  : build the environment files (-s assumed)
+  -q : quiet
+  -v : verbose
+  -s : build the secret file
+  -e : build the environment files (-s assumed)
+  -g : build an environment grouping file 
 
 EOF
 }
@@ -75,7 +76,7 @@ function fBuildSecret()
   "REGION"   : "${WOV_REGION}",
   "FLAVOR"   : "${WOV_FLAVOR}",
   "NS"       : "${WOV_NS}",
-  "AIM"      : "${WOV_AIM}",
+  "PROJECT"  : "${WOV_PROJECT}",
   "STAGE"    : "${WOV_STAGE}",
 
   "PROJECT"            : "${WOV_PROJECT}",

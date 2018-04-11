@@ -197,7 +197,7 @@ echo "... importing the existing wovtools project in this directory."
 initargs=( "$@" )
 set ""
 . wov-env
-. wov-stagecompare
+. wov-ns-check
 set -- "${initargs[@]}"
 
 wov-env -e

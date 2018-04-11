@@ -11,7 +11,7 @@ FOLD=80
 pushenvargs=( "$@" )
 set ""
 . wov-env
-. wov-stagecompare
+. wov-ns-check
 set -- "${pushenvargs[@]}"
 
 

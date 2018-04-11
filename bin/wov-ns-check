@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+
+# This script ensures that the namespace is consistent across the tools WovTools incorporates.
+#  - Namespace is a mix of {PROJECT}_{STAGE}.
+#  - Project is defined in K8s as part of the context name.
+#  - Project is defined in wovtool/config.json:.project.project
+#  - Stage is defined in K8s as part of the context name.
+#  - Stage is defined in git as the current branch.
+
+# --------------------------------------------------------------------- 
+# Load wov-env if not already loaded
+# --------------------------------------------------------------------- 
+if [ "${WOV_VERSION}" == "" ]; then
+  args=( "$@" )
+  set ""
+  . wov-env
+  set -- "${args[@]}"
+fi
+
+
+# --------------------------------------------------------------------- 
+# STAGE: Check that they align
+# --------------------------------------------------------------------- 
+#echo "WOV_STAGE : $WOV_STAGE"
+#echo "WOV_KSTAGE : $WOV_KSTAGE"
+#echo "WOV_GSTAGE : $WOV_GSTAGE"
+if [ "$WOV_KSTAGE" == "" ]; then
+  echo "ERROR: unknown WOV_KSTAGE";
+  exit 1
+elif [ "$WOV_GSTAGE" == "" ]; then
+  echo "ERROR: unknown WOV_KSTAGE";
+  exit 2
+elif [ "$WOV_KSTAGE" != "$WOV_GSTAGE" ]; then
+  echo "ERROR: STAGE miss-match. (WOV_KSTAGE=${WOV_KSTAGE}) (WOV_GSTAGE=${WOV_GSTAGE}).";
+  exit 3
+fi
+
+
+# --------------------------------------------------------------------- 
+# PROJECT: Check that they align
+# --------------------------------------------------------------------- 
+#echo "WOV_PROJECT: $WOV_PROJECT"
+#echo "WOV_KPROJECT: $WOV_KPROJECT"
+#echo "WOV_WPROJECT: $WOV_WPROJECT"
+if [ "$WOV_KPROJECT" == "" ]; then
+  echo "ERROR: unknown WOV_KPROJECT";
+  exit 1
+elif [ "$WOV_WPROJECT" == "" ]; then
+  echo "ERROR: unknown WOV_WPROJECT";
+  exit 2
+elif [ "$WOV_KPROJECT" != "$WOV_WPROJECT" ]; then
+  echo "ERROR: PROJECT miss-match. (WOV_KPROJECT=${WOV_KPROJECT}) (WOV_WPROJECT=${WOV_WPROJECT}).";
+  exit 3
+fi
+

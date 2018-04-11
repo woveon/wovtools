@@ -3,6 +3,7 @@
 DOECHO=1
 DOFORCE=0
 FOLD=80
+BLOCK=0
 
 # --------------------------------------------------------------------- 
 # Import Env 
@@ -10,7 +11,7 @@ FOLD=80
 pushcontainersargs=( "$@" )
 set ""
 . wov-env
-. wov-stagecompare
+. wov-ns-check
 set -- "${pushcontainersargs[@]}"
 #set -x
 
@@ -28,14 +29,21 @@ usage: `basename $0` [options]
 
 Runs the recipe scripts and if there is a change, build the containers.
 
-  -f : force build
   -h : this help
+  -l : list containers
+  -f : force build
   -q/-v : quiet/verbose
 
 EOF
 }
 
 
+function doList()
+{
+  C=$(ls ${WOV_BASEDIR}/wovtools/containers/*.sh 2> /dev/null )
+  RETVAL=$?
+  if [ $RETVAL -eq 0 ]; then echo $C; else echo "No containers"; fi
+}
 
 # ---------------------------------------------------------------------
 # Handle Params
@@ -54,6 +62,11 @@ while [[ $1 =~ ^- ]]; do
     shift
     DOFORCE=1
 
+  elif [ "$1" == "-l" ]; then
+    shift
+    doList
+    BLOCK=1
+
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
     exit 0
@@ -70,18 +83,20 @@ done
 
 
 
-
+if [ "${BLOCK}" == "0" ]; then
 # Find the recipes
-RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers; ls *.sh)
+RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers; ls *.sh 2> /dev/null)
 
 
 # Build containers if needed
 for f in ${RECIPES}; do
 
+  if [ $DOECHO -ge 1 ]; then echo "... build container ${f%.sh}."; fi
+
   SRCDIR=${WOV_BASEDIR}
   DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${f%.sh}
   ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${f%.sh}
-  CONTAINER=${WOV_PROJECT}-${WOV_AIM}${f%.sh}
+  CONTAINER=${WOV_PROJECT}${f%.sh}
 #  echo "CONTAINER=${CONTAINER}"
 #  echo "SRCDIR=${SRCDIR}"
 #  echo "DESTDIR=${DESTDIR} # more like a 'content' dir as this is all copied in here"
@@ -89,47 +104,52 @@ for f in ${RECIPES}; do
 
   # build the content in wovtools/cache/containers/$f
   mkdir -p ${DESTDIR}
-  echo "  ... recipe $f"
-  cd ${WOV_BASEDIR} && SRCDIR=${SRCDIR} DESTDIR=${DESTDIR} ${WOV_BASEDIR}/wovtools/containers/$f
-
-  # determine if need to build container
-  NEEDSBUILD=0
-
-  if [ "$(docker images -q ${CONTAINER})" == "" ]; then 
-    docker images -q ${CONTAINER}
-    echo "    ... no existing container, building"
-    NEEDSBUILD=1
-
-  elif [ ! -e ${ARCHDIR} ]; then 
-    echo "    ... no ${ARCHDIR}, building"
-    NEEDSBUILD=1; 
-
-  elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then 
-    echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"
-    NEEDSBUILD=1; 
-  fi
-
-  # do actions 
-  if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then
-
-    echo "    ... creating container '${CONTAINER}'"
-    docker build -f ${DESTDIR}/Dockerfile -t ${CONTAINER}:latest ${DESTDIR} || exit 1
-
-    echo "    ... archiving build of container '${CONTAINER}'"
-    mkdir -p ${ARCHDIR}
-    rsync -ai --delete ${DESTDIR}/ ${ARCHDIR} &> /dev/null
-
-    echo "    ... tag and push to repo"
-    docker tag ${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
-
-    echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-    docker push ${WOV_ARCHIVEREPOSITORY}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 
-
+  echo "  ... recipe $f (DESTDIR=${DESTDIR}, CONTAINER=${CONTAINER})"
+  if [[ ! -x "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
+    echo "ERROR: recipe for container ${f%.sh} not executable (${WOV_BASEDIR}/wovtools/containers/$f).";
   else
-    echo "    ... skipping build of container '${CONTAINER}'"
+    cd ${WOV_BASEDIR} && SRCDIR=${SRCDIR} DESTDIR=${DESTDIR} CONTAINER=${CONTAINER} ${WOV_BASEDIR}/wovtools/containers/$f
+
+    # determine if need to build container
+    NEEDSBUILD=0
+
+    if [ "$(docker images -q ${CONTAINER})" == "" ]; then 
+      docker images -q ${CONTAINER}
+      echo "    ... no existing container, building"
+      NEEDSBUILD=1
+
+    elif [ ! -e ${ARCHDIR} ]; then 
+      echo "    ... no ${ARCHDIR}, building"
+      NEEDSBUILD=1; 
+
+    elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then 
+      echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"
+      NEEDSBUILD=1; 
+    fi
+
+    # do actions 
+    if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then
+
+      echo "    ... creating container '${CONTAINER}'"
+      docker build -f ${DESTDIR}/Dockerfile -t ${CONTAINER}:latest ${DESTDIR} || exit 1
+
+      echo "    ... archiving build of container '${CONTAINER}'"
+      mkdir -p ${ARCHDIR}
+      rsync -ai --delete ${DESTDIR}/ ${ARCHDIR} &> /dev/null
+
+      echo "    ... tag and push to repo"
+      docker tag ${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
+
+      echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+      docker push ${WOV_ARCHIVEREPOSITORY}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 
+
+    else
+      echo "    ... skipping build of container '${CONTAINER}'"
+    fi
   fi
 
 
 done
+fi
 
 

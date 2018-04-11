@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 DOECHO=1
+FOLD=100
 
 # grab it if not defined
 if [ "${WOV_BASEDIR}" == "" ]; then
@@ -19,6 +20,7 @@ usage: `basename $0` [options]
 
 Check that all git files are checked in, regular and secret.
 
+  -h : this help
   -q : quiet, no output
   -v : verbose output
 
