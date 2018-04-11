@@ -44,7 +44,21 @@ WovTools tightly integrates git, Docker and Kubernetes, trying to create as litt
 
 7. **Services** - Write scripts that emulate the services your code will interact with in the cluster. This includes databases or other microservices. Write scripts in wovtools/services as SERVICE.sh, SERVICE-test.sh, SERVICE-kill.sh, which correspond to `wov-service` switches of -r, -t and -k.
 
-7. **Develop** - Build your code. Whatever you do, create that code.
+8. **Develop** - Build your code. Whatever you do, create that code. To use environment variables, use the `wov-env` script to set them, and then set them before your command is run. 
+```
+# To run service myprojectservice1 with environment vars created with wov-build on file 'wovtools/conf/env.ck8s.wov':
+env `wov-env --env env.ck8s` npm run myprojectservice1
+
+# To use in Makefiles, dump to a file and include 
+$(shell wov-env --env env.ck8s > ./.wovtools.mk)
+include ./.wovtools.mk
+
+# To get a single WovTools variable:
+wov-env --var WOV_PVER
+
+# To get all WovTools variables:
+wov-env -e
+```
 
 
 ## Development Step
