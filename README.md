@@ -88,7 +88,7 @@ wov-env -e
 
 **wov-stage** - Push the WovTools system to a new stage. This involves changing the git branch and Kubernetes context. Fails if either switches do not work. Can leave system in an error state.
 
-**wov-stagecompare** - Check that the git and Kubernetes environments are in sync.
+**wov-ns-check** - Check that the WovTools, git and Kubernetes environments are in sync regarding the namespace ({project}\_{stage}).
 
 ## Archive Step
 
