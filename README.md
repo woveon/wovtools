@@ -68,6 +68,8 @@ wov-env -e
 
 2. **Containers** - Build the containers with the `wov-push-containers`. This involves creating scripts to create the content that goes into the container. For each container, created a script.sh file in `wovtools/containers` for that container. Variables passed to the script are CONTAINER (name of the container), SRCDIR (the root of the project) and DESTDIR (the directory the files are dumped). Make sure to include a Dockerfile as well. When your recipes are created, run the `wov-push-containers` command. To list containers this will build, run `wov-push-containers -l`.
 
+3. **k8s files** - Push the env files to archive with `wov-push-env`. 
+
 ### Workflow : Deploy
 
 1. **Deploy** - Run `wov-deploy-apply` to run the latest project. This pulls env files and runs them. These files in turn include the Kubernetes deployments, which pull the containers. To run older versions, do a `wov-deploy-apply --pver X --sver Y` to run different versions. Note that only valid combinations of project and secret versions are allowable.
@@ -99,6 +101,9 @@ wov-env -e
 
 **wov-push-env** - Copies the env files (conf and k8s), into an Archive, from which we can deploy. This works with pushing secrets and containers into the Archive (which is actually several storage mediums).
 
+**wov-pushcode-check** - Check if the code in git repos has been pushed. Called automatically when needed.
+
+**wov-pushenv-check** - Check if the env files have been pushed to the archive. Called automatically when needed.
 
 ## Deploy Step
 
