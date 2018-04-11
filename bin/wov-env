@@ -60,6 +60,7 @@ WOV_PROVIDER=${array[1]}
 WOV_CLTYPE=${array[0]}
 WOV_CLUSTER=${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}
 
+#set -x 
 # vars from git, if in project directory
 if [ -e "${WOV_BASEDIR}/wovtools/config.json" ]; then
   RANGIT=1
