@@ -28,7 +28,7 @@ function fDisplayOptions()
 
 usage: `basename $0` [options]
 
-Copies the env files (conf and k8s), into an Archive, from which we can deploy. This works with pushing secrets and containers into the Archive (which is actually several storage mediusm).
+Copies the env files (conf and k8s), into an Archive, from which we can deploy. This works with pushing secrets and containers into the Archive (which is actually several storage mediums).
 
   -f : force push
   -h : this help

@@ -27,7 +27,7 @@ function fDisplayOptions()
 
 usage: `basename $0` [options]
 
-Deploys a running kubernetes project from an archive.
+Shows information of a running project.
 
   --pver :
   --sver :

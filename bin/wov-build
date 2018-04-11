@@ -30,6 +30,8 @@ usage: `basename $0` [options]
 
 Builds the environment information of a WovTools distribution. Specifically, the environment variables and K8s ConfigMap and Secrets.
 
+  -q  : quiet
+  -v  : verbose
   -s  : build the secret file
   -e  : build the environment files (-s assumed)
 
@@ -117,9 +119,9 @@ EOF
   HAS_SECRET=1
 
   if [ "$DOECHO" == "2" ]; then 
-    echo "SECRETDIFF=${SECRETDIFF}"; 
+    echo "... SECRETDIFF=${SECRETDIFF}"; 
   elif [ "$DOECHO" == "1" ] && [ "$SECRETDIFF" == "1" ]; then 
-    echo "SECRETDIFF=${SECRETDIFF}"
+    echo "... secret has modifications."
   fi
 }
 
@@ -155,7 +157,8 @@ fBuildEnvDir()
   DEST=${WOV_BASEDIR}/wovtools/cache/$1/${f%.wov}
 
   # Find src files to compile
-  WOVFILES=$(cd ${WOV_BASEDIR}/wovtools/$1; ls *.wov)
+  WOVFILES=$(cd ${WOV_BASEDIR}/wovtools/$1; ls *.wov 2> /dev/null)
+  if [ "${WOVFILES}" == "" ]; then echo "  ... no $1 files found ( in wovtools/$1/*.wov)."; fi
 
   # Compile them
   for f in ${WOVFILES}; do
@@ -173,6 +176,8 @@ fBuildEnvDir()
       if [ "$DOECHO" == "2" ]; then echo "  ... skipping ${SRC}"; fi
     fi
   done
+
+
 }
 
 
@@ -211,3 +216,12 @@ while [[ $1 =~ ^- ]]; do
     exit 1
   fi
 done
+
+
+if [ "${HAS_SECRET}" == "0" ] && [ "${HAS_BUILDENV}" == "0" ]; then
+  echo
+  echo "ERROR: no command passed."
+  echo
+  fDisplayOptions
+  exit 1
+fi

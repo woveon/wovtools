@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+DOFORCE=0
+FOLD=100
+CURSERVICE=""
+RETVAL=0
+
+
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+pushenvargs=( "$@" )
+set ""
+. wov-env
+. wov-stagecompare
+set -- "${pushenvargs[@]}"
+
+
+#set -x
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Runs, tests or kills a local running service for this project. These commands are run in order.
+
+  -s service : Sets the name of the service (look for in wovtools/services/SERVICE.sh)
+  -r : run the service if test fails 
+  -R : run without testing
+  -t : test the service (if error code returned, fails) (./wovtools/services/SERVICE-test.sh)
+  -k : kill the service (./wovtools/services/SERVICE-kill.sh)
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+function doTest()
+{
+  if [ ${DOECHO} -ge 2 ]; then echo "...test"; fi
+  if [ -e ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-test.sh ]; then
+    OUTIS=$(${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-test.sh)
+    RETVAL=$?
+  else
+    if [ ${DOECHO} -ge 2 ]; then echo "  ...no test script for '${DOSERVICE}'"; fi
+    OUTIS=""
+    RETVAL=0
+  fi
+  if [ ${DOECHO} -ge 2 ]; then printf "<<EOF\n${OUTIS}\nEOF\n  ...result ${RETVAL}\n"; fi
+  if [ "${RETVAL}" != "0" ]; then
+    echo
+    echo "ERROR: failed test '${DOSERVICE}'."
+    echo
+  fi
+}
+
+function doRun()
+{
+  if [ ${DOECHO} -ge 2 ]; then echo "...run"; fi
+  ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}.sh
+  RETVAL=$?
+}
+
+function doKill()
+{
+  if [ ${DOECHO} -ge 2 ]; then echo "...kill"; fi
+  ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-kill.sh
+  RETVAL=$?
+}
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-s" ]; then
+    shift
+    DOSERVICE="$1"
+    if [ ${DOECHO} -ge 2 ]; then echo "...setting service '${DOSERVICE}'."; fi
+    shift
+
+  elif [ "$1" == "-R" ]; then
+    shift
+    DOFORCE=1
+    doRun
+    DOFORCE=0
+
+  elif [ "$1" == "-r" ]; then
+    shift
+    doTest
+    if [ "${RETVAL}" != "0" ]; then doRun; fi
+
+  elif [ "$1" == "-t" ]; then
+    shift
+    doTest
+
+  elif [ "$1" == "-k" ]; then
+    shift
+    doKill
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+exit ${RETVAL}
+
