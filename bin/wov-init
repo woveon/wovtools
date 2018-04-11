@@ -22,41 +22,42 @@ function InitProject()
     echo "... creating git repository here"
     ISNEWGIT=1
     git init -q
-    git checkout -b prod
-    echo "  ... creating branch 'prod'"
-    git checkout -b dev
-    echo "  ... creating branch 'dev'"
-    git branch -d master
-    echo "  ... deleting branch 'master' (prod will be default)"
-#    git push -f origin prod
-    echo "TODO: set branch remote and make sure prod is the default"
-    echo " git push -u <remote_name> <local_branch_name>"
-    touch .gitignore
-
-    # Select user branch
-    echo
-    printf "Select a user stage to use (i.e. this will be the git branch and the stage portion of the Kubernetes namespace.\n"
-    printf "  - User stage (i.e. your initials or username) (${WOV_GSTAGE}) : "
-    read A
-    [[ ${A} =~ ^[A-Za-z][A-Za-z_0-9]+$ ]] || ( echo "ERROR: bad user stage name (i.e. [A-Za-z][A-Za-z_0-9]*)" ; exit 1)
-    if [ "${A}" != "" ]; then WOV_GSTAGE=${A}; fi
-    if [ "${WOV_GSTAGE}" == "" ]; then echo "ERROR: must provide a stage name."; exit 1; fi
-    git checkout -b ${WOV_GSTAGE}
-    echo "  ... creating branch '${WOV_GSTAGE}'"
-
-    # Select user name
-    echo
-    printf "Enter your name (${WOV_USERNAME}): "
-    read A
-    if [ "${A}" != "" ]; then WOV_USERNAME="${A}"; fi
-
-    # Select user email
-    echo
-    printf "Enter your email (${WOV_USEREMAIL}): "
-    read A
-    if [ "${A}" != "" ]; then WOV_USEREMAIL="${A}"; fi
-
   fi
+
+  if [ "$(git rev-parse --verify prod)" != "0" ]; then git checkout -b prod ; echo "  ... creating branch 'prod'"; fi
+  if [ "$(git rev-parse --verify dev )" != "0" ]; then git checkout -b dev  ; echo "  ... creating branch 'dev'"; fi
+  if [ "$(git rev-parse --verify master)" != "0" ]; then git branch -d master; echo "  ... deleting branch 'master' (prod will be default)"; fi
+
+#    git push -f origin prod
+  echo "TODO: set branch remote and make sure prod is the default"
+  echo " git push -u <remote_name> <local_branch_name>"
+  git push --set-upstream origin prod
+  touch .gitignore
+
+  # Select user branch/stage
+  echo
+  printf "Select a user stage to use (i.e. this will be the git branch and the stage portion of the Kubernetes namespace.\n"
+  printf "  - User stage (i.e. your initials or username) (${WOV_GSTAGE}) : "
+  read A
+  [[ ${A} =~ ^[A-Za-z][A-Za-z_0-9]+$ ]] || ( echo "ERROR: bad user stage name (i.e. [A-Za-z][A-Za-z_0-9]*)" ; exit 1)
+  if [ "${A}" != "" ]; then WOV_GSTAGE=${A}; fi
+  if [ "${WOV_GSTAGE}" == "" ]; then echo "ERROR: must provide a stage name."; exit 1; fi
+
+  if [ "$(git rev-parse --verify ${WOV_GSTAGE})" != "0" ]; then git checkout -b ${WOV_GSTAGE}; echo "  ... creating branch '${WOV_GSTAGE}'"; fi
+
+  # Select user name
+  echo
+  printf "Enter your name (${WOV_USERNAME}): "
+  read A
+  if [ "${A}" != "" ]; then WOV_USERNAME="${A}"; fi
+
+  # Select user email
+  echo
+  printf "Enter your email (${WOV_USEREMAIL}): "
+  read A
+  if [ "${A}" != "" ]; then WOV_USEREMAIL="${A}"; fi
+
+
   WOV_BASEDIR=$(git rev-parse --show-toplevel)
 
   # Ensure data is updated
@@ -187,7 +188,9 @@ EOF
 echo "... ensure directory structure"
 if [ "$(wov-env &> /dev/null ; echo $?)" == "1" ]; then
   echo "... creating new wovtools project in this directory."
+  set -x
   InitProject
+  set +x
 fi
 
 echo "... importing the existing wovtools project in this directory."
@@ -238,7 +241,7 @@ echo "HERE, write it all back"
 
 
 jq '.project.type="'"${WOV_PROJECTTYPE}"'" | .project.project="'"${WOV_PROJECT}"'"  | .project.title="'"${WOV_PROJECTTITLE}"'"  | .project.description="'"${WOV_PROJECTDESCRIPTION}"'" | .operation={} | .archive.env="'"${WOV_ARCHIVEENV}"'" | .archive.repository="'"${WOV_ARCHIVEREPOSITORY}"'"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json.$$ && cp ${WOV_BASEDIR}/wovtools/.config.json.$$ ${WOV_BASEDIR}/wovtools/config.json
-
+rm ${WOV_BASEDIR}/wovtools/.config.json.*
 
 
 
