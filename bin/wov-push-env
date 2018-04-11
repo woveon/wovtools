@@ -12,7 +12,7 @@ pushenvargs=( "$@" )
 set ""
 . wov-env
 . wov-ns-check
-. wov-push-check
+. wov-pushcode-check
 set -- "${pushenvargs[@]}"
 
 

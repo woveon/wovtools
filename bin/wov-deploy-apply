@@ -12,6 +12,8 @@ pushenvargs=( "$@" )
 set ""
 . wov-env
 . wov-ns-check
+. wov-pushcode-check
+. wov-pushenv-check
 set -- "${pushenvargs[@]}"
 
 
@@ -29,6 +31,7 @@ usage: `basename $0` [options]
 
 Deploys a running kubernetes project from an archive.
 
+  --pver|--sver X : sets the Project and Secret version for roll-backs
   -f : force push
   -h : this help
   -q/-v : quiet/verbose
@@ -54,6 +57,16 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-f" ]; then
     shift
     DOFORCE=1
+
+  elif [ "$1" == "--pver" ]; then
+    shift
+    WOV_PVER="$1"
+    shift
+
+  elif [ "$1" == "--sver" ]; then
+    shift
+    WOV_SVER="$1"
+    shift
 
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
@@ -92,7 +105,7 @@ kubectl label namespace ${WOV_NS} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=$
 
 # --------------------------------------------------------------------- 
 # Deploy the conf ConfigMap files
-FILES=$(cd ${DEPLOYDIR}/conf; ls *.ck8s)
+FILES=$(cd ${DEPLOYDIR}/conf; ls *.ck8s 2> /dev/null)
 for F in ${FILES}; do
   f=${F%.ck8s}
   if [ $DOECHO -ge 1 ]; then echo "  ... creating ConfigMap ${f} from ${F}"; fi
@@ -105,7 +118,7 @@ done
 
 # --------------------------------------------------------------------- 
 # Deploy the conf secret files
-FILES=$(cd ${DEPLOYDIR}/conf; ls *.sk8s)
+FILES=$(cd ${DEPLOYDIR}/conf; ls *.sk8s 2> /dev/null)
 for F in ${FILES}; do
   f=${F%.sk8s}
   if [ $DOECHO -ge 1 ]; then echo "  ... creating Secret ${f} from ${F}"; fi
@@ -117,6 +130,7 @@ done
 
 # --------------------------------------------------------------------- 
 # Deploy the k8s files
+echo "... deploying fils in ${DEPLOYDIR}/k8s"
 kubectl apply -f ${DEPLOYDIR}/k8s
 #FILES=$(cd ${DEPLOYDIR}/k8s; ls *.yaml)
 #for F in ${FILES}; do
@@ -129,5 +143,5 @@ kubectl apply -f ${DEPLOYDIR}/k8s
 
 # --------------------------------------------------------------------- 
 # Cleanup
-#echo "... skipping cleanup"
-rm -Rf ${DEPLOYDIR}
+echo "... skipping cleanup"
+#rm -Rf ${DEPLOYDIR}
