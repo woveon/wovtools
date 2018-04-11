@@ -28,26 +28,28 @@ WovTools tightly integrates git, Docker and Kubernetes, trying to create as litt
   * **Deploy Step** is about running your code.
 
 
-### Workflow
+### Workflow : Local
 
 1. **Project Creation** - Run *wov-init* to transform your existing project into a WovTools project. This will make changes to your git setup, and create a wovtools directory. 
 
-2. **Set Stage** - By default, *wov-init* will exist in your user's stage, but `wov-stage <stage>` sets the stage for development. So, `wov-stage dev` or `wov-stage prod` are two different stages. However, I use my initials for stages, creating my own Kubernetes namespace and git branch to work in. So, `wov-stage cw` is what I start in.
+2. **Create K8s Context** - Make sure you have a context in Kubernetes for your namespace ({PROJECT}\_{STAGE}). 
 
-3. **Secrets** - You need to start moving configuration information into json files in wovtools/secrets. These files are merged together according to the order in wovtools/secrets/config.json. Also, secrets need to be managed in a safe way. They are stored in a git repository, so we can version the secrets, but you need to ensure the repo is hosted in a secure/encryped location. NOTE: GitHub is not encrypted by default.
+3. **Set Stage** - By default, *wov-init* will exist in your user's stage, but `wov-stage <stage>` sets the stage for development. So, `wov-stage dev` or `wov-stage prod` are two different stages. However, I use my initials for stages, creating my own Kubernetes namespace and git branch to work in. So, `wov-stage cw` is what I start in.
 
-4. **Env: variables** - Using environment variables is the safe way to run containers and Kubernetes, as you add them at runtime and do not store them in the repo. Create `.wov` files in 'wovtools/conf' which are compiled for use in bash shells, Makefiles, Kubernetes ConfigMaps and Secrets, etc.  Use `.ck8s.wov` for non-secret data and `.sk8s.wov` for data that needs to remain encryped (passwords, keys, etc). See *wov File Format* below.
+4. **Secrets** - You need to start moving configuration information into json files in wovtools/secrets. These files are merged together according to the order in wovtools/secrets/config.json. Also, secrets need to be managed in a safe way. They are stored in a git repository, so we can version the secrets, but you need to ensure the repo is hosted in a secure/encryped location. NOTE: GitHub is not encrypted by default.
 
-5. **Env: Kubernetes Yaml** - Move your Kubernetes yaml files into the `wovtools/k8s` directory and append the `wov` extension. Then modify the files to use the secrets you compile from the Env files. NOTE: follows the *wov File Format* as shown below.
+5. **Env: variables** - Using environment variables is the safe way to run containers and Kubernetes, as you add them at runtime and do not store them in the repo. Create `.wov` files in 'wovtools/conf' which are compiled for use in bash shells, Makefiles, Kubernetes ConfigMaps and Secrets, etc.  Use `.ck8s.wov` for non-secret data and `.sk8s.wov` for data that needs to remain encryped (passwords, keys, etc). See *wov File Format* below.
 
-6. **Env: Build** - Run the `wov-build -s` command to compile the secrets and then `wov-build -e` to compile the Env's `wov` files with this secret. These files are only built as needed (dependencies on timestamps secret diffs) so `wov-build -v` can print which files are skipped. Also, `wov-build -e` includes the `-s` step so just `wov-build -e` will build the Env in one step.
+6. **Env: Kubernetes Yaml** - Move your Kubernetes yaml files into the `wovtools/k8s` directory and append the `wov` extension. Then modify the files to use the secrets you compile from the Env files. NOTE: follows the *wov File Format* as shown below.
 
-7. **Services** - Write scripts that emulate the services your code will interact with in the cluster. This includes databases or other microservices. Write scripts in wovtools/services as SERVICE.sh, SERVICE-test.sh, SERVICE-kill.sh, which correspond to `wov-service` switches of -r, -t and -k.
+7. **Env: Build** - Run the `wov-build -s` command to compile the secrets and then `wov-build -e` to compile the Env's `wov` files with this secret. These files are only built as needed (dependencies on timestamps secret diffs) so `wov-build -v` can print which files are skipped. Also, `wov-build -e` includes the `-s` step so just `wov-build -e` will build the Env in one step.
 
-8. **Develop** - Build your code. Whatever you do, create that code. To use environment variables, use the `wov-env` script to set them, and then set them before your command is run. 
+8. **Services** - Write scripts that emulate the services your code will interact with in the cluster. This includes databases or other microservices. Write scripts in wovtools/services as SERVICE.sh, SERVICE-test.sh, SERVICE-kill.sh, which correspond to `wov-service` switches of -r, -t and -k.
+
+9. **Develop** - Build your code. Whatever you do, create that code. To use environment variables, use the `wov-env` script to set them, and then set them before your command is run. 
 ```
 # To run service myprojectservice1 with environment vars created with wov-build on file 'wovtools/conf/env.ck8s.wov':
-env `wov-env --env env.ck8s` npm run myprojectservice1
+env `wov-env --cmd env.ck8s` npm run myprojectservice1
 
 # To use in Makefiles, dump to a file and include 
 $(shell wov-env --env env.ck8s > ./.wovtools.mk)
@@ -59,6 +61,16 @@ wov-env --var WOV_PVER
 # To get all WovTools variables:
 wov-env -e
 ```
+
+### Workflow : Archive
+
+1. **Git** - Make sure your git archive, and also your wovtools/secret git archive, are checked in and pushed.
+
+2. **Containers** - Build the containers with the `wov-push-containers`. This involves creating scripts to create the content that goes into the container. For each container, created a script.sh file in `wovtools/containers` for that container. Variables passed to the script are CONTAINER (name of the container), SRCDIR (the root of the project) and DESTDIR (the directory the files are dumped). Make sure to include a Dockerfile as well. When your recipes are created, run the `wov-push-containers` command. To list containers this will build, run `wov-push-containers -l`.
+
+### Workflow : Deploy
+
+1. **Deploy** - Run `wov-deploy-apply` to run the latest project. This pulls env files and runs them. These files in turn include the Kubernetes deployments, which pull the containers. To run older versions, do a `wov-deploy-apply --pver X --sver Y` to run different versions. Note that only valid combinations of project and secret versions are allowable.
 
 
 ## Development Step
