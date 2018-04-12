@@ -7,9 +7,17 @@
 
 WovTools tightly integrates git, Docker and Kubernetes, trying to create as little new overhead as possible. It has three data tracks it manages: secrets, env and code. **Secrets** are stored in multiple JSON files and used to compile the **Env** files which are used to configure environment variables, build scripts and Kubernetes yaml configuration files. **Code** is all managed in git repos and we separate out our stages into different branches of git, deployed to our cluster in separate namespaces. WovTools pushes secrets, env and code through three distinct steps: development, archive and deploy. This involves compiling files for archive in git, AWS S3 and Docker repositories, eventually to be deployed. The general operation of WovTools requires you to make use of a set of commands that operate on configurations in WovTools, git, Docker and Kubernets.
 
+### Example Usage of our Facebook Plugin
+
+Our Facebook plugin connects to Facebook, listening for updates and pushing content. We run it in our own cluster that we call *wov-aws-va-live*, in its own project *plfb*, which we manage in three Kubernetes namespaces of *plfb-cw* (cw is my private namespace), *plfb-dev* and *plfb-prod*. Here's how the naming convetions play out in detail:
+
+The Kubernetes *context* for the production running Facebook plugin is `wov-aws-va-live-plfb-prod`. This means the cluster name is `wov-aws-va-live`, implying this cluster is the main Woveon cluster (wov), on Amazon Web Services (aws) in us-east-1 (i.e. that is in Virginia (va)) on our main cluster (live). (NOTE: We could make another cluster with flavor 'top' or 'brown' if we wanted, to test cluster deployment.) The plugin is one project, plfb, and follows our internal naming convetion of starting plugins with 'pl' followed by the plugin's short code, 'fb' for Facebook. There is one github repo for this project, and each namespace is its own branch (cw, dev, prod). Inside the project, there are three microservices (i.e. three Kubernetes deployments) that append their microservice code to the project to generate its name (wl - plfbwl - the Facebook plugin WoveonListener, rl - plfbrl - the Facebook plugin RemoteListener, etc.). Each microservice will have its own implementation, either a Helm chart or its own Deployment with its own container (plfbwl, plfbrl, etc.). Our cluster has two nodes, which we use _kube-aws_ to manage and at the moment, because we have not set up roles, one user (admin).
 
 ### Definitions
-* **Project** - a single Aim of a Kubernetes orchestrated system, that can be composed of multiple microservices.
+
+<img src="https://github.com/woveon/wovtools2/raw/master/docs/wovtoolsnaming.png" alt="Image of WovTools Naming Conventions" width="70%">
+
+* **Project** - a portion of a Kubernetes orchestrated system, that can be composed of multiple microservices, has multiple git branches and mulitple Kubernetes namespace.
 
 * **Data Track** - the types of data managed in WovTools, compiled for a deployable system in Kubernetes.
 
@@ -26,6 +34,37 @@ WovTools tightly integrates git, Docker and Kubernetes, trying to create as litt
   * **Archive Step** is about moving your code to an archive which you can then depoloy from.
   
   * **Deploy Step** is about running your code.
+
+* **Naming Conventions** - 
+
+  * **context** - {cluster}-{namespace} ex. l-api-dev. A context is where work gets done.
+  
+    * **cluster** - {cltype}-{provider}-{regioncode}-{flavor} ex. wov-aws-va-live. A cluster is the hardware that does the work. 
+    
+      * **cltype** - ex. wov. A name give to a cluster that serves a purpose. In this case, 'wov' means Woveon's default.
+      
+      * **provider** - ex. aws, gcp. A cluster hardware provider that Kubernetes is operating under. Only using aws at the moment.
+      
+      * **regioncode** - ex. va. A short code given to a region, in this case 'va' refers to AWS's us-east-1, which is in Virginia (i.e. va).
+      
+      * **flavor** - ex. live, blue, top. A name given to differentiate between clusters. You can have dev and prod stages inside a cluster, but sometimes you need different flavors of clusters to experiment.
+      
+    * **namespace** - {aim}-{stage} ex. api-dev. A namespace separates parts of the system.
+    
+      * **project** - ex. api, app, plfb. An group of services running in a namespace to perform a task of the larger system. This might be considered a code project and has a single repository for this project. There can be one or multiple microservices in it.
+      
+      * **stage** - ex. dev, text, acc, prod. Deployment stages in software.
+
+  * **microservice** {aimcode}{microservicecode} ex. apirest, apidb, wwwapp, plfbmonitor. A Kubernetes deployment generally, with pods, services and ingress, operating as part of an application.
+  
+  * **container** - ex. container_<microservice>. A Docker container to fulfill a service.
+ 
+  * **user** - ex. minikube, admin. A kubernetes user.
+ 
+  * **node** - An actual processing unit that does work. At least one per cluster.
+
+
+Naming conventions and practices are a confusing and debatable topic. Nice thread talking about the ‘flavor’ concept I created here: https://groups.google.com/forum/#!topic/kubernetes-users/GPaGOGxCDD8".
 
 
 ### Workflow : Local
@@ -132,4 +171,6 @@ These are just darn useful...
 
 ## Wov File Format
 
-## Naming Conventions
+**.wov** files are templates to absorb configuration in the secrets json files, which varies by WovTools stage. Their format is a double handlebars representaiton, with the first pass filling in the `STAGE` variable. 
+
+For example: to set an environment variable DB_URL from a secret file `wovtools/secret/db.json` of `{ "db" : { "cw" : { "url" : "localhost", "user" : "postgres" }, "dev" : {...} , "prod" : {...} } }`, you create a db.wov file containing `DB_URL=\{{db.{{STAGE}}.url}}`. In this way, when running in the "cw" stage, DB_URL is set to localhost.
