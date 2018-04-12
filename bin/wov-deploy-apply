@@ -12,9 +12,13 @@ pushenvargs=( "$@" )
 set ""
 . wov-env
 . wov-ns-check
-. wov-pushcode-check
-. wov-pushenv-check
 set -- "${pushenvargs[@]}"
+
+
+# Cache the current values
+WOV_CUR_PVER=${WOV_PVER}
+WOV_CUR_SVER=${WOV_SVER}
+
 
 
 #set -x
@@ -82,6 +86,22 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
+# If deploying the latest PVER, check that all code is pushed to archive
+if [ "${WOV_CUR_PVER}" == "${WOV_PVER}" ]; then
+  pushenvargs=( "$@" )
+  set ""
+  . wov-pushcode-check
+  set -- "${pushenvargs[@]}"
+fi
+
+# If deploying the latest SVER, check that all env is pushed to archive
+if [ "${WOV_CUR_SVER}" == "${WOV_SVER}" ]; then
+  pushenvargs=( "$@" )
+  set ""
+  . wov-push-env -q
+  set -- "${pushenvargs[@]}"
+fi
+
 ARCHBASE=${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}
 
 
@@ -130,7 +150,7 @@ done
 
 # --------------------------------------------------------------------- 
 # Deploy the k8s files
-echo "... deploying fils in ${DEPLOYDIR}/k8s"
+echo "... deploying files in ${DEPLOYDIR}/k8s"
 kubectl apply -f ${DEPLOYDIR}/k8s
 #FILES=$(cd ${DEPLOYDIR}/k8s; ls *.yaml)
 #for F in ${FILES}; do

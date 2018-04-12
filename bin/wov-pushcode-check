@@ -64,10 +64,10 @@ done
 
 # check current repo
 if [ "$(git status -s)" != "" ]; then
-  if [ "$DOECHO" == "1" ]; then
-    echo "WARNING: failed code/env commit-check. Check in your archive."
-  elif [ "$DOECHO" == "2" ]; then
-    echo "WARNING: failed code/env commit-check. Check in your archive."
+  if [ $DOECHO -ge 1 ]; then
+    echo "WARNING: failed code/env commit-check. Check in your code/env values to Archive."
+  fi
+  if [ $DOECHO -ge 2 ]; then
     git status
   fi
   exit 1

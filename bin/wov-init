@@ -24,39 +24,33 @@ function InitProject()
     git init -q
   fi
 
-  if [ "$(git rev-parse --verify prod)" != "0" ]; then git checkout -b prod ; echo "  ... creating branch 'prod'"; fi
-  if [ "$(git rev-parse --verify dev )" != "0" ]; then git checkout -b dev  ; echo "  ... creating branch 'dev'"; fi
-  if [ "$(git rev-parse --verify master)" != "0" ]; then git branch -d master; echo "  ... deleting branch 'master' (prod will be default)"; fi
+  # ---------------------------------------------------------------------
+  # Set remote origin
+  if [ "$(git config --get remote.origin.url 2> /dev/null ; echo $?)" != "0" ]; then
+    echo
+    printf "Git repository has no remote repository to push code to. Set that up now, and enter URL below.\n"
+    printf "  Remote git repository : "
+    read A
+    if [ "${A}" == "" ]; then echo "ERROR: must provide a repository."; exit 1; fi
+    git remote add origin $A
+    if [ "$?" != "0" ]; then echo "ERROR: setting git remote origin failed."; exit 1; fi
+    git remote -v
+    if [ "$?" != "0" ]; then echo "ERROR: testing of remote git repo failed."; exit 1; fi
+  fi
 
-#    git push -f origin prod
-  echo "TODO: set branch remote and make sure prod is the default"
-  echo " git push -u <remote_name> <local_branch_name>"
-  git push --set-upstream origin prod
-  touch .gitignore
-
-  # Select user branch/stage
-  echo
-  printf "Select a user stage to use (i.e. this will be the git branch and the stage portion of the Kubernetes namespace.\n"
-  printf "  - User stage (i.e. your initials or username) (${WOV_GSTAGE}) : "
-  read A
-  [[ ${A} =~ ^[A-Za-z][A-Za-z_0-9]+$ ]] || ( echo "ERROR: bad user stage name (i.e. [A-Za-z][A-Za-z_0-9]*)" ; exit 1)
-  if [ "${A}" != "" ]; then WOV_GSTAGE=${A}; fi
-  if [ "${WOV_GSTAGE}" == "" ]; then echo "ERROR: must provide a stage name."; exit 1; fi
-
-  if [ "$(git rev-parse --verify ${WOV_GSTAGE})" != "0" ]; then git checkout -b ${WOV_GSTAGE}; echo "  ... creating branch '${WOV_GSTAGE}'"; fi
-
+  # ---------------------------------------------------------------------
   # Select user name
   echo
   printf "Enter your name (${WOV_USERNAME}): "
   read A
   if [ "${A}" != "" ]; then WOV_USERNAME="${A}"; fi
 
+  # ---------------------------------------------------------------------
   # Select user email
   echo
   printf "Enter your email (${WOV_USEREMAIL}): "
   read A
   if [ "${A}" != "" ]; then WOV_USEREMAIL="${A}"; fi
-
 
   WOV_BASEDIR=$(git rev-parse --show-toplevel)
 
@@ -70,6 +64,89 @@ function InitProject()
     echo "  ... adding to .gitignore: $f"
     if ! grep -qF "${f}" .gitignore ; then echo "${f}" >> .gitignore ; fi
   done
+
+
+  # ---------------------------------------------------------------------
+  # Create conf, k8s and containers directories
+  mkdir -p ${WOV_BASEDIR}/wovtools/conf
+  mkdir -p ${WOV_BASEDIR}/wovtools/k8s
+  mkdir -p ${WOV_BASEDIR}/wovtools/containers
+
+  # ---------------------------------------------------------------------
+  # Create the config.json 
+  if [ ! -e ${WOV_BASEDIR}/wovtools/config.json ]; then 
+    cat <<EOF > ${WOV_BASEDIR}/wovtools/config.json
+{
+  "project" : {
+    "type" : "",
+    "project" : "",
+    "title" : "",
+    "description" : ""
+  },
+  "//operation" : "unused so far",
+  "operation" : {
+    "microservice" : {
+    }
+  },
+  "archive" : {
+    "env" : "",
+    "repository" : ""
+  }
+}
+EOF
+  fi
+
+  # now commit so we can build branches
+  # Build a git revision and all branches
+  if [ "$ISNEWGIT" == "1" ]; then
+    git add .gitignore wovtools/config.json
+    git commit -a -m "initial commit"
+  fi
+
+
+
+
+  # ---------------------------------------------------------------------
+  # Create branches
+
+  echo
+  echo "NOTE: Are the next commands for (push --set-upstream origin X) going to blow up? Do I have to set remote first before calling this?"
+  echo "      git remote add origin [URL]"
+  echo
+
+  if [ "$(git rev-parse --verify prod 2> /dev/null ; echo $?)" != "0" ]; then 
+    echo "  ... creating branch 'prod', pushing to origin"; 
+    git checkout -b prod || exit 1
+    git push --set-upstream origin prod || exit 1
+  fi
+  if [ "$(git rev-parse --verify dev  2> /dev/null ; echo $?)" != "0" ]; then 
+    echo "  ... creating branch 'dev', pushing to origin"; 
+    git checkout -b dev || exit 1
+    git push --set-upstream origin dev || exit 1
+  fi
+  if [ "$(git rev-parse --verify master 2> /dev/null ; echo $?)" != "0" ]; then git branch -d master; echo "  ... deleting branch 'master' (prod will be default)"; fi
+
+#    git push -f origin prod
+#  echo "TODO: set branch remote and make sure prod is the default"
+#  echo " git push -u <remote_name> <local_branch_name>"
+#  git push --set-upstream origin prod
+  touch .gitignore
+
+  # Select user branch/stage
+  echo
+  printf "Select a user stage to use (i.e. this will be the git branch and the stage portion of the Kubernetes namespace.\n"
+  printf "  - User stage (i.e. your initials or username) (${WOV_GSTAGE}) : "
+  read A
+  [[ ${A} =~ ^[A-Za-z][A-Za-z_0-9]+$ ]] || ( echo "ERROR: bad user stage name (i.e. [A-Za-z][A-Za-z_0-9]*)" ; exit 1)
+  if [ "${A}" != "" ]; then WOV_GSTAGE=${A}; fi
+  if [ "${WOV_GSTAGE}" == "" ]; then echo "ERROR: must provide a stage name."; exit 1; fi
+
+  if [ "$(git rev-parse --verify ${WOV_GSTAGE} 2> /dev/null ; echo $?)" != "0" ]; then 
+    echo "  ... creating branch '${WOV_GSTAGE}', pushing to origin"
+    git checkout -b ${WOV_GSTAGE} || exit 1
+    git push --set-upstream origin ${WOV_GSTAGE} || exit 1
+  fi
+
 
 
   # ---------------------------------------------------------------------
@@ -117,42 +194,9 @@ EOF
   cd ${WOV_BASEDIR}
 
 
-  # ---------------------------------------------------------------------
-  # Create conf, k8s and containers directories
-  mkdir -p ${WOV_BASEDIR}/wovtools/conf
-  mkdir -p ${WOV_BASEDIR}/wovtools/k8s
-  mkdir -p ${WOV_BASEDIR}/wovtools/containers
-
-  # ---------------------------------------------------------------------
-  # Create the config.json 
-  if [ ! -e ${WOV_BASEDIR}/wovtools/config.json ]; then 
-    cat <<EOF > ${WOV_BASEDIR}/wovtools/config.json
-{
-  "project" : {
-    "type" : "",
-    "project" : "",
-    "title" : "",
-    "description" : ""
-  },
-  "//operation" : "unused so far",
-  "operation" : {
-    "microservice" : {
-    }
-  },
-  "archive" : {
-    "env" : "",
-    "repository" : ""
-  }
-}
-EOF
-  fi
 
 
-  # Build a git revision and all branches
-  if [ "$ISNEWGIT" == "1" ]; then
-    git add .gitignore wovtools/config.json
-    git commit -a -m "initial commit"
-  fi
+
 
 }
 
@@ -188,9 +232,9 @@ EOF
 echo "... ensure directory structure"
 if [ "$(wov-env &> /dev/null ; echo $?)" == "1" ]; then
   echo "... creating new wovtools project in this directory."
-  set -x
+#  set -x
   InitProject
-  set +x
+#  set +x
 fi
 
 echo "... importing the existing wovtools project in this directory."
@@ -213,7 +257,10 @@ if [ "${A}" != "" ]; then WOV_PROJECTTITLE=${A}; fi
 echo 
 printf "Project Code [i.e. short machine happy string (i.e. directory name)?]: (${WOV_PROJECT}) "
 read A
-[[ ${A} =~ ^[A-Za-z][A-Za-z_0-9]+$ ]] || ( echo "ERROR: bad string (i.e. [A-Za-z][A-Za-z_0-9]*)" ; exit 1)
+if [[ ${A} =~ ^[A-Za-z][A-Za-z_0-9]+$ ]];  then
+  echo "ERROR: bad string (i.e. [A-Za-z][A-Za-z_0-9]*)" 
+  exit 1
+fi
 if [ "${A}" != "" ]; then WOV_PROJECT=${A}; fi
 
 echo
@@ -237,9 +284,7 @@ read A
 if [ "${A}" != "" ]; then WOV_ARCHIVEENV=${A}; fi
 
 
-echo "HERE, write it all back"
-
-
+echo "... writing 'wovtools/config.json'"
 jq '.project.type="'"${WOV_PROJECTTYPE}"'" | .project.project="'"${WOV_PROJECT}"'"  | .project.title="'"${WOV_PROJECTTITLE}"'"  | .project.description="'"${WOV_PROJECTDESCRIPTION}"'" | .operation={} | .archive.env="'"${WOV_ARCHIVEENV}"'" | .archive.repository="'"${WOV_ARCHIVEREPOSITORY}"'"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json.$$ && cp ${WOV_BASEDIR}/wovtools/.config.json.$$ ${WOV_BASEDIR}/wovtools/config.json
 rm ${WOV_BASEDIR}/wovtools/.config.json.*
 

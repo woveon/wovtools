@@ -13,7 +13,7 @@ set ""
 . wov-env
 . wov-ns-check
 . wov-pushcode-check
-. wov-pushenv-check
+. wov-push-env
 set -- "${pushenvargs[@]}"
 
 

@@ -93,6 +93,7 @@ if [ -e "${WOV_BASEDIR}/wovtools/config.json" ]; then
 
   WOV_ARCHIVEREPOSITORY=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.archive.repository') 
   WOV_ARCHIVEENV=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.archive.env') 
+  export WOV_ARCHIVEREPOSITORY
   export WOV_ARCHIVEENV
 
   WOV_GSTAGE=$(git rev-parse --abbrev-ref HEAD)
