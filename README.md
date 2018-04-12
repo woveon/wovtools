@@ -36,7 +36,14 @@ WovTools tightly integrates git, Docker and Kubernetes, trying to create as litt
 
 3. **Set Stage** - By default, *wov-init* will exist in your user's stage, but `wov-stage <stage>` sets the stage for development. So, `wov-stage dev` or `wov-stage prod` are two different stages. However, I use my initials for stages, creating my own Kubernetes namespace and git branch to work in. So, `wov-stage cw` is what I start in.
 
-4. **Secrets** - You need to start moving configuration information into json files in wovtools/secrets. These files are merged together according to the order in wovtools/secrets/config.json. Also, secrets need to be managed in a safe way. They are stored in a git repository, so we can version the secrets, but you need to ensure the repo is hosted in a secure/encryped location. NOTE: GitHub is not encrypted by default.
+4. **Secrets** - You need to start moving configuration information into json files in wovtools/secrets. These files are merged together according to the order in wovtools/secrets/config.json. Also, secrets need to be managed in a safe way. They are stored in a git repository, so we can version the secrets, but you need to ensure the repo is hosted in a secure/encryped location. NOTE: GitHub is not encrypted by default. While your commands will differ, you will use commands similiar to this to commit your secrets to Git:
+```
+git remote add origin *URL*    # set origin to remote URL
+  # ex. for AWS CodeCommit: git remote add origin https://git-codecommit.us-east-1.amazonaws.com/v1/repos/reponame  
+git remote -v                  # test connection
+git push -u origin master      # send data to remote master
+```
+NOTE: [on AWS, you will need to configure your AWSCodeCommit access as well as a git key which git will ask for.](https://docs.aws.amazon.com/codecommit/latest/userguide/setting-up-gc.html)
 
 5. **Env: variables** - Using environment variables is the safe way to run containers and Kubernetes, as you add them at runtime and do not store them in the repo. Create `.wov` files in 'wovtools/conf' which are compiled for use in bash shells, Makefiles, Kubernetes ConfigMaps and Secrets, etc.  Use `.ck8s.wov` for non-secret data and `.sk8s.wov` for data that needs to remain encryped (passwords, keys, etc). See *wov File Format* below.
 
