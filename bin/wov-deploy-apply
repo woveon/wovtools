@@ -163,5 +163,5 @@ kubectl apply -f ${DEPLOYDIR}/k8s
 
 # --------------------------------------------------------------------- 
 # Cleanup
-echo "... skipping cleanup"
-#rm -Rf ${DEPLOYDIR}
+# echo "... skipping cleanup"
+rm -Rf ${DEPLOYDIR}
