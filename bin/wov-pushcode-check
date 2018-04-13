@@ -68,8 +68,6 @@ done
 if [ "$(git status -s)" != "" ]; then
   if [ $DOECHO -ge 1 ]; then
     echo "WARNING: failed code/env commit-check. Check in your code/env values to Archive."
-  fi
-  if [ $DOECHO -ge 2 ]; then
     git status
   fi
   exit 1
@@ -82,9 +80,7 @@ fi
 
 # check secrets repo
 if [ "$(cd ${WOV_BASEDIR}/wovtools/secrets && git status -s)" != "" ]; then
-  if [ "$DOECHO" == "1" ]; then
-    echo "WARNING: failed secrets commit-check. Check in your secrets archives."
-  elif [ "$DOECHO" == "2" ]; then
+  if [ $DOECHO -ge 1]; then
     echo "WARNING: failed secrets commit-check. Check in your secrets archives."
     cd ${WOV_BASEDIR}/wovtools/secrets && git status
   fi
@@ -105,8 +101,9 @@ MYSBRANCH=$(cd ${WOV_BASEDIR}/wovtools/secrets && git rev-parse --abbrev-ref HEA
 
 # check code/env
 if [ "$(git log origin/${MYBRANCH}..${MYBRANCH})" != "" ]; then
-  if [ "$DOECHO" == "1" ] || [ "$DOECHO" == "2" ]; then
+  if [ $DOECHO -ge 1 ]; then
     echo "WARNING: failed code/env push check. Push your archive."
+    git status
   fi
   exit 1
 else
@@ -117,8 +114,9 @@ fi
 
 # check secrets
 if [ "$(cd ${WOV_BASEDIR}/wovtools/secrets && git log origin/${MYSBRANCH}..${MYSBRANCH})" != "" ]; then
-  if [ "$DOECHO" == "1" ] || [ "$DOECHO" == "2" ]; then
+  if [ $DOECHO -ge 1 ]; then
     echo "WARNING: failed secrets push check. Push your secrets archive."
+    git status
   fi
   exit 1
 else

@@ -1,6 +1,73 @@
 #!/usr/bin/env bash
 
+DOECHO=1
+DOFORCE=0
+FOLD=80
+BLOCK=0
 
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+pushargs=( "$@" )
+set ""
+. wov-env
+. wov-ns-check
 . wov-pushcode-check
-. wov-push-containers
-. wov-push-env
+set -- "${pushargs[@]}"
+
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Macro command that pushes containers, then env. It uses:
+   wov-push-containers
+   wov-push-env
+
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+METAARGS=""
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+    METAARGS="${METAARGS} -q "
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+    METAARGS="${METAARGS} -v "
+
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+set -x
+wov-push-containers ${METAARGS}
+wov-push-env ${METAARGS}

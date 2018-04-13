@@ -2,6 +2,7 @@
 
 DOECHO=1
 DOFORCE=0
+DORETAIN=0
 FOLD=80
 
 
@@ -36,6 +37,7 @@ usage: `basename $0` [options]
 Deploys a running kubernetes project from an archive.
 
   --pver|--sver X : sets the Project and Secret version for roll-backs
+  -r : retains the deployment values locally (potential security risk)
   -f : force push
   -h : this help
   -q/-v : quiet/verbose
@@ -61,6 +63,10 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-f" ]; then
     shift
     DOFORCE=1
+
+  elif [ "$1" == "-r" ]; then
+    shift
+    DORETAIN=1
 
   elif [ "$1" == "--pver" ]; then
     shift
@@ -163,5 +169,9 @@ kubectl apply -f ${DEPLOYDIR}/k8s
 
 # --------------------------------------------------------------------- 
 # Cleanup
-echo "... skipping cleanup"
-#rm -Rf ${DEPLOYDIR}
+if [ ${DORETAIN} == 1 ]; then
+  echo "... skipping cleanup"
+else
+  rm -Rf ${DEPLOYDIR}
+fi
+

@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+DOFORCE=0
+FOLD=80
+
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+pushargs=( "$@" )
+set ""
+. wov-env
+. wov-ns-check
+. wov-pushcode-check
+set -- "${pushargs[@]}"
+
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{ 
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options] container
+
+Checks if the current container needs to be pushed. This checks, in order:
+  * does the container exist
+  * is the container pushed to remote?
+  * do we have a directory for the contents to build the container
+  * does the directory for hte container differ from the last build?
+
+  -h : this help
+  -q/-v : quiet/verbose
+  -f : force
+
+EOF
+}
+
+# These can be used for testing
+#  --pver : explicitly set WOV_PVER
+#  --stage : explicitly set WOV_STAGE (WOV_KSTAGE actually)
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-f" ]; then
+    shift
+    DOFORCE=1
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+# Can be used for testing
+#  elif [ "$1" == "--pver" ]; then
+#    shift
+#    WOV_PVER=$1
+#    shift
+#
+#  elif [ "$1" == "--stage" ]; then
+#    shift
+#    WOV_KSTAGE=$1
+#    shift
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+# Echoes 1 if found a remote, 0 otherwise
+function fCheckForRemoteImage() 
+{
+  local retval=0
+
+  # NOTE: check KSTAGE since GSTAGE is mixed with local
+  R=$(ecs-cli images ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} | awk '{print $2}' | \grep ${WOV_KSTAGE}_${WOV_PVER})
+  if [ "${R}" != "" ]; then
+    retval=1
+  fi
+
+#  echo "R $R"
+#  echo "TAG ${WOV_KSTAGE}_${WOV_PVER}"
+
+  echo $retval
+}
+
+
+if [ "$#" != "1" ]; then
+  printf "\nERROR: need to supply the container name.\n"
+  fDisplayOptions
+  exit 1
+fi
+
+CONTAINER=$1
+
+DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${CONTAINER}
+ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${CONTAINER}
+NEEDSBUILD=1
+
+#echo "CHECK : "
+#fCheckForRemoteImage
+#exit 1
+
+if [ ${DOFORCE} -eq 1 ]; then
+  if [ $DOECHO -ge 1 ]; then echo "    ... forcing build."; fi
+
+elif [ "$(docker images -q ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} )" == "" ]; then
+  if [ $DOECHO -ge 1 ]; then echo "    ... no existing container, building"; fi
+  docker images -q "${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER}"
+
+elif [ ! -e ${ARCHDIR} ]; then
+  if [ $DOECHO -ge 1 ]; then echo "    ... no ${ARCHDIR}, building"; fi
+
+elif [ "$(fCheckForRemoteImage)" == "0" ]; then
+  if [ $DOECHO -ge 1 ]; then echo "    ... no remote tagged image found."; fi
+
+elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then
+  if [ $DOECHO -ge 1 ]; then echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"; fi
+
+else
+  NEEDSBUILD=0
+fi
+
+if [ ${DOECHO} -ge 2 ]; then echo "... needs build ${NEEDSBUILD}"; fi
+exit ${NEEDSBUILD}
