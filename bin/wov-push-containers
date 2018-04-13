@@ -114,25 +114,24 @@ for f in ${RECIPES}; do
     # determine if need to build container
     NEEDSBUILD=0
 
-    printf "\n\n\n\n\n replace below with script\n\n\n\n"
-
-    if [ ${NEEDSBUILD} == 1 ] || [ $DOFORCE == 1 ]; then
-      echo "    ... forcing container build."
-
-    elif [ "$(docker images -q ${CONTAINER})" == "" ]; then 
-      docker images -q ${CONTAINER}
-      echo "    ... no existing container, building"
-      NEEDSBUILD=1
-
-    elif [ ! -e ${ARCHDIR} ]; then 
-      echo "    ... no ${ARCHDIR}, building"
-      NEEDSBUILD=1; 
-
-    elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then 
-      echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"
-      NEEDSBUILD=1; 
-    fi
-
+    NEEDSBUILD=$(wov-pushcontainer-check ${f%.sh} > /dev/null ; echo $?)
+#    if [ ${NEEDSBUILD} == 1 ] || [ $DOFORCE == 1 ]; then
+#      echo "    ... forcing container build."
+#
+#    elif [ "$(docker images -q ${CONTAINER})" == "" ]; then 
+#      docker images -q ${CONTAINER}
+#      echo "    ... no existing container, building"
+#      NEEDSBUILD=1
+#
+#    elif [ ! -e ${ARCHDIR} ]; then 
+#      echo "    ... no ${ARCHDIR}, building"
+#      NEEDSBUILD=1; 
+#
+#    elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then 
+#      echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"
+#      NEEDSBUILD=1; 
+#    fi
+#
     # do actions 
     if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then
 
