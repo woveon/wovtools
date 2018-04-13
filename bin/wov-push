@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+
+. wov-pushcode-check
+. wov-push-containers
+. wov-push-env

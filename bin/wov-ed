@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+  
+DOECHO=1
+
+FOLD=80
+HAS_SECRET=0
+HAS_BUILDENV=0
+SECRETDIFF=1
+EDPATH=''
+
+
+# --------------------------------------------------------------------- 
+# Import Env 
+# --------------------------------------------------------------------- 
+buildargs=( "$@" )
+set ""
+. wov-env
+. wov-ns-check
+set -- "${buildargs[@]}"
+#set -x
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options] resource ...
+
+Opens an editor to view the compiled resources.
+
+  secrets
+  conf X  : 
+
+  -s : edit the src file
+  -o : edit the output file
+  -h : this help
+
+EOF
+}
+
+
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+#  echo "param '$1'"
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-s" ]; then
+    shift
+    EDPATH=''
+
+  elif [ "$1" == "-o" ]; then
+    shift
+    EDPATH='cache/'
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+if [ "$1" == "secrets" ]; then
+  if [ "$#" != "1" ]; then
+    printf "\nERROR: bad number of arguments for 'secrets'.\n"
+    fDisplayOptions
+    exit 1
+  fi
+  $EDITOR ${WOV_BASEDIR}/wovtools/${EDPATH}secrets/current.json
+elif [ "$1" == "conf" ]; then
+
+  # list
+  if [ "$#" == "1" ]; then
+    ls ${WOV_BASEDIR}/wovtools/${EDPATH}conf
+    exit 0
+  fi
+
+  if [ "$#" != "2" ]; then
+    printf "\nERROR: bad number of arguments for 'conf'.\n"
+    fDisplayOptions
+    exit 1
+  fi
+
+  P=${WOV_BASEDIR}/wovtools/${EDPATH}conf/$2
+  if [ ! -e ${P} ]; then
+    P=${WOV_BASEDIR}/wovtools/${EDPATH}conf/$2.wov
+    if [ ! -e ${P} ]; then
+      printf "\nERROR: no conf file of '${2}'.\n"
+      ls ${WOV_BASEDIR}/wovtools/${EDPATH}conf
+      exit 1
+    fi
+  fi
+  $EDITOR ${P}
+
+fi

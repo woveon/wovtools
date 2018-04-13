@@ -30,8 +30,10 @@ if [ "$WOV_KSTAGE" == "" ]; then
 elif [ "$WOV_GSTAGE" == "" ]; then
   echo "ERROR: unknown WOV_KSTAGE";
   exit 2
+elif [[ $WOV_GSTAGE == "${WOV_KSTAGE}-local" ]]; then
+  echo "...matched local stage"
 elif [ "$WOV_KSTAGE" != "$WOV_GSTAGE" ]; then
-  echo "ERROR: STAGE miss-match. (WOV_KSTAGE=${WOV_KSTAGE}) (WOV_GSTAGE=${WOV_GSTAGE}).";
+  echo "ERROR: STAGE miss-match. Kubernetes (WOV_KSTAGE)=${WOV_KSTAGE}, Git (WOV_GSTAGE)=${WOV_GSTAGE}.";
   exit 3
 fi
 

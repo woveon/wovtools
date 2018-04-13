@@ -63,7 +63,7 @@ echo "TAIL ${TAIL}"
 
 #kubectl get pods -n "$NAMESPACE" --no-headers --show-all=true
 #POD=`kubectl get pods --namespace "$NAMESPACE" --no-headers --show-all=true | grep ${STEM} | awk '{print $1}'`
-POD=`wovp -n "$NAMESPACE" "${STEM}"`
+POD=`wov-p -n "$NAMESPACE" "${STEM}"`
 echo "POD: ${POD}"
 if [[ "$?" != "0" ]] || [[ "$POD" == "" ]] ; then 
   echo ""

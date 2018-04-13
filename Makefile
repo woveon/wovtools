@@ -1,9 +1,9 @@
 
 
-BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service
-BINS=wov-env wov-ns-check wov-stage wov-env wov-build wov-compile \
-		 wov-pushcode-check wov-pushenv-check wov-push-containers wov-push-env wov-push-secrets \
-		 wov-deploy-apply wov-deploy-info \
+BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service wov-ed wov-ls
+BINS=wov-env wov-ns-check wov-stage wov-build wov-compile \
+		 wov-pushcode-check wov-pushenv-check wov-push-containers wov-push-env wov-push-secrets wov-push \
+		 wov-deploy wov-deploy-info \
 		 $(BINS-UTIL)
 
 APPLESCRIPT=wov-context.app

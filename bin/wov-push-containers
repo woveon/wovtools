@@ -12,6 +12,7 @@ pushcontainersargs=( "$@" )
 set ""
 . wov-env
 . wov-ns-check
+. wov-pushcode-check
 set -- "${pushcontainersargs[@]}"
 #set -x
 
@@ -113,7 +114,10 @@ for f in ${RECIPES}; do
     # determine if need to build container
     NEEDSBUILD=0
 
-    if [ "$(docker images -q ${CONTAINER})" == "" ]; then 
+    if [ ${NEEDSBUILD} == 1 ] || [ $DOFORCE == 1 ]; then
+      echo "    ... forcing container build."
+
+    elif [ "$(docker images -q ${CONTAINER})" == "" ]; then 
       docker images -q ${CONTAINER}
       echo "    ... no existing container, building"
       NEEDSBUILD=1
@@ -131,17 +135,17 @@ for f in ${RECIPES}; do
     if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then
 
       echo "    ... creating container '${CONTAINER}'"
-      docker build -f ${DESTDIR}/Dockerfile -t ${CONTAINER}:latest ${DESTDIR} || exit 1
+      docker build -f ${DESTDIR}/Dockerfile -t ${WOV_PROJECT}/${CONTAINER}:latest ${DESTDIR} || exit 1
 
       echo "    ... archiving build of container '${CONTAINER}'"
       mkdir -p ${ARCHDIR}
       rsync -ai --delete ${DESTDIR}/ ${ARCHDIR} &> /dev/null
 
       echo "    ... tag and push to repo"
-      docker tag ${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
+      docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
 
-      echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-      docker push ${WOV_ARCHIVEREPOSITORY}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 
+      echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+      docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 
 
     else
       echo "    ... skipping build of container '${CONTAINER}'"

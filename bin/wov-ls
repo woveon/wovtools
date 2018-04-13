@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+DOFORCE=0
+FOLD=80
+BLOCK=0
+
+# --------------------------------------------------------------------- 
+# Import Env 
+# --------------------------------------------------------------------- 
+lsargs=( "$@" )
+set ""
+. wov-env
+set -- "${lsargs[@]}"
+#set -x
+
+
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Lists information of the current file space.
+
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+function doDisplay() 
+{
+  echo
+  echo "= ${WOV_NS} = ${WOV_PVER}:${WOV_SVER} ==============================="
+  echo
+
+  pad="---------------------------------------------------------------------" 
+
+  DIRS=( "conf" "k8s" "containers" "services" "cmds" "secrets" )
+
+  for f in "${DIRS[@]}"; do
+    if [ -e ${WOV_BASEDIR}/wovtools/$f ]; then
+      printf "\n- %s  %s\n" $f "${pad:${#f}}"
+      ls ${WOV_BASEDIR}/wovtools/$f
+    fi
+  done
+
+}
+
+
+doDisplay

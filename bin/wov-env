@@ -98,6 +98,7 @@ if [ -e "${WOV_BASEDIR}/wovtools/config.json" ]; then
 
   WOV_GSTAGE=$(git rev-parse --abbrev-ref HEAD)
   WOV_STAGE=$WOV_GSTAGE
+    # GSTAGE has priority since it can represent <initials>-local, for local namespaces.
   export WOV_GSTAGE
   export WOV_STAGE
 

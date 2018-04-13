@@ -3,11 +3,13 @@
 DOECHO=1
 FOLD=100
 
+# Try to build
+wov-build -e
+
 # grab it if not defined
 if [ "${WOV_BASEDIR}" == "" ]; then
   WOV_BASEDIR=$(git rev-parse --show-toplevel)
 fi
-
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------

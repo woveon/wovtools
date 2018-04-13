@@ -147,6 +147,12 @@ EOF
     git push --set-upstream origin ${WOV_GSTAGE} || exit 1
   fi
 
+  # Create local repo
+  if [ "$(git rev-parse --verify ${WOV_GSTAGE}_local 2> /dev/null ; echo $?)" != "0" ]; then 
+    echo "  ... creating branch '${WOV_GSTAGE}_local', pushing to origin"; 
+    git checkout -b ${WOV_GSTAGE}_local || exit 1
+    git push --set-upstream origin ${WOV_GSTAGE}_local || exit 1
+  fi
 
 
   # ---------------------------------------------------------------------
