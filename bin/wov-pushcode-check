@@ -80,7 +80,7 @@ fi
 
 # check secrets repo
 if [ "$(cd ${WOV_BASEDIR}/wovtools/secrets && git status -s)" != "" ]; then
-  if [ $DOECHO -ge 1]; then
+  if [ $DOECHO -ge 1 ]; then
     echo "WARNING: failed secrets commit-check. Check in your secrets archives."
     cd ${WOV_BASEDIR}/wovtools/secrets && git status
   fi

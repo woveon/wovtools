@@ -143,7 +143,6 @@ for f in ${RECIPES}; do
     if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then
 
       echo "    ... creating container '${CONTAINER}'"
-      set -x
       if [ "${SSHKEY}" != "" ]; then
         echo "      ... adding ssh key to build: '${SSHKEY}'"
         cp ${SSHKEY} ${DESTDIR}/$(basename ${SSHKEY})
@@ -156,7 +155,6 @@ for f in ${RECIPES}; do
         echo "      ... removing key from dest: '${DESTDIR}/$(basename ${SSHKEY})'"
         rm ${DESTDIR}/$(basename ${SSHKEY})
       fi
-      set +x
 
       echo "    ... archiving build of container '${CONTAINER}'"
       mkdir -p ${ARCHDIR}

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
+FOLD=80
 WOV_VERSION=0
 WOV_BASEDIR=$(git rev-parse --show-toplevel)
 export WOV_BASEDIR
+
 
 if [ "$WOV_BASEDIR" == "" ]; then
   echo "ERROR: not in wovtools project."
@@ -31,6 +33,7 @@ usage: `basename $0` [options]
   --cmd X      : for commands on one line, echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
   --qcmd X     :   ", quoted
   --sl X       :   ", string literal output
+  --rcAWS      : convert a region code to an AWS code (ex. va-> us-east-1)
 
 Example Usage:
   `basename $0`    : sets all environment variables
@@ -179,7 +182,8 @@ function fDoEcho()
 function fDoCluster()
 {
   RANCLUSTER=1
-  CL_REGION=`wovtools --rcAWS ${WOV_REGION}`
+  fConvertRegionCodeAWS ${WOV_REGION}
+  CL_REGION=$cRC
   CL_ZONES="c d"
   export CL_REGION
   export CL_ZONES
@@ -232,6 +236,18 @@ function doStringLiteral()
   fi
 }
 
+# ---------------------------------------------------------------------
+function fConvertRegionCodeAWS()
+{
+  case $1 in
+    va) cRC='us-east-1' ;;
+    *)
+      echo
+      echo "***ERROR: unknown AWS region code of '$1'."
+      exit 1
+  esac
+}
+
 # --------------------------------------------------------------------- 
 # Command line processing
 while [[ $1 =~ ^- ]]; do
@@ -256,6 +272,12 @@ while [[ $1 =~ ^- ]]; do
     shift
     doStringLiteral $1
 
+  elif [ "$1" == "--rcAWS" ]; then
+    shift
+    fConvertRegionCodeAWS $1
+    echo "$cRC"
+    shift
+
   elif [ "$1" == '--var' ]; then
     shift 
     if [ "$ECHOMODE" == "1" ]; then
@@ -266,6 +288,7 @@ while [[ $1 =~ ^- ]]; do
     DOALL=0
   elif [ "$1" == '-v' ] || [ "$1" == '--version' ]; then
     echo $WOV_VERSION
+
   elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
     fDisplayOptions
     exit 0

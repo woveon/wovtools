@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+
+
+# note: this does not work
+CleanUp() {
+  echo 'tell app "Terminal" to set current settings of first window to settings set "Novel" ' | osascript
+  echo
+}
+trap CleanUp SIGHUP SIGINT SIGTERM
+
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+wovpshellargs=( "$@" )
+set ""
+. wov-env
+set -- "${wovpshellargs[@]}"
+
+function DisplayOptions
+{
+  cat <<EOF
+
+usage : `basename $0` [-n|--namespace] [svc]
+
+ Connect to the running microservice (Pod) in current or given namespace. Defaults to 'msdev'.
+
+   -h|--help : this output
+   -n|--namespace X : get in the namespace of X
+  
+EOF
+}
+
+NAMESPACE=$WOV_NS
+
+while [[ $1 =~ ^- ]]
+do
+    if [ "$1" == '-n' ] || [  "$1" == '--namespace' ]; then
+        shift
+        NAMESPACE="$1"
+        echo "- using namespace '$NAMESPACE'"
+        shift
+    elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
+        DisplayOptions
+        exit 0
+    fi
+done
+
+
+if [ "$#" == "0" ]; then
+  SERVICE=vh
+elif [ "$#" == "1" ]; then 
+  echo "set service $#"
+  SERVICE=$1
+else
+  echo
+  echo "***ERROR: bad arguments."
+  DisplayOptions
+  exit 1
+fi
+
+
+cat <<EOF
+
+- wov-pshell --------------------------------------------------------- 
+ Pod: '$SERVICE' 
+  ... in context '$K8S_CONTEXT'
+  ... in namespace '$NAMESPACE'
+--------------------------------------------------------------------- 
+
+EOF
+
+echo 'tell app "Terminal" to set current settings of first window to settings set "Desert" ' | osascript
+
+# Set Terminal tab
+echo -ne "\033]1;SVC: ${NAMESPACE}/${SERVICE}\007"
+#echo "wovp -n $NAMESPACE $SERVICE"
+PODNAME=`wov-p -n "$NAMESPACE" "$SERVICE" || ( CleanUp ; exit 1)`
+if [ "$?" != "0" ]; then
+  exit 1
+fi
+kubectl exec --namespace "$NAMESPACE" -it "$PODNAME" -- /bin/bash || ( CleanUp ; exit 1 )
+CleanUp

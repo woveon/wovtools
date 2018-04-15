@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+
+JUSTCHECK=0
+WAITTIME=3
+WAITFIRST=0
+NAMESPACE=
+
+#set -x
+
+function fDoDisplay()
+{
+  cat <<EOF
+
+usage: `basename $0` [options] ([podname] ...)
+
+Waits for a pod to enter the running state, by continuous polling. 
+
+  -h|--help : Display this help.
+  -f|--first : initial time to wait before polling, otherwise standard
+  -w|--wait  : wait time in seconds between polling (default=3)
+  -n|--namespace : search for pod in namespace
+  -j|--just-check : check if pod is ready
+  -c : NOT IMPLEMENTED - wait for cluster to come online
+
+Pod names are matched to the stem, so the full name is not necessary. 
+   ex. 'plfb-mongodb-384393937-hdfk' is matched by 'plfb-mongodb'
+
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# Command line processing
+while [[ $1 =~ ^- ]]; do
+  if [ "$1" == '-f' ] || [ "$1" == '--first' ]; then
+    shift
+    WAITFIRST="$1"
+    shift
+  elif [ "$1" == '-w' ] || [ "$1" == '--wait' ]; then
+    shift
+    WAITTIME="$1"
+    shift
+  elif [ "$1" == '-j' ] || [ "$1" == '--just-check' ]; then
+    JUSTCHECK="1"
+    shift
+  elif [ "$1" == '-c' ] || [ "$1" == '--cluster' ]; then
+    fDoCluster
+    shift
+  elif [ "$1" == '-n' ] || [ "$1" == '--namespace' ]; then
+    shift
+    NAMESPACE=" -n $1 "
+    shift
+  elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
+    fDoDisplay
+    exit 0
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    exit 1
+  fi
+done
+
+
+# Wait for each pod
+first=1
+for p in $*; do
+
+  podname=`wov-p $NAMESPACE $p`
+  stat=`kubectl describe $NAMESPACE pods $podname | grep "^Status" | awk '{print $2}'`
+
+  if [ "$JUSTCHECK" == "1" ]; then
+    if [ "$stat" == "Running" ]; then
+      exit 0
+    else
+      exit 1
+    fi
+  fi
+
+  while [ "$stat" != "Running" ]; do
+    if [ "$first" == "1" ]; then
+      echo "    ... waiting at least ${WAITFIRST}s for msdev to come online"
+      sleep ${WAITFIRST}
+      first=0
+    else
+      echo "    ... waiting ${WAITTIME}s more for msdev to come online"
+      sleep ${WAITTIME}
+    fi
+    stat=`kubectl describe $NAMESPACE pods $podname | grep "^Status" | awk '{print $2}'`
+  done
+done
