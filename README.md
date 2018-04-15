@@ -97,12 +97,17 @@ NOTE: [on AWS, you will need to configure your AWSCodeCommit access as well as a
 # To run service myprojectservice1 with environment vars created with wov-build on file 'wovtools/conf/env.ck8s.wov':
 env `wov-env --cmd env.ck8s` npm run myprojectservice1
 
+# To bring the variables locally (not env, so won't be passed to scripts
+eval $(wov-env --env env.ck8s)
+export WOV_plugin_desc             # now it is global so can be used in a called script
+
+
 # To use in Makefiles, dump to a file and include 
 $(shell wov-env --env env.ck8s > ./.wovtools.mk)
 include ./.wovtools.mk
 
-# To get a single WovTools variable:
-wov-env --var WOV_PVER
+# To get a single WovTools variable (ex. 2):
+wov-env --var WOV_PVER   # returns 'WOV_PVER=2'
 
 # To get all WovTools variables:
 wov-env -e
