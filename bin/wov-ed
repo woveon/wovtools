@@ -6,6 +6,7 @@ FOLD=80
 HAS_SECRET=0
 HAS_BUILDENV=0
 SECRETDIFF=1
+DONEW=0
 EDPATH=''
 
 
@@ -27,15 +28,17 @@ function fDisplayOptions()
   cat <<EOF | fold -w ${FOLD} -s
 
 
-usage: `basename $0` [options] resource ...
+usage: `basename $0` [options] resource/file 
 
-Opens an editor to view the compiled resources.
+Opens an editor to edit the project's WovTools src or compiled resource file. Exact path not required.
+NOTE: this will test for '.wov' extension if needed.
 
-  secrets
-  conf X  : 
+  ex. `basename $0` -s conf/a.ck8s
+      `basename $0` -c secrets/current.json
 
+  -n : new, creates the file
   -s : edit the src file
-  -o : edit the output file
+  -c : edit the cached file
   -h : this help
 
 EOF
@@ -55,11 +58,15 @@ while [[ $1 =~ ^- ]]; do
     shift
     DOECHO=2
 
+  elif [ "$1" == "-n" ]; then
+    shift
+    DONEW=1
+
   elif [ "$1" == "-s" ]; then
     shift
     EDPATH=''
 
-  elif [ "$1" == "-o" ]; then
+  elif [ "$1" == "-c" ]; then
     shift
     EDPATH='cache/'
 
@@ -76,33 +83,28 @@ while [[ $1 =~ ^- ]]; do
   fi
 done
 
-if [ "$1" == "secrets" ]; then
+
+if [ "${EDITOR}" == "" ]; then
+  printf "\nERROR: environment variable EDITOR not defined.\n"
+  exit 1
+fi
+
+
+if [[ $1 == conf/* ]]     || [[ $1 == k8s/* ]]  || [[ $1 == containers/* ]] || 
+   [[ $1 == services/* ]] || [[ $1 == cmds/* ]] || [[ $1 == secrets/* ]]; then
+  
   if [ "$#" != "1" ]; then
     printf "\nERROR: bad number of arguments for 'secrets'.\n"
     fDisplayOptions
     exit 1
   fi
-  $EDITOR ${WOV_BASEDIR}/wovtools/${EDPATH}secrets/current.json
-elif [ "$1" == "conf" ]; then
 
-  # list
-  if [ "$#" == "1" ]; then
-    ls ${WOV_BASEDIR}/wovtools/${EDPATH}conf
-    exit 0
-  fi
-
-  if [ "$#" != "2" ]; then
-    printf "\nERROR: bad number of arguments for 'conf'.\n"
-    fDisplayOptions
-    exit 1
-  fi
-
-  P=${WOV_BASEDIR}/wovtools/${EDPATH}conf/$2
-  if [ ! -e ${P} ]; then
-    P=${WOV_BASEDIR}/wovtools/${EDPATH}conf/$2.wov
+  P=${WOV_BASEDIR}/wovtools/${EDPATH}$1
+  if [ ! -e ${P} ] && [ "${DONEW}" == "0" ]; then
+    P=${WOV_BASEDIR}/wovtools/${EDPATH}$1.wov
     if [ ! -e ${P} ]; then
-      printf "\nERROR: no conf file of '${2}'.\n"
-      ls ${WOV_BASEDIR}/wovtools/${EDPATH}conf
+      printf "\nERROR: no WovTools file '${1}'. Use '-n' to create a new file of that name.\n\n"
+      ls ${WOV_BASEDIR}/wovtools/${EDPATH}$(dirname ${1})
       exit 1
     fi
   fi

@@ -4,6 +4,7 @@ DOECHO=1
 DOFORCE=0
 FOLD=80
 BLOCK=0
+SSHKEY=
 
 # --------------------------------------------------------------------- 
 # Import Env 
@@ -30,6 +31,7 @@ usage: `basename $0` [options]
 
 Runs the recipe scripts and if there is a change, build the containers.
 
+  --key X : ssh key to add ex. ${HOME}/.ssh/id_rsa
   -h : this help
   -l : list containers
   -f : force build
@@ -58,6 +60,11 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-v" ]; then
     shift
     DOECHO=2
+
+  elif [ "$1" == "--key" ]; then
+    shift
+    SSHKEY=$1
+    shift
 
   elif [ "$1" == "-f" ]; then
     shift
@@ -136,7 +143,20 @@ for f in ${RECIPES}; do
     if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then
 
       echo "    ... creating container '${CONTAINER}'"
-      docker build -f ${DESTDIR}/Dockerfile -t ${WOV_PROJECT}/${CONTAINER}:latest ${DESTDIR} || exit 1
+      set -x
+      if [ "${SSHKEY}" != "" ]; then
+        echo "      ... adding ssh key to build: '${SSHKEY}'"
+        cp ${SSHKEY} ${DESTDIR}/$(basename ${SSHKEY})
+        SS="--build-arg SSH_KEY=$(basename ${SSHKEY})"
+      fi
+
+      docker build ${SS} -f ${DESTDIR}/Dockerfile -t ${WOV_PROJECT}/${CONTAINER}:latest ${DESTDIR} || exit 1
+
+      if [ "${SSHKEY}" != "" ]; then
+        echo "      ... removing key from dest: '${DESTDIR}/$(basename ${SSHKEY})'"
+        rm ${DESTDIR}/$(basename ${SSHKEY})
+      fi
+      set +x
 
       echo "    ... archiving build of container '${CONTAINER}'"
       mkdir -p ${ARCHDIR}

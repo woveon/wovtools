@@ -28,7 +28,9 @@ usage: `basename $0` [options]
   -h/--help    : display these options
   -v/--version : version of wovtools
   --env X      : echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
-  --cmd X      : on one line, echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
+  --cmd X      : for commands on one line, echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
+  --qcmd X     :   ", quoted
+  --sl X       :   ", string literal output
 
 Example Usage:
   `basename $0`    : sets all environment variables
@@ -61,6 +63,7 @@ WOV_REGION=${array[2]}
 WOV_PROVIDER=${array[1]}
 WOV_CLTYPE=${array[0]}
 WOV_CLUSTER=${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}
+WOV_DEVMODE=
 
 #set -x 
 # vars from git, if in project directory
@@ -82,6 +85,12 @@ if [ -e "${WOV_BASEDIR}/wovtools/config.json" ]; then
   #echo "A:${A[*]}:A"
   #dir_root="${A[0]}"
 
+  WOV_PVERSION=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.ver')
+  if [ "${WOV_PVERSION}" != "${WOV_VERSION}" ]; then
+    printf "\n\nERROR: Your project version '${WOV_PVERSION}', does not match to the WovTools version '${WOV_VERSION}'.\n\n"
+    exit 1
+  fi
+
   WOV_WPROJECT=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.project') 
   WOV_PROJECTTYPE=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.type') 
   WOV_PROJECTTITLE=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.title') 
@@ -101,6 +110,14 @@ if [ -e "${WOV_BASEDIR}/wovtools/config.json" ]; then
     # GSTAGE has priority since it can represent <initials>-local, for local namespaces.
   export WOV_GSTAGE
   export WOV_STAGE
+
+  # Set DEVMODE 
+  if [[ ${WOV_GSTAGE} == "${WOV_KSTAGE}-l" ]]; then
+    WOV_DEVMODE=local
+  elif [[ ${WOV_GSTAGE} == "${WOV_KSTAGE}-v" ]]; then
+    WOV_DEVMODE=virtual
+  fi
+  export WOV_DEVMODE
 
   WOV_PROJECT=${WOV_WPROJECT}
   export WOV_PROJECT
@@ -138,6 +155,7 @@ function fDoEcho()
     echo WOV_GSTAGE="$WOV_GSTAGE"
     echo WOV_STAGE="$WOV_STAGE"
   fi
+  echo WOV_DEVMODE="${WOV_DEVMODE}"
   if [ "$RANCLUSTER" == "1" ]; then
     echo CL_REGION="$CL_REGION"
     echo CL_ZONES="${CL_ZONES}"
@@ -178,6 +196,17 @@ function doEnv()
     exit 1
   fi
 }
+function doQCmd() 
+{
+  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf/${1} ]; then
+    cat ${WOV_BASEDIR}/wovtools/cache/conf/${1} | sed -e 's/#.*$//' -e '/^$/d' -e 's/^/'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
+  else
+    echo
+    echo "ERROR: no environment file ${1} in cache."
+    echo
+    exit 1
+  fi
+}
 
 function doCmd() 
 {
@@ -191,6 +220,17 @@ function doCmd()
   fi
 }
 
+function doStringLiteral() 
+{
+  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf/${1} ]; then
+    cat ${WOV_BASEDIR}/wovtools/cache/conf/${1} | sed -e 's/#.*$//' -e '/^$/d' -e 's/^/\$'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
+  else
+    echo
+    echo "ERROR: no environment file ${1} in cache."
+    echo
+    exit 1
+  fi
+}
 
 # --------------------------------------------------------------------- 
 # Command line processing
@@ -207,6 +247,14 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--cmd" ]; then
     shift
     doCmd $1
+
+  elif [ "$1" == "--qcmd" ]; then
+    shift
+    doQCmd $1
+
+  elif [ "$1" == "--sl" ]; then
+    shift
+    doStringLiteral $1
 
   elif [ "$1" == '--var' ]; then
     shift 

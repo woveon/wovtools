@@ -138,6 +138,7 @@ function fBuildEnv()
 
   mkdir -p ${WOV_BASEDIR}/wovtools/cache/conf
   mkdir -p ${WOV_BASEDIR}/wovtools/cache/k8s
+  chmod 700 ${WOV_BASEDIR}/wovtools/cache
 
   fBuildEnvDir conf
   fBuildEnvDir k8s
