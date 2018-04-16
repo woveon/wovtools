@@ -6,6 +6,7 @@ FOLD=80
 BLOCK=0
 SSHKEY=
 
+
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
@@ -164,7 +165,20 @@ for f in ${RECIPES}; do
       docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
 
       echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-      docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 
+      docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
+      if [ "$?" != "0" ]; then
+        echo "    ... auto-login to AWS attempt"
+        AWSAUTHCMD=$(aws ecr get-login --no-include-email)
+        eval ${AWSAUTHCMD}
+        if [ "$?" != "0" ]; then
+          echo "      ... FAILED auto-login to AWS attempt"
+          exit 1
+        else
+          echo "      ... SUCCESS auto-login to AWS attempt"
+          echo "    ... re-push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+          docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 
+        fi
+      fi
 
     else
       echo "    ... skipping build of container '${CONTAINER}'"

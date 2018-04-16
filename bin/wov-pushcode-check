@@ -2,9 +2,10 @@
 
 DOECHO=1
 FOLD=100
+RETVAL=0
 
-# Try to build
-wov-build -e
+## Try to build ... DO WE NEED TO build since that goes to cache and this deals with git codes! Skipping.
+#wov-build -e
 
 # grab it if not defined
 if [ "${WOV_BASEDIR}" == "" ]; then
@@ -68,9 +69,9 @@ done
 if [ "$(git status -s)" != "" ]; then
   if [ $DOECHO -ge 1 ]; then
     echo "WARNING: failed code/env commit-check. Check in your code/env values to Archive."
-    git status
   fi
-  exit 1
+  if [ $DOECHO -ge 2 ]; then git status; fi
+  RETVAL=$((RETVAL+1))
 else
   if [ "$DOECHO" == "2" ]; then
     echo "SUCCESS: wov-push-check commit code/env"
@@ -82,9 +83,9 @@ fi
 if [ "$(cd ${WOV_BASEDIR}/wovtools/secrets && git status -s)" != "" ]; then
   if [ $DOECHO -ge 1 ]; then
     echo "WARNING: failed secrets commit-check. Check in your secrets archives."
-    cd ${WOV_BASEDIR}/wovtools/secrets && git status
   fi
-  exit 1
+  if [ $DOECHO -ge 2 ]; then cd ${WOV_BASEDIR}/wovtools/secrets && git status; fi
+  RETVAL=$((RETVAL+2))
 else
   if [ "$DOECHO" == "2" ]; then
     echo "SUCCESS: wov-push-check commit secrets."
@@ -103,9 +104,9 @@ MYSBRANCH=$(cd ${WOV_BASEDIR}/wovtools/secrets && git rev-parse --abbrev-ref HEA
 if [ "$(git log origin/${MYBRANCH}..${MYBRANCH})" != "" ]; then
   if [ $DOECHO -ge 1 ]; then
     echo "WARNING: failed code/env push check. Push your archive."
-    git status
   fi
-  exit 1
+  if [ $DOECHO -ge 2 ]; then git status; fi
+  RETVAL=$((RETVAL+4))
 else
   if [ "$DOECHO" == "2" ]; then
     echo "SUCCESS: wov-push-check push code/env."
@@ -116,9 +117,9 @@ fi
 if [ "$(cd ${WOV_BASEDIR}/wovtools/secrets && git log origin/${MYSBRANCH}..${MYSBRANCH})" != "" ]; then
   if [ $DOECHO -ge 1 ]; then
     echo "WARNING: failed secrets push check. Push your secrets archive."
-    git status
   fi
-  exit 1
+  if [ $DOECHO -ge 2 ]; then git status; fi
+  RETVAL=$((RETVAL+8))
 else
   if [ "$DOECHO" == "2" ]; then
     echo "SUCCESS: wov-push-check push secrets."
@@ -127,6 +128,8 @@ fi
 
 
 
-if [ "$DOECHO" == "2" ]; then
+if [[ $RETVAL -eq 0 ]] && [ "$DOECHO" == "2" ]; then
   echo "SUCCESS: wov-push-check"
 fi
+
+exit $RETVAL

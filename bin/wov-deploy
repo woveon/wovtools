@@ -13,7 +13,6 @@ pushenvargs=( "$@" )
 set ""
 . wov-env
 . wov-ns-check
-. wov-push
 set -- "${pushenvargs[@]}"
 
 
@@ -91,6 +90,10 @@ while [[ $1 =~ ^- ]]; do
     exit 1
   fi
 done
+
+
+## all args gone by now so not backing up args
+#. wov-push
 
 
 # If deploying the latest PVER, check that all code is pushed to archive

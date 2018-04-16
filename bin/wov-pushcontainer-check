@@ -84,18 +84,42 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
-# Echoes 1 if found a remote, 0 otherwise
+# Echoes 1 if found, 0 not found, -1 unknown, -2 if no repo
 function fCheckForRemoteImage() 
 {
-  local retval=0
+  local retval=-1
+  local RR=""
 
-  # NOTE: check KSTAGE since GSTAGE is mixed with local
-  R=$(ecs-cli images ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} | awk '{print $2}' | \grep ${WOV_KSTAGE}_${WOV_PVER})
-  if [ "${R}" != "" ]; then
-    retval=1
+
+  if [[ $WOV_ARCHIVEREPOSITORY == *".amazonaws.com" ]]; then
+
+    # do check
+    RR=$(ecs-cli images ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} 2>&1 )
+    if [[ $RR == *"RepositoryNotFoundException"* ]]; then
+      printf "\n\nERROR: Repository Not Found. Create '${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER}' in AWS CodeCommit, then try again.\n" 1>&2
+      retval=-2
+    elif [ "$RR" == "" ]; then
+      retval=0
+    fi
+
+
+    # if no errors, check
+    if [[ $retval -eq -1 ]]; then
+      # NOTE: check KSTAGE since GSTAGE is mixed with local
+      R=$(echo "${RR}" | awk '{print $2}' | \grep ${WOV_KSTAGE}_${WOV_PVER})
+      echo "R $R"
+      if [ "${R}" != "" ]; then
+        retval=1
+      fi
+    fi
+  else
+    printf "\n\nERROR: Unknown provider to check (only AWS known in wov-pushcontainer-check).\n" 1>&2&
+    printf "    NOTE: sohuld be an easy fix for regular git!\n\n" 1>&2
+    retval=-2
   fi
 
-#  echo "R $R"
+  # 
+
 #  echo "TAG ${WOV_KSTAGE}_${WOV_PVER}"
 
   echo $retval
@@ -118,6 +142,7 @@ NEEDSBUILD=1
 #fCheckForRemoteImage
 #exit 1
 
+
 if [ ${DOFORCE} -eq 1 ]; then
   if [ $DOECHO -ge 1 ]; then echo "    ... forcing build."; fi
 
@@ -128,7 +153,7 @@ elif [ "$(docker images -q ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} )" == "" ];
 elif [ ! -e ${ARCHDIR} ]; then
   if [ $DOECHO -ge 1 ]; then echo "    ... no ${ARCHDIR}, building"; fi
 
-elif [ "$(fCheckForRemoteImage)" == "0" ]; then
+elif [ "$(fCheckForRemoteImage)" != "1" ]; then
   if [ $DOECHO -ge 1 ]; then echo "    ... no remote tagged image found."; fi
 
 elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then
