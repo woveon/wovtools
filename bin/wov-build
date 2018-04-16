@@ -5,6 +5,7 @@ DOECHO=1
 FOLD=80
 HAS_SECRET=0
 HAS_BUILDENV=0
+HAS_CLEAN=0
 SECRETDIFF=1
 
 
@@ -35,6 +36,7 @@ Builds the environment information of a WovTools distribution. Specifically, the
   -s : build the secret file
   -e : build the environment files (-s assumed)
   -g : build an environment grouping file 
+  --clean : cleans the cache
 
 EOF
 }
@@ -132,6 +134,20 @@ EOF
 
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
+function fCleanCache() 
+{
+  HAS_CLEAN=1
+  BUILDDIRS=( "conf" "k8s" "secret" )
+  for f in ${BUILDDIRS[@]}; do
+    DEST=${WOV_BASEDIR}/wovtools/cache/$f
+    if [ $DOECHO -ge 1 ]; then echo "  ... clean cache in dir '${DEST}'."; fi
+    rm -fR ${DEST}/* || true
+  done
+}
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
 function fBuildEnv()
 {
   if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
@@ -209,6 +225,10 @@ while [[ $1 =~ ^- ]]; do
     shift
     fBuildEnv
 
+  elif [ "$1" == "--clean" ]; then
+    shift
+    fCleanCache
+
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
     exit 0
@@ -223,7 +243,7 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
-if [ "${HAS_SECRET}" == "0" ] && [ "${HAS_BUILDENV}" == "0" ]; then
+if [ ${HAS_SECRET} -eq 0 ] && [ ${HAS_BUILDENV} -eq 0 ] && [ ${HAS_CLEAN} -eq 0 ]; then
   echo
   echo "ERROR: no command passed."
   echo

@@ -44,7 +44,6 @@ function doStart()
 
   echo "  ... ensuring a volume in AWS: 'vh-vol-${WOV_PROJECT}-${WOV_STAGE}'"
 
-  set -x
   volid=`aws ec2 describe-volumes --filter Name="tag:Name",Values=\"vh-vol-${WOV_PROJECT}-${WOV_STAGE}\" | jq '.Volumes[0].VolumeId' -r`
 
   if [ "$volid" == "null" ]; then
@@ -103,7 +102,6 @@ EOF
   # untested lines here
   kubectl cp ${WOV_BASEDIR}/wovtools/cache/conf/vh/bash_aliases ${WOV_NS}/vh:/root/.bash_aliases
   kubectl cp ${WOV_BASEDIR}/wovtools/cache/conf/vh/inputrc ${WOV_NS}/vh:/root/.inputrc
-  set +x
 
 cat <<EOF
 
