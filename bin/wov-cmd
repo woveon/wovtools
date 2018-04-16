@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+FOLD=80
+
+
+# --------------------------------------------------------------------- 
+# Import Env 
+# --------------------------------------------------------------------- 
+cmdargs=( "$@" )
+set ""
+. wov-env
+. wov-ns-check
+set -- "${cmdargs[@]}"
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function fDisplayOptions()
+{ 
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Runs a command found in the cmds directory. These commands have access to wov-env variables.
+
+  -v|-q : verbose/quiet output
+  -h    : this help text
+
+EOF
+}
+
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+#  echo "param '$1'"
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+CMDFILE=${WOV_BASEDIR}/wovtools/cmds/$1
+
+if [ ! -e  ${CMDFILE} ]; then
+  printf "\n\nERROR: no cmd named '$1'.\n" 2>&1
+  exit 1
+elif [ ! -x ${CMDFILE} ]; then
+  printf "\n\nERROR: cmd '$1' not executable (run 'chmod 775 wovtools/cmds/$1').\n" 2>&1
+  exit 1
+else
+  shift
+  ${CMDFILE} $*
+fi
