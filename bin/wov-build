@@ -60,8 +60,8 @@ function fBuildSecret()
   # --------------------------------------------------------------------- 
   # Read config
   # --------------------------------------------------------------------- 
-  SECRETFILES=( `jq -r ".order[] " ${WOV_BASEDIR}/wovtools/secrets/config.json` )
-  #echo "SECRETFILES=${SECRETFILES[*]}"
+  SECRETFILES=( `jq -r ".secrets.${WOV_STAGE}[] " ${WOV_BASEDIR}/wovtools/config.json` )
+  # echo "SECRETFILES=${SECRETFILES[*]}"
 
 
   # --------------------------------------------------------------------- 

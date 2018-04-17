@@ -179,19 +179,19 @@ EOF
     fi
   done
 
-  # Create basic secrets information
-  if [ ! -e ${WOV_BASEDIR}/wovtools/secrets/config.json ]; then
-    cat <<EOF > ${WOV_BASEDIR}/wovtools/secrets/config.json
-{
-  "order" : [ "base.json" ]
-}
-EOF
-    touch ${WOV_BASEDIR}/wovtools/secrets/base.json
-  fi
+  # Create basic secrets information (MOVED TO main config.json file)
+#  if [ ! -e ${WOV_BASEDIR}/wovtools/secrets/ config.json ]; then
+#    cat <<EOF > ${WOV_BASEDIR}/wovtools/secrets/ config.json
+#{
+#  "order" : [ "base.json" ]
+#}
+#EOF
+#    touch ${WOV_BASEDIR}/wovtools/secrets/base.json
+#  fi
 
   # Build a git revision and all branches
   if [ "$ISNEWSGIT" == "1" ]; then
-    git add .gitignore ${WOV_BASEDIR}/wovtools/secrets/config.json ${WOV_BASEDIR}/wovtools/secrets/base.json
+    git add .gitignore ${WOV_BASEDIR}/wovtools/secrets/base.json
     git commit -a -m "initial commit"
   fi
 
@@ -292,7 +292,7 @@ if [ "${A}" != "" ]; then WOV_ARCHIVEENV=${A}; fi
 
 
 echo "... writing 'wovtools/config.json'"
-jq '.project.type="'"${WOV_PROJECTTYPE}"'" | .project.project="'"${WOV_PROJECT}"'"  | .project.title="'"${WOV_PROJECTTITLE}"'"  | .project.description="'"${WOV_PROJECTDESCRIPTION}"'" | .operation={} | .archive.env="'"${WOV_ARCHIVEENV}"'" | .archive.repository="'"${WOV_ARCHIVEREPOSITORY}"'"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json.$$ && cp ${WOV_BASEDIR}/wovtools/.config.json.$$ ${WOV_BASEDIR}/wovtools/config.json
+jq '.project.type="'"${WOV_PROJECTTYPE}"'" | .project.project="'"${WOV_PROJECT}"'"  | .project.title="'"${WOV_PROJECTTITLE}"'"  | .project.description="'"${WOV_PROJECTDESCRIPTION}"'" | .secrets={ \"${WOV_STAGE}\"= [ \"base.json\" ] } | .operation={} | .archive.env="'"${WOV_ARCHIVEENV}"'" | .archive.repository="'"${WOV_ARCHIVEREPOSITORY}"'"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json.$$ && cp ${WOV_BASEDIR}/wovtools/.config.json.$$ ${WOV_BASEDIR}/wovtools/config.json
 rm ${WOV_BASEDIR}/wovtools/.config.json.*
 
 

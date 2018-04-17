@@ -3,6 +3,7 @@
 DOECHO=1
 DOFORCE=0
 FOLD=80
+LASTCHECKFORREMOTEIMAGE=-1
 
 # ---------------------------------------------------------------------
 # Import Env
@@ -11,9 +12,10 @@ pushargs=( "$@" )
 set ""
 . wov-env
 . wov-ns-check
-. wov-pushcode-check
 set -- "${pushargs[@]}"
 
+wov-pushcode-check
+if [ "$?" != "0" ]; then exit 1; fi
 
 
 # ---------------------------------------------------------------------
@@ -154,7 +156,13 @@ elif [ ! -e ${ARCHDIR} ]; then
   if [ $DOECHO -ge 1 ]; then echo "    ... no ${ARCHDIR}, building"; fi
 
 elif [ "$(fCheckForRemoteImage)" != "1" ]; then
-  if [ $DOECHO -ge 1 ]; then echo "    ... no remote tagged image found."; fi
+  LC=$?
+  if [ "${LC}" == "0" ]; then
+    if [ $DOECHO -ge 1 ]; then echo "    ... no remote tagged image found."; fi
+  fi
+  if [ "${LC}" == "-2" ]; then
+    if [ $DOECHO -ge 1 ]; then echo "    ... no repo found."; fi
+  fi
 
 elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then
   if [ $DOECHO -ge 1 ]; then echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"; fi

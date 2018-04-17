@@ -14,10 +14,10 @@ pushcontainersargs=( "$@" )
 set ""
 . wov-env
 . wov-ns-check
-. wov-pushcode-check
 set -- "${pushcontainersargs[@]}"
-#set -x
 
+wov-pushcode-check
+if [ "$?" != "0" ]; then exit 1; fi
 
 
 
@@ -122,7 +122,10 @@ for f in ${RECIPES}; do
     # determine if need to build container
     NEEDSBUILD=0
 
-    NEEDSBUILD=$(wov-pushcontainer-check ${f%.sh} > /dev/null ; echo $?)
+    wov-pushcontainer-check ${f%.sh}
+    NEEDSBUILD=$?
+#    echo "NEEDSBUILD: $NEEDSBUILD"
+#    echo "NEEDSBUILDOUT: $NEEDSBUILDOUT"
 #    if [ ${NEEDSBUILD} == 1 ] || [ $DOFORCE == 1 ]; then
 #      echo "    ... forcing container build."
 #
@@ -140,6 +143,8 @@ for f in ${RECIPES}; do
 #      NEEDSBUILD=1; 
 #    fi
 #
+    if [ "${NEEDSBUILD}" ==  "-2" ]; then exit  ${NEEDSBUILD}; fi
+
     # do actions 
     if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then
 
