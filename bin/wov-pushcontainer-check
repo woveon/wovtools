@@ -86,10 +86,10 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
-# Echoes 1 if found, 0 not found, -1 unknown, -2 if no repo
+# Echoes 1 if found, 0 not found, 2 unknown, 3 if no repo
 function fCheckForRemoteImage() 
 {
-  local retval=-1
+  local retval=2
   local RR=""
 
 
@@ -99,17 +99,16 @@ function fCheckForRemoteImage()
     RR=$(ecs-cli images ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} 2>&1 )
     if [[ $RR == *"RepositoryNotFoundException"* ]]; then
       printf "\n\nERROR: Repository Not Found. Create '${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER}' in AWS CodeCommit, then try again.\n" 1>&2
-      retval=-2
+      retval=3
     elif [ "$RR" == "" ]; then
       retval=0
     fi
 
 
     # if no errors, check
-    if [[ $retval -eq -1 ]]; then
+    if [[ $retval -eq 2 ]]; then
       # NOTE: check KSTAGE since GSTAGE is mixed with local
       R=$(echo "${RR}" | awk '{print $2}' | \grep ${WOV_KSTAGE}_${WOV_PVER})
-      echo "R $R"
       if [ "${R}" != "" ]; then
         retval=1
       fi
@@ -117,13 +116,26 @@ function fCheckForRemoteImage()
   else
     printf "\n\nERROR: Unknown provider to check (only AWS known in wov-pushcontainer-check).\n" 1>&2&
     printf "    NOTE: sohuld be an easy fix for regular git!\n\n" 1>&2
-    retval=-2
+    retval=2
   fi
 
   # 
 
 #  echo "TAG ${WOV_KSTAGE}_${WOV_PVER}"
 
+  echo $retval
+}
+
+function fGetRepoLabel() 
+{
+  local retval=""
+  if [[ $WOV_ARCHIVEREPOSITORY == *".amazonaws.com" ]]; then
+    retval=$(ecs-cli images api/apirest | awk '{print $2}' | sed -n '3p')
+#    echo "RETVAL: ${retval}"
+  else
+    printf "\n\nERROR: Unknown provider to check (only AWS known in wov-pushcontainer-check).\n" 1>&2&
+    printf "    NOTE: should be an easy fix for regular git!\n\n" 1>&2
+  fi
   echo $retval
 }
 
@@ -142,7 +154,7 @@ NEEDSBUILD=1
 
 #echo "CHECK : "
 #fCheckForRemoteImage
-#exit 1
+#fGetRepoLabel
 
 
 if [ ${DOFORCE} -eq 1 ]; then
@@ -155,20 +167,36 @@ elif [ "$(docker images -q ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} )" == "" ];
 elif [ ! -e ${ARCHDIR} ]; then
   if [ $DOECHO -ge 1 ]; then echo "    ... no ${ARCHDIR}, building"; fi
 
-elif [ "$(fCheckForRemoteImage)" != "1" ]; then
-  LC=$?
-  if [ "${LC}" == "0" ]; then
-    if [ $DOECHO -ge 1 ]; then echo "    ... no remote tagged image found."; fi
-  fi
-  if [ "${LC}" == "-2" ]; then
-    if [ $DOECHO -ge 1 ]; then echo "    ... no repo found."; fi
-  fi
+else 
 
-elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then
-  if [ $DOECHO -ge 1 ]; then echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"; fi
+  CH=$(fCheckForRemoteImage)
+  #echo "CH: ${CH}"
+  if [ "${CH}" != "1" ]; then
+    if [ "${CH}" == "0" ]; then
+      if [ $DOECHO -ge 1 ]; then echo "    ... no remote tagged image found."; fi
+      NEEDSBUILD=1
+    fi
+    if [ "${CH}" == "3" ]; then
+      if [ $DOECHO -ge 1 ]; then echo "    ... no repo found."; fi
+    fi
+    if [ "${CH}" == "2" ]; then
+      if [ $DOECHO -ge 1 ]; then echo "    ... some error or other."; fi
+    fi
 
-else
-  NEEDSBUILD=0
+  # check remote repo version... since if the git version is diff from that, then need to build!!!
+  elif [ "$(fGetRepoLabel)" != "${WOV_STAGE}_${WOV_PVER}" ]; then
+    if [ $DOECHO -ge 1 ]; then echo "    ... remote repo is behind."; fi
+    NEEDSBUILD=1
+
+
+  # ok, so remote repo exists and no error, check for diffs
+  elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then
+    if [ $DOECHO -ge 1 ]; then echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"; fi
+    NEEDSBUILD=1
+
+  else
+    NEEDSBUILD=0
+  fi
 fi
 
 if [ ${DOECHO} -ge 2 ]; then echo "... needs build ${NEEDSBUILD}"; fi

@@ -98,10 +98,7 @@ done
 
 # If deploying the latest PVER, check that all code is pushed to archive
 if [ "${WOV_CUR_PVER}" == "${WOV_PVER}" ]; then
-  pushenvargs=( "$@" )
-  set ""
-  . wov-pushcode-check
-  set -- "${pushenvargs[@]}"
+  wov-pushcode-check
 fi
 
 # If deploying the latest SVER, check that all env is pushed to archive

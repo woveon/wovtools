@@ -5,6 +5,7 @@ DOFORCE=0
 FOLD=80
 BLOCK=0
 SSHKEY=
+RECIPES=( )
 
 
 # --------------------------------------------------------------------- 
@@ -28,7 +29,7 @@ function fDisplayOptions()
   cat <<EOF | fold -w ${FOLD} -s
 
 
-usage: `basename $0` [options]
+usage: `basename $0` [options] containers ...
 
 Runs the recipe scripts and if there is a change, build the containers.
 
@@ -92,110 +93,119 @@ done
 
 
 
-if [ "${BLOCK}" == "0" ]; then
 # Find the recipes
-RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers; ls *.sh 2> /dev/null)
-
-
-# Build containers if needed
-for f in ${RECIPES}; do
-
-  if [ $DOECHO -ge 1 ]; then echo "... build container ${f%.sh}."; fi
-
-  SRCDIR=${WOV_BASEDIR}
-  DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${f%.sh}
-  ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${f%.sh}
-  CONTAINER=${WOV_PROJECT}${f%.sh}
-#  echo "CONTAINER=${CONTAINER}"
-#  echo "SRCDIR=${SRCDIR}"
-#  echo "DESTDIR=${DESTDIR} # more like a 'content' dir as this is all copied in here"
-#  echo "ARCHDIR=${ARCHDIR} # location of archive of DESTDIR"
-
-  # build the content in wovtools/cache/containers/$f
-  mkdir -p ${DESTDIR}
-  echo "  ... recipe $f (DESTDIR=${DESTDIR}, CONTAINER=${CONTAINER})"
-  if [[ ! -x "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
-    echo "ERROR: recipe for container ${f%.sh} not executable (${WOV_BASEDIR}/wovtools/containers/$f).";
-  else
-    cd ${WOV_BASEDIR} && SRCDIR=${SRCDIR} DESTDIR=${DESTDIR} CONTAINER=${CONTAINER} ${WOV_BASEDIR}/wovtools/containers/$f
-    if [ "$?" != "0" ]; then
-      printf "\n\nERROR: failed building container.\n\n"
-      exit 1
-    fi
-
-    # determine if need to build container
-    NEEDSBUILD=0
-
-    wov-pushcontainer-check ${f%.sh}
-    NEEDSBUILD=$?
-#    echo "NEEDSBUILD: $NEEDSBUILD"
-#    echo "NEEDSBUILDOUT: $NEEDSBUILDOUT"
-#    if [ ${NEEDSBUILD} == 1 ] || [ $DOFORCE == 1 ]; then
-#      echo "    ... forcing container build."
-#
-#    elif [ "$(docker images -q ${CONTAINER})" == "" ]; then 
-#      docker images -q ${CONTAINER}
-#      echo "    ... no existing container, building"
-#      NEEDSBUILD=1
-#
-#    elif [ ! -e ${ARCHDIR} ]; then 
-#      echo "    ... no ${ARCHDIR}, building"
-#      NEEDSBUILD=1; 
-#
-#    elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then 
-#      echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"
-#      NEEDSBUILD=1; 
-#    fi
-#
-    if [ "${NEEDSBUILD}" ==  "-2" ]; then exit  ${NEEDSBUILD}; fi
-
-    # do actions 
-    if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then
-
-      echo "    ... creating container '${CONTAINER}'"
-      if [ "${SSHKEY}" != "" ]; then
-        echo "      ... adding ssh key to build: '${SSHKEY}'"
-        cp ${SSHKEY} ${DESTDIR}/$(basename ${SSHKEY})
-        SS="--build-arg SSH_KEY=$(basename ${SSHKEY})"
-      fi
-
-      docker build ${SS} -f ${DESTDIR}/Dockerfile -t ${WOV_PROJECT}/${CONTAINER}:latest ${DESTDIR} || exit 1
-
-      if [ "${SSHKEY}" != "" ]; then
-        echo "      ... removing key from dest: '${DESTDIR}/$(basename ${SSHKEY})'"
-        rm ${DESTDIR}/$(basename ${SSHKEY})
-      fi
-
-      echo "    ... archiving build of container '${CONTAINER}'"
-      mkdir -p ${ARCHDIR}
-      rsync -ai --delete ${DESTDIR}/ ${ARCHDIR} &> /dev/null
-
-      echo "    ... tag and push to repo"
-      docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
-
-      echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-      docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
-      if [ "$?" != "0" ]; then
-        echo "    ... auto-login to AWS attempt"
-        AWSAUTHCMD=$(aws ecr get-login --no-include-email)
-        eval ${AWSAUTHCMD}
-        if [ "$?" != "0" ]; then
-          echo "      ... FAILED auto-login to AWS attempt"
-          exit 1
-        else
-          echo "      ... SUCCESS auto-login to AWS attempt"
-          echo "    ... re-push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-          docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 
-        fi
-      fi
-
-    else
-      echo "    ... skipping build of container '${CONTAINER}'"
-    fi
+if [ "${BLOCK}" == "0" ]; then
+ 
+  RECIPES=( "$@" )
+  if [ "${#RECIPES[@]}" == 0 ]; then
+    RECIPES=( $(cd ${WOV_BASEDIR}/wovtools/containers; ls *.sh 2> /dev/null) )
   fi
 
+  # Build containers if needed
+  for f in ${RECIPES}; do
 
-done
+    if [ $DOECHO -ge 1 ]; then echo "... build container ${f%.sh}."; fi
+
+    SRCDIR=${WOV_BASEDIR}
+    DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${f%.sh}
+    ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${f%.sh}
+    CONTAINER=${WOV_PROJECT}${f%.sh}
+    #  echo "CONTAINER=${CONTAINER}"
+    #  echo "SRCDIR=${SRCDIR}"
+    #  echo "DESTDIR=${DESTDIR} # more like a 'content' dir as this is all copied in here"
+    #  echo "ARCHDIR=${ARCHDIR} # location of archive of DESTDIR"
+
+    # build the content in wovtools/cache/containers/$f
+    mkdir -p ${DESTDIR}
+    echo "  ... recipe $f (DESTDIR=${DESTDIR}, CONTAINER=${CONTAINER})"
+    if [[ ! -x "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
+      echo "ERROR: recipe for container ${f%.sh} not executable (${WOV_BASEDIR}/wovtools/containers/$f).";
+    else
+      cd ${WOV_BASEDIR} && SRCDIR=${SRCDIR} DESTDIR=${DESTDIR} CONTAINER=${CONTAINER} ${WOV_BASEDIR}/wovtools/containers/$f
+      if [ "$?" != "0" ]; then
+        printf "\n\nERROR: failed building container.\n\n"
+        exit 1
+      fi
+
+      # determine if need to build container
+      NEEDSBUILD=0
+
+      wov-pushcontainer-check ${f%.sh}
+      NEEDSBUILD=$?
+      # printf "\n\n\n\nNEEDSBUILD: $NEEDSBUILD\n\n\n"
+      #    echo "NEEDSBUILDOUT: $NEEDSBUILDOUT"
+      #    if [ ${NEEDSBUILD} == 1 ] || [ $DOFORCE == 1 ]; then
+      #      echo "    ... forcing container build."
+      #
+      #    elif [ "$(docker images -q ${CONTAINER})" == "" ]; then 
+      #      docker images -q ${CONTAINER}
+      #      echo "    ... no existing container, building"
+      #      NEEDSBUILD=1
+      #
+      #    elif [ ! -e ${ARCHDIR} ]; then 
+      #      echo "    ... no ${ARCHDIR}, building"
+      #      NEEDSBUILD=1; 
+      #
+      #    elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then 
+      #      echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"
+      #      NEEDSBUILD=1; 
+      #    fi
+      #
+      if [ "${NEEDSBUILD}" ==  "3" ]; then exit  ${NEEDSBUILD}; fi
+      if [ "${NEEDSBUILD}" ==  "2" ]; then exit  ${NEEDSBUILD}; fi
+
+      # do actions 
+      if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then
+
+        echo "    ... creating container '${CONTAINER}'"
+        if [ "${SSHKEY}" != "" ]; then
+          echo "      ... adding ssh key to build: '${SSHKEY}'"
+          cp ${SSHKEY} ${DESTDIR}/$(basename ${SSHKEY})
+          SS="--build-arg SSH_KEY=$(basename ${SSHKEY})"
+        fi
+
+        docker build ${SS} -f ${DESTDIR}/Dockerfile -t ${WOV_PROJECT}/${CONTAINER}:latest ${DESTDIR} || exit 1
+
+        if [ "${SSHKEY}" != "" ]; then
+          echo "      ... removing key from dest: '${DESTDIR}/$(basename ${SSHKEY})'"
+          rm ${DESTDIR}/$(basename ${SSHKEY})
+        fi
+
+        echo "    ... archiving build of container '${CONTAINER}'"
+        mkdir -p ${ARCHDIR}
+        rsync -ai --delete ${DESTDIR}/ ${ARCHDIR} &> /dev/null
+
+        echo "    ... tag and push to repo"
+        docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
+
+        echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+        R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 )
+        if [ "$?" != "0" ]; then
+          echo "R: ${R}"
+          if [[ $R == 'name unknown'* ]]; then
+            printf "\n\n  ...${R}.\n"
+            exit 1
+          fi
+          echo "    ... auto-login to AWS attempt"
+          AWSAUTHCMD=$(aws ecr get-login --no-include-email)
+          eval ${AWSAUTHCMD}
+          if [ "$?" != "0" ]; then
+            echo "      ... FAILED auto-login to AWS attempt"
+            exit 1
+          else
+            echo "      ... SUCCESS auto-login to AWS attempt"
+            echo "    ... re-push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+            docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 
+          fi
+        fi
+
+      else
+        echo "    ... skipping build of container '${CONTAINER}'"
+      fi
+    fi
+
+
+  done
 fi
 
 
