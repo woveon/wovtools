@@ -92,7 +92,9 @@ NOTE: [on AWS, you will need to configure your AWSCodeCommit access as well as a
 
 8. **Services** - Write scripts that emulate the services your code will interact with in the cluster. This includes databases or other microservices. Write scripts in wovtools/services as SERVICE.sh, SERVICE-test.sh, SERVICE-kill.sh, which correspond to `wov-service` switches of -r, -t and -k.
 
-9. **Develop** - Build your code. Whatever you do, create that code. To use environment variables, use the `wov-env` script to set them, and then set them before your command is run. 
+9. **Cmds** - Create commands in the `cmds` directory that are run with `wov-cmd`. This are things kile url checks or database access. 
+
+10. **Develop** - Build your code. Whatever you do, create that code. To use environment variables, use the `wov-env` script to set them, and then set them before your command is run. 
 ```
 # To run service myprojectservice1 with environment vars created with wov-build on file 'wovtools/conf/env.ck8s.wov':
 env `wov-env --cmd env.ck8s` npm run myprojectservice1
@@ -115,15 +117,17 @@ wov-env -e
 
 ### Workflow : Archive
 
-1. **Git** - Make sure your git archive, and also your wovtools/secret git archive, are checked in and pushed.
+1. **Git** - `wov-pushcode-check` - Make sure your git archive, and also your wovtools/secret git archive, are checked in and pushed.
 
 2. **Containers** - Build the containers with the `wov-push-containers`. This involves creating scripts to create the content that goes into the container. For each container, created a script.sh file in `wovtools/containers` for that container. Variables passed to the script are CONTAINER (name of the container), SRCDIR (the root of the project) and DESTDIR (the directory the files are dumped). Make sure to include a Dockerfile as well. When your recipes are created, run the `wov-push-containers` command. To list containers this will build, run `wov-push-containers -l`.
 
 3. **k8s files** - Push the env files to archive with `wov-push-env`. 
 
+NOTE: `wov-push` will do this entire process...
+
 ### Workflow : Deploy
 
-1. **Deploy** - Run `wov-deploy-apply` to run the latest project. This pulls env files and runs them. These files in turn include the Kubernetes deployments, which pull the containers. To run older versions, do a `wov-deploy-apply --pver X --sver Y` to run different versions. Note that only valid combinations of project and secret versions are allowable.
+1. **Deploy** - Run `wov-deploy` to run the latest project. This pulls env files and runs them. These files in turn include the Kubernetes deployments, which pull the containers. To run older versions, do a `wov-deploy --pver X --sver Y` to run different versions. Note that only valid combinations of project and secret versions are allowable.
 
 
 ## Development Step
