@@ -89,7 +89,7 @@ if [ -e "${WOV_BASEDIR}/wovtools/config.json" ]; then
   #dir_root="${A[0]}"
 
   WOV_PVERSION=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.ver')
-  if [ "${WOV_PVERSION}" != "${WOV_VERSION}" ]; then
+  if [ "${WOV_PVERSION}" != "${WOV_VERSION}" ] && [ "${WOV_PVERSION}" != "initing" ] ; then
     printf "\n\nERROR: Your project version '${WOV_PVERSION}', does not match to the WovTools version '${WOV_VERSION}'.\n\n"
     exit 1
   fi
@@ -142,6 +142,7 @@ export WOV_KSTAGE
 
 function fDoEcho() 
 {
+  echo WOV_VERSION="${WOV_VERSION}"
   echo WOV_BASEDIR="${WOV_BASEDIR}"
   echo WOV_ARCHIVEREPOSITORY="${WOV_ARCHIVEREPOSITORY}"
   echo WOV_ARCHIVEENV="${WOV_ARCHIVEENV}"

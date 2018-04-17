@@ -33,7 +33,7 @@ elif [ "$WOV_GSTAGE" == "" ]; then
 elif [[ $WOV_GSTAGE == "${WOV_KSTAGE}-local" ]]; then
   echo "...matched local stage"
 elif [ "$WOV_KSTAGE" != "$WOV_GSTAGE" ]; then
-  echo "ERROR: STAGE miss-match. Kubernetes (WOV_KSTAGE)=${WOV_KSTAGE}, Git (WOV_GSTAGE)=${WOV_GSTAGE}.";
+  echo "ERROR: STAGE missmatch. Kubernetes (WOV_KSTAGE)=${WOV_KSTAGE}, Git (WOV_GSTAGE)=${WOV_GSTAGE}.";
   exit 3
 fi
 
@@ -41,13 +41,13 @@ fi
 # --------------------------------------------------------------------- 
 # PROJECT: Check that they align
 # --------------------------------------------------------------------- 
-#echo "WOV_PROJECT: $WOV_PROJECT"
-#echo "WOV_KPROJECT: $WOV_KPROJECT"
-#echo "WOV_WPROJECT: $WOV_WPROJECT"
-if [ "$WOV_KPROJECT" == "" ]; then
+echo "WOV_PROJECT: $WOV_PROJECT"
+echo "WOV_KPROJECT: $WOV_KPROJECT"
+echo "WOV_WPROJECT: $WOV_WPROJECT"
+if [[ -z "$WOV_KPROJECT" ]]; then
   echo "ERROR: unknown WOV_KPROJECT";
   exit 1
-elif [ "$WOV_WPROJECT" == "" ]; then
+elif [[ -z "$WOV_WPROJECT" ]]; then
   echo "ERROR: unknown WOV_WPROJECT";
   exit 2
 elif [ "$WOV_KPROJECT" != "$WOV_WPROJECT" ]; then

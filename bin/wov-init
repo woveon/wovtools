@@ -26,7 +26,8 @@ function InitProject()
 
   # ---------------------------------------------------------------------
   # Set remote origin
-  if [ "$(git config --get remote.origin.url 2> /dev/null ; echo $?)" != "0" ]; then
+  RR=$(git config --get remote.origin.url 2> /dev/null)
+  if [ "$?" != "0" ]; then
     echo
     printf "Git repository has no remote repository to push code to. Set that up now, and enter URL below.\n"
     printf "  Remote git repository : "
@@ -41,6 +42,7 @@ function InitProject()
   # ---------------------------------------------------------------------
   # Select user name
   echo
+  if [ "${WOV_USERNAME}" == "" ]; then WOV_USERNAME=$(git config user.name); fi
   printf "Enter your name (${WOV_USERNAME}): "
   read A
   if [ "${A}" != "" ]; then WOV_USERNAME="${A}"; fi
@@ -48,6 +50,7 @@ function InitProject()
   # ---------------------------------------------------------------------
   # Select user email
   echo
+  if [ "${WOV_USEREMAIL}" == "" ]; then WOV_USEREMAIL=$(git config user.email); fi
   printf "Enter your email (${WOV_USEREMAIL}): "
   read A
   if [ "${A}" != "" ]; then WOV_USEREMAIL="${A}"; fi
@@ -78,6 +81,7 @@ function InitProject()
   if [ ! -e ${WOV_BASEDIR}/wovtools/config.json ]; then 
     cat <<EOF > ${WOV_BASEDIR}/wovtools/config.json
 {
+  "ver" : "initing",
   "project" : {
     "type" : "",
     "project" : "",
@@ -115,12 +119,14 @@ EOF
   echo "      git remote add origin [URL]"
   echo
 
-  if [ "$(git rev-parse --verify prod 2> /dev/null ; echo $?)" != "0" ]; then 
+  RR=$(git rev-parse --verify prod 2> /dev/null)
+  if [ "$?" != "0" ]; then 
     echo "  ... creating branch 'prod', pushing to origin"; 
     git checkout -b prod || exit 1
     git push --set-upstream origin prod || exit 1
   fi
-  if [ "$(git rev-parse --verify dev  2> /dev/null ; echo $?)" != "0" ]; then 
+  RR=$(git rev-parse --verify dev 2> /dev/null)
+  if [ "$?" != "0" ]; then 
     echo "  ... creating branch 'dev', pushing to origin"; 
     git checkout -b dev || exit 1
     git push --set-upstream origin dev || exit 1
@@ -142,17 +148,19 @@ EOF
   if [ "${A}" != "" ]; then WOV_GSTAGE=${A}; fi
   if [ "${WOV_GSTAGE}" == "" ]; then echo "ERROR: must provide a stage name."; exit 1; fi
 
-  if [ "$(git rev-parse --verify ${WOV_GSTAGE} 2> /dev/null ; echo $?)" != "0" ]; then 
+  RR=$(git rev-parse --verify ${WOV_GSTAGE} 2> /dev/null)
+  if [ "$?" != "0" ]; then 
     echo "  ... creating branch '${WOV_GSTAGE}', pushing to origin"
     git checkout -b ${WOV_GSTAGE} || exit 1
     git push --set-upstream origin ${WOV_GSTAGE} || exit 1
   fi
 
   # Create local repo
-  if [ "$(git rev-parse --verify ${WOV_GSTAGE}_local 2> /dev/null ; echo $?)" != "0" ]; then 
-    echo "  ... creating branch '${WOV_GSTAGE}_local', pushing to origin"; 
-    git checkout -b ${WOV_GSTAGE}_local || exit 1
-    git push --set-upstream origin ${WOV_GSTAGE}_local || exit 1
+  RR=$(git rev-parse --verify ${WOV_GSTAGE}-local  2> /dev/null)
+  if [ "$?" != "0" ]; then 
+    echo "  ... creating branch '${WOV_GSTAGE}-local', pushing to origin"; 
+    git checkout -b ${WOV_GSTAGE}-local || exit 1
+    git push --set-upstream origin ${WOV_GSTAGE}-local || exit 1
   fi
 
 
@@ -188,6 +196,9 @@ EOF
 #EOF
 #    touch ${WOV_BASEDIR}/wovtools/secrets/base.json
 #  fi
+  if [ ! -e ${WOV_BASEDIR}/wovtools/secrets/base.json ]; then
+    touch ${WOV_BASEDIR}/wovtools/secrets/base.json
+  fi
 
   # Build a git revision and all branches
   if [ "$ISNEWSGIT" == "1" ]; then
@@ -248,7 +259,7 @@ echo "... importing the existing wovtools project in this directory."
 initargs=( "$@" )
 set ""
 . wov-env
-. wov-ns-check
+#. wov-ns-check
 set -- "${initargs[@]}"
 
 wov-env -e
@@ -264,7 +275,7 @@ if [ "${A}" != "" ]; then WOV_PROJECTTITLE=${A}; fi
 echo 
 printf "Project Code [i.e. short machine happy string (i.e. directory name)?]: (${WOV_PROJECT}) "
 read A
-if [[ ${A} =~ ^[A-Za-z][A-Za-z_0-9]+$ ]];  then
+if [[ ! $A =~ ^[A-Za-z][A-Za-z_0-9]+$ ]];  then
   echo "ERROR: bad string (i.e. [A-Za-z][A-Za-z_0-9]*)" 
   exit 1
 fi
@@ -292,7 +303,7 @@ if [ "${A}" != "" ]; then WOV_ARCHIVEENV=${A}; fi
 
 
 echo "... writing 'wovtools/config.json'"
-jq '.project.type="'"${WOV_PROJECTTYPE}"'" | .project.project="'"${WOV_PROJECT}"'"  | .project.title="'"${WOV_PROJECTTITLE}"'"  | .project.description="'"${WOV_PROJECTDESCRIPTION}"'" | .secrets={ \"${WOV_STAGE}\"= [ \"base.json\" ] } | .operation={} | .archive.env="'"${WOV_ARCHIVEENV}"'" | .archive.repository="'"${WOV_ARCHIVEREPOSITORY}"'"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json.$$ && cp ${WOV_BASEDIR}/wovtools/.config.json.$$ ${WOV_BASEDIR}/wovtools/config.json
+jq ' .ver='${WOV_VERSION}' | .project.type="'"${WOV_PROJECTTYPE}"'" | .project.project="'"${WOV_PROJECT}"'"  | .project.title="'"${WOV_PROJECTTITLE}"'"  | .project.description="'"${WOV_PROJECTDESCRIPTION}"'" | .secrets={ "'${WOV_GSTAGE}'": [ "base.json" ] } | .operation={} | .archive.env="'"${WOV_ARCHIVEENV}"'" | .archive.repository="'"${WOV_ARCHIVEREPOSITORY}"'"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json.$$ && cp ${WOV_BASEDIR}/wovtools/.config.json.$$ ${WOV_BASEDIR}/wovtools/config.json
 rm ${WOV_BASEDIR}/wovtools/.config.json.*
 
 
