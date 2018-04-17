@@ -12,9 +12,11 @@ pushargs=( "$@" )
 set ""
 . wov-env
 . wov-ns-check
-. wov-pushcode-check
 set -- "${pushargs[@]}"
 
+
+wov-pushcode-check
+if [ "$?" != "0" ]; then exit 1; fi
 
 
 # ---------------------------------------------------------------------
@@ -68,5 +70,7 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
+echo "  ... wov-push-containers ${METAARGS}"
 wov-push-containers ${METAARGS}
+echo "  ... wov-push-env ${METAARGS}"
 wov-push-env ${METAARGS}

@@ -41,9 +41,9 @@ fi
 # --------------------------------------------------------------------- 
 # PROJECT: Check that they align
 # --------------------------------------------------------------------- 
-echo "WOV_PROJECT: $WOV_PROJECT"
-echo "WOV_KPROJECT: $WOV_KPROJECT"
-echo "WOV_WPROJECT: $WOV_WPROJECT"
+#echo "WOV_PROJECT: $WOV_PROJECT"
+#echo "WOV_KPROJECT: $WOV_KPROJECT"
+#echo "WOV_WPROJECT: $WOV_WPROJECT"
 if [[ -z "$WOV_KPROJECT" ]]; then
   echo "ERROR: unknown WOV_KPROJECT";
   exit 1

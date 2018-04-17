@@ -104,6 +104,14 @@ EOF
   # remove prying eyes...
   chmod 600 ${SECRETFILE}
 
+  # Check for file existence
+  for sf in ${SECRETFILES[*]}; do
+    if [ ! -e ${WOV_BASEDIR}/wovtools/secrets/$sf ]; then
+      printf "\n\nERROR: file for secret build does not exist: 'wovtools/secrets/$sf'.\n"
+      exit 1
+    fi
+  done
+
   # merge files in order
   for sf in ${SECRETFILES[*]}; do
     if [ "$DOECHO" == "2" ]; then echo "  ... adding secret file $sf"; fi

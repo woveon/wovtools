@@ -118,6 +118,10 @@ for f in ${RECIPES}; do
     echo "ERROR: recipe for container ${f%.sh} not executable (${WOV_BASEDIR}/wovtools/containers/$f).";
   else
     cd ${WOV_BASEDIR} && SRCDIR=${SRCDIR} DESTDIR=${DESTDIR} CONTAINER=${CONTAINER} ${WOV_BASEDIR}/wovtools/containers/$f
+    if [ "$?" != "0" ]; then
+      printf "\n\nERROR: failed building container.\n\n"
+      exit 1
+    fi
 
     # determine if need to build container
     NEEDSBUILD=0

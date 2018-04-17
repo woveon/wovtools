@@ -12,10 +12,11 @@ pushenvargs=( "$@" )
 set ""
 . wov-env
 . wov-ns-check
-. wov-pushcode-check
 set -- "${pushenvargs[@]}"
 
 
+wov-pushcode-check
+if [ "$?" != "0" ]; then exit 1; fi
 
 
 # ---------------------------------------------------------------------
