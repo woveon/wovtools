@@ -180,7 +180,8 @@ if [ "${BLOCK}" == "0" ]; then
         docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
 
         echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-        R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 )
+
+        R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty )
         if [ "$?" != "0" ]; then
           echo "R: ${R}"
           if [[ $R == 'name unknown'* ]]; then
@@ -196,7 +197,11 @@ if [ "${BLOCK}" == "0" ]; then
           else
             echo "      ... SUCCESS auto-login to AWS attempt"
             echo "    ... re-push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-            docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 
+            R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1  | tee /dev/tty)
+            if [ "$?" != "0" ]; then
+              printf "\n\n  ...still errors: ${R}.\n"
+              exit 1
+            fi
           fi
         fi
 

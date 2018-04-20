@@ -87,6 +87,7 @@ done
 
 
 # Echoes 1 if found, 0 not found, 2 unknown, 3 if no repo
+# NOTE: echo to stderr since return value is stdout
 function fCheckForRemoteImage() 
 {
   local retval=2
@@ -98,7 +99,17 @@ function fCheckForRemoteImage()
     # do check
     RR=$(ecs-cli images ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} 2>&1 )
     if [[ $RR == *"RepositoryNotFoundException"* ]]; then
-      printf "\n\nERROR: Repository Not Found. Create '${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER}' in AWS CodeCommit, then try again.\n" 1>&2
+      printf "\n\nERROR: Docker Repository Not Found: Create '${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER}' in AWS ElasticContainerService, then try again.\n" 1>&2
+      printf "   : https://console.aws.amazon.com/ecs\n\n" 1>&2
+      printf "   Open repo in browser for you? (no) " 1>&2
+      read A
+      if [[ $A == [yY][eE][sS] ]] || [[ $A == [yY] ]]; then
+        echo "    ... opening repo in browser" 1>&2
+        open https://console.aws.amazon.com/ecs &
+      else
+        echo "    ... skipping" 1>&2
+      fi
+
       retval=3
     elif [ "$RR" == "" ]; then
       retval=0
@@ -178,9 +189,11 @@ else
     fi
     if [ "${CH}" == "3" ]; then
       if [ $DOECHO -ge 1 ]; then echo "    ... no repo found."; fi
+      NEEDSBUILD=3
     fi
     if [ "${CH}" == "2" ]; then
       if [ $DOECHO -ge 1 ]; then echo "    ... some error or other."; fi
+      NEEDSBUILD=2
     fi
 
   # check remote repo version... since if the git version is diff from that, then need to build!!!

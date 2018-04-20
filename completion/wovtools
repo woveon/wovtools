@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+
+#_compWovDir() {
+#  local cur baseFolder
+#  cur="${COMP_WORDS[$COMP_CWORD]}"
+#  baseFolder=git rev-parse --show-toplevel
+#  compopt -o nospace
+#  COMPREPLY=(  $(
+#  cd "$baseFolder"
+#  if [[ ${cur: -1} != "/" && -d $cur ]] ; then
+#    echo "$cur/"
+#  else
+#    compgen -f "$cur"
+#  fi
+#  )  )
+#}
+#complete -F _compWovDir wov-ed
+
+
+_compWovEd() 
+{
+  _compWovComplete ""
+}
+
+_compWovCmd() 
+{
+  _compWovComplete "cmds/"
+}
+
+_compWovService() 
+{
+  _compWovComplete "services/"
+}
+
+_compWovComplete()
+{
+  local cur; local tmp;  local tmp_escaped; local i;
+  _get_comp_words_by_ref cur;
+  local _compreply=()
+  tmp=$(git rev-parse --show-toplevel)/wovtools/$1
+#  echo "tmp : ${tmp}"
+#  tmp=~/tmp/
+  tmp_escaped=${tmp//\//\\\/}
+  cur=$tmp$cur;
+
+  if [ "$1" == "-d" ]; then
+    _cd
+  else
+    _filedir;
+  fi;
+  for i in "${COMPREPLY[@]}"; do
+    [ -d "$i" ] && [ "$i" != "$tmp." ] && [ "$i" != "$tmp.." ] && i="$i/"
+    _compreply=("${_compreply[@]}" "$i")
+  done
+
+  COMPREPLY=(${_compreply[@]/$tmp_escaped/})
+} 
+complete -o nospace -F _compWovEd  wov-ed
+complete -o nospace -F _compWovCmd wov-cmd
+complete -o nospace -F _compWovService wov-service
+
+#aaa_files
+
+#_compTestDir()
+#{
+#    _compTest -d
+#} && complete -o nospace -F _compTestDir aaa_directories

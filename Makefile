@@ -6,6 +6,7 @@ BINS=wov-env wov-ns-check wov-stage wov-build wov-compile \
 		 wov-deploy wov-deploy-info \
 		 $(BINS-UTIL)
 
+
 APPLESCRIPT=wov-context.app
 
 install : 
@@ -13,7 +14,7 @@ install :
 # ---------------------------------------------------------------------
 # Install scripts
 # ---------------------------------------------------------------------
-install :
+install : /usr/local/etc/bash_completion.d/wovtools
 	@echo "- $(@) --------------------------------------------------------------"
 	@echo "  ... install bins in /usr/local/bin, via ln"
 	@for b in $(BINS); do \
@@ -34,3 +35,20 @@ install :
 #		echo "    ... install $$b"; \
 #		ln -f -s $(CURDIR)/bin/$$b $(HOME)/Library/Scripts/Applications/Terminal/$$b; \
 #		done
+
+
+/usr/local/etc/bash_completion.d/wovtools : completion/wovtools
+	@echo "...checking for bash_completion"
+	@if [ ! -e $(shell brew --prefix)/etc/bash_completion ]; then \
+	  echo "  ...installing"; \
+		brew install bash-completion ; \
+		echo 'if [ -f $(brew --prefix)/etc/bash_completion ]; then' >> ${HOME}/.bash_profile; \
+		echo '  . $(brew --prefix)/etc/bash_completion; ' >> ${HOME}/.bash_profile; \
+		echo 'fi' >> ${HOME}/.bash_profile; \
+		echo "  ... NOTE: source ~/.bash_profile to enable bash-completion"; \
+	else \
+	  echo "  ...exists"; \
+	fi
+	ln -f -s $(CURDIR)/completion/wovtools /usr/local/etc/bash_completion.d/wovtools
+
+	
