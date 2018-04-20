@@ -128,6 +128,11 @@ aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s ${DEPLOYDIR}/k8s  --delete
 # --------------------------------------------------------------------- 
 # Add labels
 if [ $DOECHO -ge 1 ]; then echo "  ... labeling namespace"; fi
+R=$(kubectl get namespaces | grep ${WOV_NS})
+if [ "$?" != "0" ]; then
+  printf "\n\nERROR: missing namespace '${WOV_NS}'. Type : 'kubectl create namespace ${WOV_NS}' to create one.\n\n"
+  exit 1
+fi
 kubectl label namespace ${WOV_NS} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
 
 # --------------------------------------------------------------------- 
@@ -140,7 +145,6 @@ for F in ${FILES}; do
   kubectl delete configmap ${f} #2> /dev/null
   kubectl create configmap ${f} ${DATA}
   kubectl label  configmap ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
-
 done
 
 # --------------------------------------------------------------------- 
