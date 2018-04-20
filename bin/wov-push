@@ -14,7 +14,7 @@ set ""
 . wov-ns-check
 set -- "${pushargs[@]}"
 
-
+wov-build -e
 wov-pushcode-check
 if [ "$?" != "0" ]; then exit 1; fi
 

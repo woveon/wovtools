@@ -16,7 +16,7 @@ EDPATH=''
 buildargs=( "$@" )
 set ""
 . wov-env
-. wov-ns-check
+#. wov-ns-check
 set -- "${buildargs[@]}"
 #set -x
 

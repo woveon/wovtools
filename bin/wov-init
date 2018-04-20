@@ -165,6 +165,9 @@ EOF
     git push --set-upstream origin ${WOV_GSTAGE}-local || exit 1
   fi
 
+  # Switch back to personal
+  echo "  ... switching back to branch: '${WOV_GSTAGE}'"
+  git checkout -b ${WOV_GSTAGE} || exit 1
 
   # ---------------------------------------------------------------------
   # Create secrets repo

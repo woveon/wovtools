@@ -45,7 +45,7 @@ EOF
 
 function doList()
 {
-  C=$(ls ${WOV_BASEDIR}/wovtools/containers/*.sh 2> /dev/null )
+  C=$(ls ${WOV_BASEDIR}/wovtools/containers/* 2> /dev/null )
   RETVAL=$?
   if [ $RETVAL -eq 0 ]; then echo $C; else echo "No containers"; fi
 }
@@ -97,19 +97,20 @@ done
 if [ "${BLOCK}" == "0" ]; then
  
   RECIPES=( "$@" )
-  if [ "${#RECIPES[@]}" == 0 ]; then
-    RECIPES=( $(cd ${WOV_BASEDIR}/wovtools/containers; ls *.sh 2> /dev/null) )
+  if [ "${#RECIPES[@]}" == "0" ]; then
+    RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && ls * 2> /dev/null)
   fi
+  #echo "R: ${RECIPES}"
 
   # Build containers if needed
   for f in ${RECIPES}; do
 
-    if [ $DOECHO -ge 1 ]; then echo "... build container ${f%.sh}."; fi
+    if [ $DOECHO -ge 1 ]; then echo "... build container ${f}."; fi
 
     SRCDIR=${WOV_BASEDIR}
-    DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${f%.sh}
-    ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${f%.sh}
-    CONTAINER=${WOV_PROJECT}${f%.sh}
+    DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${f}
+    ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${f}
+    CONTAINER=${WOV_PROJECT}${f}
     #  echo "CONTAINER=${CONTAINER}"
     #  echo "SRCDIR=${SRCDIR}"
     #  echo "DESTDIR=${DESTDIR} # more like a 'content' dir as this is all copied in here"
@@ -119,7 +120,7 @@ if [ "${BLOCK}" == "0" ]; then
     mkdir -p ${DESTDIR}
     echo "  ... recipe $f (DESTDIR=${DESTDIR}, CONTAINER=${CONTAINER})"
     if [[ ! -x "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
-      echo "ERROR: recipe for container ${f%.sh} not executable (${WOV_BASEDIR}/wovtools/containers/$f).";
+      echo "ERROR: recipe for container ${f} not executable (${WOV_BASEDIR}/wovtools/containers/$f).";
     else
       cd ${WOV_BASEDIR} && SRCDIR=${SRCDIR} DESTDIR=${DESTDIR} CONTAINER=${CONTAINER} ${WOV_BASEDIR}/wovtools/containers/$f
       if [ "$?" != "0" ]; then
@@ -130,7 +131,7 @@ if [ "${BLOCK}" == "0" ]; then
       # determine if need to build container
       NEEDSBUILD=0
 
-      wov-pushcontainer-check ${f%.sh}
+      wov-pushcontainer-check ${f}
       NEEDSBUILD=$?
       # printf "\n\n\n\nNEEDSBUILD: $NEEDSBUILD\n\n\n"
       #    echo "NEEDSBUILDOUT: $NEEDSBUILDOUT"

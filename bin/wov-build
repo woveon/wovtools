@@ -135,7 +135,7 @@ EOF
   if [ "$DOECHO" == "2" ]; then 
     echo "... SECRETDIFF=${SECRETDIFF}"; 
   elif [ "$DOECHO" == "1" ] && [ "$SECRETDIFF" == "1" ]; then 
-    echo "... secret has modifications."
+    echo "... secret needs to be (re)built."
   fi
 }
 

@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+
+FOLD=80
+DOECHO=1
+DIDCMD=0
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Command to assist with running the Kubernetes Dashboad UI. Can launches the Kubernetes Dashboard and puts the login token into clipboard for copy and paste.
+
+  -p    : launch proxy if needed
+  -t    : get token for UI
+  -b    : open browser window to UI
+  -v|-q : verbose/quiet output
+  -h    : this help text
+
+EOF
+}
+
+function doProxy()
+{
+  echo ""
+  echo "- wovdashboard -----------------------------------------------"
+  echo "  ... ensure Kubernetes proxy operating"
+  if [ "`ps -ef | grep "[k]ubectl proxy" ; echo $?`" == "1" ]; then
+    echo "    ... launching kubectl proxy"
+    xx kubectl proxy
+  else echo "    ... ok."
+  fi
+  DIDCMD=1
+}
+
+
+function doToken()
+{
+  # echo "  ... getting token 'kubernetes-dashboard-token' in namespace 'kube-system'"
+  TOKPODNAME=`kubectl -n kube-system get secret | \grep kubernetes-dashboard-token- | awk '{print $1}' `
+  #echo "TOKPODNAME: ${TOKPODNAME}"
+  #echo "--- DASHBOARD TOKEN --- (use to login to dashboard) ---"
+  kubectl -n kube-system describe secret ${TOKPODNAME} | \grep "^token" | awk '{print $2}' | tr -d '\040\011\012\015' | pbcopy
+  echo "  ... token copied to clipboard."
+  DIDCMD=1
+}
+
+function doBrowser()
+{
+  echo "  ... opening browser to:  http://localhost:8001/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/"
+  open http://localhost:8001/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/
+  DIDCMD=1
+}
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+#  echo "param '$1'"
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-p" ]; then
+    shift
+    doProxy
+
+  elif [ "$1" == "-t" ]; then
+    shift
+    doToken
+
+  elif [ "$1" == "-b" ]; then
+    shift
+    doBrowser
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+  
+
+
+if [ "${DIDCMD}" == "0" ]; then
+  printf "\n\nERROR: No command provided.\n\n"
+  fDisplayOptions
+  exit 1
+fi
