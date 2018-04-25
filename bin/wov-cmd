@@ -10,7 +10,7 @@ FOLD=80
 cmdargs=( "$@" )
 set ""
 . wov-env
-. wov-ns-check
+#. wov-ns-check
 set -- "${cmdargs[@]}"
 
 

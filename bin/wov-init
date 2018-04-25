@@ -80,7 +80,9 @@ function InitProject()
 
   # ---------------------------------------------------------------------
   # Create the config.json 
+  echo " ... check to create config.json"
   if [ ! -e ${WOV_BASEDIR}/wovtools/config.json ]; then 
+    echo "   ... try to create config.json"
     cat <<EOF > ${WOV_BASEDIR}/wovtools/config.json
 {
   "ver" : "initing",
@@ -102,6 +104,7 @@ function InitProject()
 }
 EOF
   fi
+  echo "   ... exit to create config.json"
 
   # now commit so we can build branches
   # Build a git revision and all branches
@@ -167,7 +170,7 @@ EOF
 
   # Switch back to personal
   echo "  ... switching back to branch: '${WOV_GSTAGE}'"
-  git checkout -b ${WOV_GSTAGE} || exit 1
+  git checkout ${WOV_GSTAGE} || exit 1
 
   # ---------------------------------------------------------------------
   # Create secrets repo
@@ -308,6 +311,7 @@ if [ "${A}" != "" ]; then WOV_ARCHIVEENV=${A}; fi
 
 
 echo "... writing 'wovtools/config.json'"
+set -x
 jq ' .ver='${WOV_VERSION}' | .project.type="'"${WOV_PROJECTTYPE}"'" | .project.project="'"${WOV_PROJECT}"'"  | .project.title="'"${WOV_PROJECTTITLE}"'"  | .project.description="'"${WOV_PROJECTDESCRIPTION}"'" | .secrets={ "'${WOV_GSTAGE}'": [ "base.json" ] } | .operation={} | .archive.env="'"${WOV_ARCHIVEENV}"'" | .archive.repository="'"${WOV_ARCHIVEREPOSITORY}"'"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json.$$ && cp ${WOV_BASEDIR}/wovtools/.config.json.$$ ${WOV_BASEDIR}/wovtools/config.json
 rm ${WOV_BASEDIR}/wovtools/.config.json.*
 

@@ -7,10 +7,13 @@ export WOV_BASEDIR
 
 
 if [ "$WOV_BASEDIR" == "" ]; then
-  echo "ERROR: not in wovtools project."
+  echo "ERROR: not in wovtools project (no git)."
   exit 1
 elif [ ! -e "$WOV_BASEDIR/wovtools" ]; then
-  echo "ERROR: not in wovtools project."
+  echo "ERROR: not in wovtools project (no wovtools directory)."
+  exit 1
+elif [ ! -e "${WOV_BASEDIR}/wovtools/config.json" ]; then
+  echo "ERROR: not in wovtools project (no wovtools/config.json file)."
   exit 1
 fi
 
@@ -70,61 +73,58 @@ WOV_DEVMODE=
 
 #set -x 
 # vars from git, if in project directory
-if [ -e "${WOV_BASEDIR}/wovtools/config.json" ]; then
-  RANGIT=1
-  WOV_PVER=$(git rev-list --count $(git rev-parse --abbrev-ref HEAD))
-  WOV_SVER=$(cd ${WOV_BASEDIR}/wovtools/secrets && git rev-list --count $(git rev-parse --abbrev-ref HEAD))
-  # WOV_USER=$(git config user.email | cut -d@ -f1)
-  WOV_USERNAME=$(git config user.name)
-  WOV_USEREMAIL=$(git config user.email)
-  export WOV_PVER
-  export WOV_SVER
+WOV_PVER=$(git rev-list --count $(git rev-parse --abbrev-ref HEAD))
+WOV_SVER=$(cd ${WOV_BASEDIR}/wovtools/secrets && git rev-list --count $(git rev-parse --abbrev-ref HEAD))
+# WOV_USER=$(git config user.email | cut -d@ -f1)
+WOV_USERNAME=$(git config user.name)
+WOV_USEREMAIL=$(git config user.email)
+export WOV_PVER
+export WOV_SVER
 #  export WOV_USER
-  export WOV_USERNAME
-  export WOV_USEREMAIL
+export WOV_USERNAME
+export WOV_USEREMAIL
 
-  # TODO:  optimize the jq calls into one, returning an array
-  #A=( `jq -r ". | ( .rootdir, .srcdir, .secretsdir, .compileddir, .containerdir, .registry, .wovtools )" ${dir_wovtools_rc}/.wovtools.json` )
-  #echo "A:${A[*]}:A"
-  #dir_root="${A[0]}"
+# TODO:  optimize the jq calls into one, returning an array
+#A=( `jq -r ". | ( .rootdir, .srcdir, .secretsdir, .compileddir, .containerdir, .registry, .wovtools )" ${dir_wovtools_rc}/.wovtools.json` )
+#echo "A:${A[*]}:A"
+#dir_root="${A[0]}"
 
-  WOV_PVERSION=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.ver')
-  if [ "${WOV_PVERSION}" != "${WOV_VERSION}" ] && [ "${WOV_PVERSION}" != "initing" ] ; then
-    printf "\n\nERROR: Your project version '${WOV_PVERSION}', does not match to the WovTools version '${WOV_VERSION}'.\n\n"
-    exit 1
-  fi
-
-  WOV_WPROJECT=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.project') 
-  WOV_PROJECTTYPE=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.type') 
-  WOV_PROJECTTITLE=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.title') 
-  WOV_PROJECTDESCRIPTION=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.description') 
-  export WOV_WPROJECT
-  export WOV_PROJECTTYPE
-  export WOV_PROJECTTITLE
-  export WOV_PROJECTDESCRIPTION
-
-  WOV_ARCHIVEREPOSITORY=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.archive.repository') 
-  WOV_ARCHIVEENV=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.archive.env') 
-  export WOV_ARCHIVEREPOSITORY
-  export WOV_ARCHIVEENV
-
-  WOV_GSTAGE=$(git rev-parse --abbrev-ref HEAD)
-  WOV_STAGE=$WOV_GSTAGE
-    # GSTAGE has priority since it can represent <initials>-local, for local namespaces.
-  export WOV_GSTAGE
-  export WOV_STAGE
-
-  # Set DEVMODE 
-  if [[ ${WOV_GSTAGE} == "${WOV_KSTAGE}-l" ]]; then
-    WOV_DEVMODE=local
-  elif [[ ${WOV_GSTAGE} == "${WOV_KSTAGE}-v" ]]; then
-    WOV_DEVMODE=virtual
-  fi
-  export WOV_DEVMODE
-
-  WOV_PROJECT=${WOV_WPROJECT}
-  export WOV_PROJECT
+WOV_PVERSION=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.ver')
+if [ "${WOV_PVERSION}" != "${WOV_VERSION}" ] && [ "${WOV_PVERSION}" != "initing" ] ; then
+  printf "\n\nERROR: Your project version '${WOV_PVERSION}', does not match to the WovTools version '${WOV_VERSION}'.\n\n"
+  exit 1
 fi
+
+WOV_WPROJECT=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.project') 
+WOV_PROJECTTYPE=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.type') 
+WOV_PROJECTTITLE=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.title') 
+WOV_PROJECTDESCRIPTION=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.description') 
+export WOV_WPROJECT
+export WOV_PROJECTTYPE
+export WOV_PROJECTTITLE
+export WOV_PROJECTDESCRIPTION
+
+WOV_ARCHIVEREPOSITORY=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.archive.repository') 
+WOV_ARCHIVEENV=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.archive.env') 
+export WOV_ARCHIVEREPOSITORY
+export WOV_ARCHIVEENV
+
+WOV_GSTAGE=$(git rev-parse --abbrev-ref HEAD)
+WOV_STAGE=$WOV_GSTAGE
+  # GSTAGE has priority since it can represent <initials>-local, for local namespaces.
+export WOV_GSTAGE
+export WOV_STAGE
+
+# Set DEVMODE 
+if [[ ${WOV_GSTAGE} == "${WOV_KSTAGE}-l" ]]; then
+  WOV_DEVMODE=local
+elif [[ ${WOV_GSTAGE} == "${WOV_KSTAGE}-v" ]]; then
+  WOV_DEVMODE=virtual
+fi
+export WOV_DEVMODE
+
+WOV_PROJECT=${WOV_WPROJECT}
+export WOV_PROJECT
 
 export K8S_CONTEXT
 export WOV_CLUSTER
@@ -155,28 +155,25 @@ function fDoEcho()
   echo WOV_FLAVOR="$WOV_FLAVOR"
   echo WOV_PROJECT="$WOV_PROJECT"
   echo WOV_KSTAGE="$WOV_KSTAGE"
-  if [ "$RANGIT" == "1" ]; then
-    echo WOV_GSTAGE="$WOV_GSTAGE"
-    echo WOV_STAGE="$WOV_STAGE"
-  fi
+  echo WOV_GSTAGE="$WOV_GSTAGE"
+  echo WOV_STAGE="$WOV_STAGE"
   echo WOV_DEVMODE="${WOV_DEVMODE}"
   if [ "$RANCLUSTER" == "1" ]; then
     echo CL_REGION="$CL_REGION"
     echo CL_ZONES="${CL_ZONES}"
   fi
-  if [ "$RANGIT" == "1" ]; then
-    echo WOV_PVER="$WOV_PVER"
-    echo WOV_SVER="$WOV_SVER"
+
+  echo WOV_PVER="$WOV_PVER"
+  echo WOV_SVER="$WOV_SVER"
 #    echo WOV_USER="$WOV_USER"
-    echo WOV_USERNAME="$WOV_USERNAME"
-    echo WOV_USEREMAIL="$WOV_USEREMAIL"
-    echo WOV_PROJECT="$WOV_PROJECT"
-    echo WOV_PROJECTTYPE="$WOV_PROJECTTYPE"
-    echo WOV_PROJECTTITLE="$WOV_PROJECTTITLE"
-    echo WOV_PROJECTDESCRIPTION="$WOV_PROJECTDESCRIPTION"
-    echo WOV_KPROJECT="$WOV_KPROJECT"
-    echo WOV_WPROJECT="$WOV_WPROJECT"
-  fi
+  echo WOV_USERNAME="$WOV_USERNAME"
+  echo WOV_USEREMAIL="$WOV_USEREMAIL"
+  echo WOV_PROJECT="$WOV_PROJECT"
+  echo WOV_PROJECTTYPE="$WOV_PROJECTTYPE"
+  echo WOV_PROJECTTITLE="$WOV_PROJECTTITLE"
+  echo WOV_PROJECTDESCRIPTION="$WOV_PROJECTDESCRIPTION"
+  echo WOV_KPROJECT="$WOV_KPROJECT"
+  echo WOV_WPROJECT="$WOV_WPROJECT"
 }
 
 # TODO: fill this function in, and remove from WIAAS

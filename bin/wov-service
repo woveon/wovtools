@@ -2,6 +2,7 @@
 
 DOECHO=1
 DOFORCE=0
+DIDRUN=0
 FOLD=100
 CURSERVICE=""
 RETVAL=0
@@ -17,7 +18,7 @@ set ""
 set -- "${pushenvargs[@]}"
 
 
-#set -x
+# set -x
 
 
 # ---------------------------------------------------------------------
@@ -31,11 +32,11 @@ usage: `basename $0` [options]
 
 Runs, tests or kills a local running service for this project. These commands are run in order.
 
-  -s service : Sets the name of the service (look for in wovtools/services/SERVICE.sh)
+  -s service : Sets the name of the service (look for in wovtools/services/SERVICE)
   -r : run the service if test fails 
   -R : run without testing
-  -t : test the service (if error code returned, fails) (./wovtools/services/SERVICE-test.sh)
-  -k : kill the service (./wovtools/services/SERVICE-kill.sh)
+  -t : test the service (if error code returned, fails) (./wovtools/services/SERVICE-test)
+  -k : kill the service (./wovtools/services/SERVICE-kill)
   -h : this help
   -q/-v : quiet/verbose
 
@@ -45,9 +46,11 @@ EOF
 function doTest()
 {
   if [ ${DOECHO} -ge 2 ]; then echo "...test"; fi
-  if [ -e ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-test.sh ]; then
-    OUTIS=$(${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-test.sh)
+  if [ -e ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-test ]; then
+    echo 1
+    OUTIS=$(${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-test)
     RETVAL=$?
+    echo 2
   else
     if [ ${DOECHO} -ge 2 ]; then echo "  ...no test script for '${DOSERVICE}'"; fi
     OUTIS=""
@@ -59,19 +62,22 @@ function doTest()
     echo "ERROR: failed test '${DOSERVICE}'."
     echo
   fi
+  DIDRUN=1
 }
 
 function doRun()
 {
   if [ ${DOECHO} -ge 2 ]; then echo "...run"; fi
-  ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}.sh
+  ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}
+  DIDRUN=1
   RETVAL=$?
 }
 
 function doKill()
 {
   if [ ${DOECHO} -ge 2 ]; then echo "...kill"; fi
-  ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-kill.sh
+  ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-kill
+  DIDRUN=1
   RETVAL=$?
 }
 
@@ -97,10 +103,14 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-R" ]; then
     shift
     DOFORCE=1
+    DOSERVICE="$1"
+    shift
     doRun
     DOFORCE=0
 
   elif [ "$1" == "-r" ]; then
+    shift
+    DOSERVICE="$1"
     shift
     doTest
     if [ "${RETVAL}" != "0" ]; then doRun; fi
@@ -125,6 +135,12 @@ while [[ $1 =~ ^- ]]; do
     exit 1
   fi
 done
+
+if [ "${DIDRUN}" == "0" ]; then
+  printf "\n\nERROR: you did not call any services.\n"
+  fDisplayOptions
+  exit 1
+fi
 
 exit ${RETVAL}
 

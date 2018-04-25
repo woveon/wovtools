@@ -28,7 +28,7 @@ if [ "$WOV_KSTAGE" == "" ]; then
   echo "ERROR: unknown WOV_KSTAGE";
   exit 1
 elif [ "$WOV_GSTAGE" == "" ]; then
-  echo "ERROR: unknown WOV_KSTAGE";
+  echo "ERROR: unknown WOV_GSTAGE";
   exit 2
 elif [[ $WOV_GSTAGE == "${WOV_KSTAGE}-local" ]]; then
   echo "...matched local stage"

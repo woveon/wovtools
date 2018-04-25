@@ -115,13 +115,17 @@ function fCheckForRemoteImage()
       retval=0
     fi
 
+#    echo "RR: ${RR} " 1>&2
 
     # if no errors, check
     if [[ $retval -eq 2 ]]; then
       # NOTE: check KSTAGE since GSTAGE is mixed with local
-      R=$(echo "${RR}" | awk '{print $2}' | \grep ${WOV_KSTAGE}_${WOV_PVER})
+      R=$(echo "${RR}" | awk '{print $2}' | grep ${WOV_KSTAGE}_${WOV_PVER})
+#      echo "R: ${R} " 1>&2
       if [ "${R}" != "" ]; then
         retval=1
+      else
+        retval=0
       fi
     fi
   else

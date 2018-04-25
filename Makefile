@@ -51,4 +51,15 @@ install : /usr/local/etc/bash_completion.d/wovtools
 	fi
 	ln -f -s $(CURDIR)/completion/wovtools /usr/local/etc/bash_completion.d/wovtools
 
-	
+
+VH-BUILDNUM=0.1
+
+# Creates the vh Docker container
+vh : vh/Dockerfile
+	docker build -f ./vh/Dockerfile -t vh ./vh
+	@echo "  ... tagging container   : wovtools/vh:${VH-BUILDNUM}"
+	docker tag vh "wovtools/vh:${VH-BUILDNUM}"
+	@echo "  ... push to DockerHub: wovtools/vh"
+	docker push wovtools/vh
+	@echo "  ... success"
+
