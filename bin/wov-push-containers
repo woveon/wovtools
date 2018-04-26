@@ -17,8 +17,13 @@ set ""
 . wov-ns-check
 set -- "${pushcontainersargs[@]}"
 
-wov-pushcode-check
-if [ "$?" != "0" ]; then exit 1; fi
+
+# Check local code is checked in and pushed
+wov-git-check -v ${WOV_BASEDIR}
+R1=$?
+wov-git-check -v ${WOV_BASEDIR}/wovtools/secrets
+R2=$?
+if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
 
 
 
@@ -118,7 +123,9 @@ if [ "${BLOCK}" == "0" ]; then
 
     # build the content in wovtools/cache/containers/$f
     mkdir -p ${DESTDIR}
-    echo "  ... recipe $f (DESTDIR=${DESTDIR}, CONTAINER=${CONTAINER})"
+    echo "  ... recipe $f"
+    echo "    ... DESTDIR=${DESTDIR}"
+    echo "    ... CONTAINER=${CONTAINER}"
     if [[ ! -x "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
       echo "ERROR: recipe for container ${f} not executable (${WOV_BASEDIR}/wovtools/containers/$f).";
     else
@@ -182,12 +189,13 @@ if [ "${BLOCK}" == "0" ]; then
         echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
 
         R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty )
-        if [ "$?" != "0" ]; then
-          echo "R: ${R}"
-          if [[ $R == 'name unknown'* ]]; then
-            printf "\n\n  ...${R}.\n"
-            exit 1
-          fi
+        RR=$?
+        echo "R: ${R}"
+        if [[ $R == 'name unknown'* ]]; then
+          printf "\n\n  ...${R}.\n"
+          exit 1
+        fi
+        if [[ $R == *'Your Authorization Token has expired.'* ]]; then
           echo "    ... auto-login to AWS attempt"
           AWSAUTHCMD=$(aws ecr get-login --no-include-email)
           eval ${AWSAUTHCMD}

@@ -98,7 +98,11 @@ done
 
 # If deploying the latest PVER, check that all code is pushed to archive
 if [ "${WOV_CUR_PVER}" == "${WOV_PVER}" ]; then
-  wov-pushcode-check
+  wov-git-check -v ${WOV_BASEDIR}
+  R1=$?
+  wov-git-check -v ${WOV_BASEDIR}/wovtools/secrets
+  R2=$?
+  if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
 fi
 
 # If deploying the latest SVER, check that all env is pushed to archive

@@ -18,7 +18,8 @@ function DoDisplay {
 
   echo 
   echo "= ${WOV_NS} = ${WOV_PVER}:${WOV_SVER} ==============================="
-  wov-pushcode-check
+  wov-git-check -v ${WOV_BASEDIR}
+  wov-git-check -v ${WOV_BASEDIR}/wovtools/secrets
   echo
   echo "- namespaces - (of stage -${WOV_STAGE}) -----------------------------------------------"
   kubectl get namespaces | grep "\-${WOV_STAGE}" | awk '{print $1}' | tr '\n' ' '

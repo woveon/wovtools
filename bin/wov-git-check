@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+FOLD=100
+RETVAL=0
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{ 
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options] [path ...]
+
+Checks that the git archives on path(s) are committed and pushed to origin.
+
+  -h : this help
+  -q : quiet, no output
+  -v : verbose output
+
+EOF
+}
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+if [ "$#" == "0" ]; then
+  PATHS=( "." )
+else
+  PATHS=${@}
+fi
+
+for p in ${PATHS}; do
+
+  # ---------------------------------------------------------------------
+  # Check code changes and added/removed files are committed into current branch.
+  # ---------------------------------------------------------------------
+
+  # check current repo
+  R=$(cd ${p} && git status -s)
+  RR=${?}
+  if [ "$RR" != "0" ] || [ "$R" != "" ]; then
+    if [ $DOECHO -ge 1 ]; then
+      printf "\nWARNING: '${p}': failed code/env commit-check. Check in your code/env values to Archive.\n"
+    fi
+    if [ $DOECHO -ge 2 ]; then 
+      printf "\n*** git status : start ************************************************\n" 
+      cd ${p} && git status
+      printf "*** git status : end **************************************************\n\n" 
+    fi
+    # RETVAL=$((RETVAL+1))
+    RETVAL=1
+  else
+    if [ "$DOECHO" == "2" ]; then
+      echo "SUCCESS: '${p}': wov-push-check commit code/env"
+    fi
+  fi
+
+
+  if [ "$RETVAL" == "0" ]; then
+    # ---------------------------------------------------------------------
+    # Check local changes are pushed
+    # ---------------------------------------------------------------------
+    # check code/env
+    R=$(cd ${p} && git push -nq)
+    RR=${?}
+    if [ "$RR" != "0" ] || [ "$R" != "" ]; then
+      if [ $DOECHO -ge 1 ]; then
+        printf "\nWARNING: '${p}': failed code/env push check. Push your archive.\n"
+      fi
+      if [ $DOECHO -ge 2 ]; then 
+        echo "*** git status : start ************************************************ " 
+        cd ${p} && git status
+        echo "*** git status : end ************************************************** " 
+      fi
+      # RETVAL=$((RETVAL+4))
+      RETVAL=2
+    else
+      if [ "$DOECHO" == "2" ]; then
+        echo "SUCCESS: '${p}': wov-push-check push code/env."
+      fi
+    fi
+  fi
+
+done
+
+if [ "${RETVAL}" != "0" ]; then
+  exit ${RETVAL}
+fi

@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+cat <<EOF
+
+`basename $0` : DEPRICATED
+  use 'wov-git-check'
+
+
+EOF
+exit 1
+
 DOECHO=1
 FOLD=100
 RETVAL=0

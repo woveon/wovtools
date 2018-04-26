@@ -1,6 +1,7 @@
 
 
-BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service wov-ed wov-ls wov-v wov-pwait wov-pshell wov-cmd wov-kui
+BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service wov-ed wov-ls wov-v wov-pwait \
+	        wov-pshell wov-cmd wov-kui wov-git-check
 BINS=wov-env wov-ns-check wov-stage wov-build wov-compile \
 		 wov-pushcode-check wov-pushcontainer-check wov-pushenv-check wov-push-containers wov-push-env wov-push-secrets wov-push \
 		 wov-deploy wov-deploy-info \
@@ -55,11 +56,11 @@ install : /usr/local/etc/bash_completion.d/wovtools
 VH-BUILDNUM=0.1
 
 # Creates the vh Docker container
-vh : vh/Dockerfile
+vh : vh/Dockerfile vh/vimrc
 	docker build -f ./vh/Dockerfile -t vh ./vh
 	@echo "  ... tagging container   : wovtools/vh:${VH-BUILDNUM}"
 	docker tag vh "wovtools/vh:${VH-BUILDNUM}"
 	@echo "  ... push to DockerHub: wovtools/vh"
-	docker push wovtools/vh
+	docker push wovtools/vh || echo 'Hmm, did you 'docker login'?'
 	@echo "  ... success"
 
