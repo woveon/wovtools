@@ -2,7 +2,7 @@
 
 
 DOECHO=1
-FOLD=80
+FOLD=140
 DIDCOMMAND=0
 
 
@@ -29,6 +29,7 @@ Virtual commands.
 
   -s : start the virtual machine
   --config : mount all secrets and configmaps to the vh
+  --route-service [service] [pod] - patches the service to point to the given pod
   -h : this help
   -q/-v : quiet/verbose
 
@@ -92,9 +93,7 @@ EOF
   kubectl apply -f .file
 
   echo "  ... wait for running vh"
-  set -x
   wov-pwait -f 20 -w 5 vh
-  set +x
 
 
   echo "  ... finish configuring vh"
@@ -159,6 +158,16 @@ function doConfig()
 }
 
 
+# ---------------------------------------------------------------------
+# route the spec.selector.app from service to vh
+# ---------------------------------------------------------------------
+function doRouteService()
+{
+  local patch="{ \"spec\" : { \"selector\" : { \"app\" : \"$2\" }}}"
+  # echo "PATCH: $patch"
+  kubectl patch service $1 -p "$patch"
+
+}
 
 # ---------------------------------------------------------------------
 # Handle Params
@@ -180,6 +189,12 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--config" ]; then
     shift
     doConfig
+
+  elif [ "$1" == "--route-service" ]; then
+    shift 
+    doRouteService $1 $2
+    shift
+    shift
 
 
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
