@@ -6,6 +6,11 @@ FOLD=80
 BLOCK=0
 
 # ---------------------------------------------------------------------
+# Build right before to update any files
+# ---------------------------------------------------------------------
+wov-build -e
+
+# ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
 pushargs=( "$@" )
@@ -14,12 +19,11 @@ set ""
 . wov-ns-check
 set -- "${pushargs[@]}"
 
-wov-build -e
 
 # Check local code is checked in and pushed
-wov-git-check -v ${WOV_BASEDIR}
+wov-git-check ${WOV_BASEDIR}
 R1=$?
-wov-git-check -v ${WOV_BASEDIR}/wovtools/secrets
+wov-git-check ${WOV_BASEDIR}/wovtools/secrets
 R2=$?
 if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
 
@@ -77,5 +81,11 @@ done
 
 echo "  ... wov-push-containers ${METAARGS}"
 wov-push-containers ${METAARGS}
+if [ "$?" != "0" ]; then
+  exit 1
+fi
 echo "  ... wov-push-env ${METAARGS}"
 wov-push-env ${METAARGS}
+if [ "$?" != "0" ]; then
+  exit 1
+fi

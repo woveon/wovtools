@@ -16,9 +16,9 @@ set -- "${pushenvargs[@]}"
 
 
 # Check local code is checked in and pushed
-wov-git-check -v ${WOV_BASEDIR}
+wov-git-check ${WOV_BASEDIR}
 R1=$?
-wov-git-check -v ${WOV_BASEDIR}/wovtools/secrets
+wov-git-check ${WOV_BASEDIR}/wovtools/secrets
 R2=$?
 if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
 

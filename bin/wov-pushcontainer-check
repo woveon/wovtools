@@ -15,11 +15,11 @@ set ""
 set -- "${pushargs[@]}"
 
 # Check local code is checked in and pushed
-wov-git-check -v ${WOV_BASEDIR}
+wov-git-check ${WOV_BASEDIR}
 R1=$?
-wov-git-check -v ${WOV_BASEDIR}/wovtools/secrets
+wov-git-check ${WOV_BASEDIR}/wovtools/secrets
 R2=$?
-if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
+if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 4; fi
 
 
 # ---------------------------------------------------------------------
@@ -40,6 +40,13 @@ Checks if the current container needs to be pushed. This checks, in order:
   -h : this help
   -q/-v : quiet/verbose
   -f : force
+
+exit values:
+  0 - no build needed
+  1 - needs build
+  2 - general error
+  3 - no repo errro
+  4 - wov-git-check error
 
 EOF
 }

@@ -21,6 +21,18 @@ WOV_CUR_PVER=${WOV_PVER}
 WOV_CUR_SVER=${WOV_SVER}
 
 
+if [ "${WOV_STAGE}" == "prod" ]; then
+  printf "\n\n**** deploying to production *********************************\n\n"
+  printf "   Are you sure? (yes|NO) "
+  read $A
+  if [ "$A" == "yes" ] || [ "$A" == "YES" ]; then
+    printf "  ... ok, continuing.\n"
+  else
+    printf "\n  ... stopping.\n"
+    exit 1
+  fi
+fi
+
 
 #set -x
 
@@ -37,7 +49,7 @@ usage: `basename $0` [options]
 Deploys a running kubernetes project from an archive.
 
   --pver|--sver X : sets the Project and Secret version for roll-backs
-  -r : retains the deployment values locally (potential security risk)
+  -r|--retain : retains the deployment values locally (potential security risk)
   -f : force push
   -h : this help
   -q/-v : quiet/verbose
@@ -64,7 +76,7 @@ while [[ $1 =~ ^- ]]; do
     shift
     DOFORCE=1
 
-  elif [ "$1" == "-r" ]; then
+  elif [ "$1" == "-r" ] || [ "$1" == "--retain" ]; then
     shift
     DORETAIN=1
 
@@ -98,9 +110,9 @@ done
 
 # If deploying the latest PVER, check that all code is pushed to archive
 if [ "${WOV_CUR_PVER}" == "${WOV_PVER}" ]; then
-  wov-git-check -v ${WOV_BASEDIR}
+  wov-git-check -q ${WOV_BASEDIR}
   R1=$?
-  wov-git-check -v ${WOV_BASEDIR}/wovtools/secrets
+  wov-git-check -q ${WOV_BASEDIR}/wovtools/secrets
   R2=$?
   if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
 fi
