@@ -46,12 +46,12 @@ fi
 #echo "WOV_WPROJECT: $WOV_WPROJECT"
 if [[ -z "$WOV_KPROJECT" ]]; then
   echo "ERROR: unknown WOV_KPROJECT";
-  exit 1
+  exit 4
 elif [[ -z "$WOV_WPROJECT" ]]; then
   echo "ERROR: unknown WOV_WPROJECT";
-  exit 2
+  exit 5
 elif [ "$WOV_KPROJECT" != "$WOV_WPROJECT" ]; then
   echo "ERROR: PROJECT miss-match. (WOV_KPROJECT=${WOV_KPROJECT}) (WOV_WPROJECT=${WOV_WPROJECT}).";
-  exit 3
+  exit 6
 fi
 

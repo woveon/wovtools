@@ -1,0 +1,1 @@
+alias ngrep="grep --exclude-dir node_modules --exclude-dir '_old*' --exclude-dir '.*' *"

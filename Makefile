@@ -7,6 +7,7 @@ BINS=wov-env wov-ns-check wov-stage wov-build wov-compile \
 		 wov-deploy wov-deploy-info \
 		 $(BINS-UTIL)
 
+.PHONY: vh
 
 APPLESCRIPT=wov-context.app
 
@@ -53,14 +54,12 @@ install : /usr/local/etc/bash_completion.d/wovtools
 	ln -f -s $(CURDIR)/completion/wovtools /usr/local/etc/bash_completion.d/wovtools
 
 
-VH-BUILDNUM=0.1
-
 # Creates the vh Docker container
-vh : vh/Dockerfile vh/vimrc
-	docker build -f ./vh/Dockerfile -t vh ./vh
-	@echo "  ... tagging container   : wovtools/vh:${VH-BUILDNUM}"
-	docker tag vh "wovtools/vh:${VH-BUILDNUM}"
+vh : $(shell find vh -type f)
+	@docker build -f ./vh/Dockerfile -t vh ./vh
+	@echo "  ... tagging container   : wovtools/vh:$(shell wov-env --vh-label)"
+	@docker tag vh "wovtools/vh:$(shell wov-env --vh-label)"
 	@echo "  ... push to DockerHub: wovtools/vh"
-	docker push wovtools/vh || echo 'Hmm, did you 'docker login'?'
+	@docker push wovtools/vh || echo 'Hmm, did you 'docker login'?'
 	@echo "  ... success"
 

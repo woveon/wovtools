@@ -41,3 +41,7 @@ RUN git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.v
 RUN mkdir -p ~/.vim/autoload ~/.vim/bundle && curl -LSso ~/.vim/autoload/pathogen.vim https://tpo.pe/pathogen.vim
 RUN vim +PluginInstall +qall
 #RUN script -c bash "vim +PluginInstall +qall"
+
+#Other files
+COPY bash_profile /root/.bash_profile
+COPY inputrc /root/.inputrc

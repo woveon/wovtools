@@ -28,6 +28,7 @@ usage: `basename $0` [options] resource/file
 Virtual commands. 
 
   -s : start the virtual machine
+  --config : mount all secrets and configmaps to the vh
   -h : this help
   -q/-v : quiet/verbose
 
@@ -55,8 +56,9 @@ function doStart()
 
   # Wait a sec to make sure it is ready
   sleep 1
+  CF=$(doConfig)
   echo "  ... creating a microservice development pod (vh) in ${WOV_NS}."
-  kubectl apply -f  - <<EOF
+  cat <<EOF > .file
 apiVersion: v1
 kind: Pod
 metadata:
@@ -68,16 +70,18 @@ spec:
   restartPolicy: Never
   containers:
   - name: vh
+
     # Run continuously CMD from: https://stackoverflow.com/a/35770783/2664702
     command : ["/bin/bash", "-c", "trap : TERM INT; sleep infinity & wait"]
+
     # for now, but need to upate for wovtools2
-    image: woveon/container_msdev:1
-#    image: 686413534598.dkr.ecr.us-east-1.amazonaws.com/container_msdev:1
+    #image: woveon/container_msdev:1
+    image: index.docker.io/wovtools/vh:$(wov-env --vh-label)
     imagePullPolicy: Always
     volumeMounts:
-#    - mountPath: /usr/src/app/dev
     - mountPath: /usr/src/app
       name: vh-vol-${WOV_PROJECT}-${WOV_STAGE}
+${CF}
   volumes:
   - name: vh-vol-${WOV_PROJECT}-${WOV_STAGE}
     awsElasticBlockStore:
@@ -85,8 +89,12 @@ spec:
       fsType: ext4
 EOF
 
+  kubectl apply -f .file
+
   echo "  ... wait for running vh"
+  set -x
   wov-pwait -f 20 -w 5 vh
+  set +x
 
 
   echo "  ... finish configuring vh"
@@ -98,10 +106,6 @@ EOF
   kubectl cp ${WOV_BASEDIR}/wovtools/secrets/vh_${WOV_NS}_id_rsa     ${WOV_NS}/vh:/root/.ssh/id_rsa
   kubectl cp ${WOV_BASEDIR}/wovtools/secrets/vh_${WOV_NS}_id_rsa.pub ${WOV_NS}/vh:/root/.ssh/id_rsa.pub
 
-
-  # untested lines here
-  kubectl cp ${WOV_BASEDIR}/wovtools/cache/conf/vh/bash_aliases ${WOV_NS}/vh:/root/.bash_aliases
-  kubectl cp ${WOV_BASEDIR}/wovtools/cache/conf/vh/inputrc ${WOV_NS}/vh:/root/.inputrc
 
 cat <<EOF
 
@@ -130,6 +134,33 @@ EOF
 
 
 # ---------------------------------------------------------------------
+# Use patch to add the secrets
+# ---------------------------------------------------------------------
+function doConfig()
+{
+#  echo "for now, echo it"
+
+  V_S=( $(kubectl get secrets | sed -n '3,$p' | awk '{print $1}') )
+  V_CM=( $(kubectl get cm | sed -n '2,$p' | awk '{print $1}') )
+#  echo "$V_S"
+#  echo "$V_CM"
+
+  CF=""
+  printf -v CF "    envFrom:\n"
+  for v in "${V_CM[@]}"; do
+    printf -v CF "%s    - configMapRef:\n" "$CF"
+    printf -v CF "%s        name: $v\n" "$CF"
+  done
+  for v in "${V_S[@]}"; do
+    printf -v CF "%s    - secretRef:\n" "$CF"
+    printf -v CF "%s        name: $v\n" "$CF"
+  done
+  printf "$CF"
+}
+
+
+
+# ---------------------------------------------------------------------
 # Handle Params
 # ---------------------------------------------------------------------
 while [[ $1 =~ ^- ]]; do
@@ -145,6 +176,11 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-s" ]; then
     shift
     doStart
+
+  elif [ "$1" == "--config" ]; then
+    shift
+    doConfig
+
 
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions

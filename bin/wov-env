@@ -5,6 +5,10 @@ WOV_VERSION=0
 WOV_BASEDIR=$(git rev-parse --show-toplevel)
 export WOV_BASEDIR
 
+if [ "$1" == "--vh-label" ]; then
+  echo "0.1"
+  exit 0
+fi
 
 if [ "$WOV_BASEDIR" == "" ]; then
   echo "ERROR: not in wovtools project (no git)."
@@ -32,6 +36,7 @@ usage: `basename $0` [options]
   --var X      : only operate on this variable X
   -h/--help    : display these options
   -v/--version : version of wovtools
+  --vh-label   : vh label in DockerHub repo
   --env X      : echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
   --cmd X      : for commands on one line, echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
   --qcmd X     :   ", quoted

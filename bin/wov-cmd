@@ -9,9 +9,18 @@ FOLD=80
 # --------------------------------------------------------------------- 
 cmdargs=( "$@" )
 set ""
+. wov-build -e
 . wov-env
-#. wov-ns-check
+. wov-ns-check
 set -- "${cmdargs[@]}"
+
+# check that stages align, but project does not need to for commands,
+# as this allows running commands in another project withouth changing K8s namespace
+# NOTE: while the above is true, it screws up a bunch of other things so ocmmenting out
+#if [ "${WOV_GSTAGE}" != "${WOV_KSTAGE}" ]; then
+#  printf "\n\nERROR: stages do not match.\n\n"
+#  exit 1
+#fi
 
 
 # --------------------------------------------------------------------- 
