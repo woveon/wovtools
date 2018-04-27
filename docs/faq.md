@@ -2,7 +2,22 @@
 
 # FAQ
 
+## VH: Develop on Your Cluster
 
+## Q: How do I develop microservices with WovTools?
+* The 'vh' pod can be created to run commands and develop in your cluster.
+
+## Q: How do I set up a development environment in my cluster?
+- Start the 'vh' pod: `wov-vh -s`
+- Put your git code repos on it. 
+  - whole topic, invluives often machine users on Github (adding your vh's key to that user).
+- Develop and run your microservice.
+- Route the service through to vh instead of your pod
+- Pull your code back into your local repos:
+  - cd to your local git repo
+  - `wov-pull-dir`, assumes directory is on vh is /usr/src/app/
+  - commit and push
+  - if needed, pull vh's git repo again to update 
 
 ## VH : Private Repos
 
