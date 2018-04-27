@@ -45,3 +45,7 @@ RUN vim +PluginInstall +qall
 #Other files
 COPY bash_profile /root/.bash_profile
 COPY inputrc /root/.inputrc
+
+# Add github 
+RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
+RUN chmod 600 /root/.ssh/known_hosts

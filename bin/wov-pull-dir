@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+
+# Copies from the vh as vh:$1 which is the working dir on pod, to local directory
+#  - assumes current directory from remote machine to here
+#  - 1st arg sets remote branch
+#
+# ex. if in directry 'mygitrepo', and on vh have dir /usr/src/app/mygitrepo,
+#       `wov-pull-dir` will copy all from vh:mygitrepo .
+#     
+# ex. if in directry 'mygitrepo', and on vh have dir /usr/src/app/path/to/mygitrepo,
+#       `wov-pull-dir path/to/mygitrepo` will copy all from vh:path/to/mygitrepo .
+# 
+# NOTE: moves node_modules out of the way, then puts back to speed cp and aovid cp errors
+
+
+NAMESPACE=
+PODNAME=vh
+
+
+# BD - base directory   RPA - path on remote machine
+BD=$(basename $(pwd))
+RPA=${BD}
+LPA=.
+if [ "$#" == 0 ]; then
+  LPA=.
+elif [ "$#" == 1 ]; then
+  if [ "${BD}" != "$(basename $1)" ]; then
+    printf "\nHmm, copying 'vh:$1' into this directory (named '${BD}') which does not match...\n"
+    printf "  Continue (y|N): "
+    read A
+    if [ "${A}" == "y" ] || [ "${A}" == "Y" ]; then
+      A=$A
+    else
+      printf "\nOk, stopping...\n\n"
+      exit 1
+    fi
+  fi
+  RPA="$1"
+  BD=$(basename $RPA)
+else
+  echo
+  echo "ERROR: bad commands"
+  echo
+  exit 1
+fi
+
+#echo "BD:  $BD"
+#echo "RPA: $RPA"
+#echo "LPA: $LPA"
+
+# Copy node_modules out of the way
+#kubectl exec --namespace "$NAMESPACE" -it "$PODNAME" -- mv $1/node_modules .node_modules.$$
+echo " mv vh:$RPA/node_modules vh:.node_modules.${BD}"
+R1=$(kubectl exec -it "$PODNAME" -- mv $RPA/node_modules .node_modules.${BD} && true)
+RR1=$?
+
+# Copy all but node_modules
+echo kubectl cp vh:$RPA $LPA
+kubectl cp vh:$RPA $LPA
+
+# Put it back
+echo " mv vh:.node_modules.${BD} vh:$RPA/node_modules "
+R2=$(kubectl exec -it "$PODNAME" -- mv .node_modules.${BD} $RPA/node_modules && true)
+RR2=$?
