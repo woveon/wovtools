@@ -20,6 +20,7 @@
   - commit and push
   - if needed, pull vh's git repo again to update 
 
+
 ## VH : Private Repos
 
 ### Q: How do I checkout my repos on 'vh'? 
@@ -34,6 +35,15 @@ wov-pull-dir - Copies from the vh as vh:$1 which is the working dir on pod, to l
 ```
 
 * Alternatively, set your machine user account on Github to have write access. But, than all commits are from that user and not you, which is odd for development teams.
+
+
+## NodeJS Specific
+
+## Q: I have repos my main repo depends on, that I am developing for. Any easy way to manage this?
+Yes, just use npm's link so it symlinks directly to the file, then do development on the private repo just as you would any other.
+- Checkout the private repo, next to your main repo on vh.
+- cd into that private repo and `npm link`.
+- cd into your main repo and `npm link [privatereponame]`.
 
 
 
