@@ -12,7 +12,8 @@
 - Put your git code repos on it. 
   - whole topic, invluives often machine users on Github (adding your vh's key to that user).
 - Develop and run your microservice.
-- Route the service through to vh instead of your pod
+- Route the service through to vh instead of your pod: `wov-vh --route-service [service] vh`
+  - NOTE: a deploy with overwrite this, or `wov-vh --route-service [service] [originalpodname]` to undo.
 - Pull your code back into your local repos:
   - cd to your local git repo
   - `wov-pull-dir`, assumes directory is on vh is /usr/src/app/
