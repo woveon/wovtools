@@ -20,6 +20,11 @@
   - commit and push
   - if needed, pull vh's git repo again to update 
 
+## Q: Isn't development on a pod a bad idea since pods by definition get blown away by Kubernetes and I would lose all my development?
+- `wov-vh -s` creates a persistent volume that is mounted on /usr/src/app, i.e. the Docker container's WORKINGDIR. So, anything you put there will persist between pods.
+
+## Q: My 'vh' pod died! What did I lose?
+- Nothing on /usr/src/app. Just run `wov-vh -s` to restart the pod and remount the persistent volume.
 
 ## VH : Private Repos
 
