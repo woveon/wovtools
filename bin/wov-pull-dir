@@ -10,7 +10,7 @@
 # ex. if in directry 'mygitrepo', and on vh have dir /usr/src/app/path/to/mygitrepo,
 #       `wov-pull-dir path/to/mygitrepo` will copy all from vh:path/to/mygitrepo .
 # 
-# NOTE: moves node_modules out of the way, then puts back to speed cp and aovid cp errors
+# NOTE: moves node_modules and .git out of the way, then puts back to speed cp and aovid cp errors
 
 
 NAMESPACE=
@@ -44,6 +44,14 @@ else
   exit 1
 fi
 
+
+# Make sure we aren't overwriting anything
+wov-git-check ${WOV_BASEDIR}
+R1=$?
+if [ "$R1" != "0" ]; then exit 1; fi
+
+
+
 #echo "BD:  $BD"
 #echo "RPA: $RPA"
 #echo "LPA: $LPA"
@@ -51,7 +59,8 @@ fi
 # Copy node_modules out of the way
 #kubectl exec --namespace "$NAMESPACE" -it "$PODNAME" -- mv $1/node_modules .node_modules.$$
 echo " mv vh:$RPA/node_modules vh:.node_modules.${BD}"
-R1=$(kubectl exec -it "$PODNAME" -- mv $RPA/node_modules .node_modules.${BD} && true)
+R1a=$(kubectl exec -it "$PODNAME" -- mv $RPA/node_modules .node_modules.${BD} && true)
+R1b=$(kubectl exec -it "$PODNAME" -- mv $RPA/.git .git.${BD} && true)
 RR1=$?
 
 # Copy all but node_modules
@@ -60,5 +69,12 @@ kubectl cp vh:$RPA $LPA
 
 # Put it back
 echo " mv vh:.node_modules.${BD} vh:$RPA/node_modules "
-R2=$(kubectl exec -it "$PODNAME" -- mv .node_modules.${BD} $RPA/node_modules && true)
+R2a=$(kubectl exec -it "$PODNAME" -- mv .node_modules.${BD} $RPA/node_modules && true)
+R2b=$(kubectl exec -it "$PODNAME" -- mv .git.${BD} $RPA/.git && true)
 RR2=$?
+
+cat <<EOF
+
+* Git Status Results *************************************************************
+EOF
+git status

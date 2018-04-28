@@ -15,7 +15,7 @@ usage : `basename $0` [-f|--follow] [-n|--namespace] podstem
 Connects to a running pod (via podstem) and logs its data, with a -f to follow it.
 
   -f      - follows the output and does not close
-  -n      - select namespace to look in
+  -n|--namespace - select namespace to look in
   podstem - this finds the pod with just the stem
             ex. apirest is stem, apirest-asdldj3j is full name
   --tail X - number of lines on end
