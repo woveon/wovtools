@@ -166,6 +166,7 @@ function fDoEcho()
   if [ "$RANCLUSTER" == "1" ]; then
     echo CL_REGION="$CL_REGION"
     echo CL_ZONES="${CL_ZONES}"
+    echo CL_VPC="${CL_VPC}"
   fi
 
   echo WOV_PVER="$WOV_PVER"
@@ -188,8 +189,10 @@ function fDoCluster()
   fConvertRegionCodeAWS ${WOV_REGION}
   CL_REGION=$cRC
   CL_ZONES="c d"
+  CL_VPC=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${WOV_CLUSTER}-vpc" --query 'Vpcs[0].VpcId' | sed -e 's/^"//' -e 's/"$//')
   export CL_REGION
   export CL_ZONES
+  export CL_VPC
 }
 
 function doEnv() 
