@@ -8,6 +8,7 @@ DATABASESERVER=
 # ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
+wov-build -e
 pushenvargs=( "$@" )
 set ""
 . wov-env
@@ -46,6 +47,10 @@ if [ "$#" == "0" ]; then
   fDisplayOptions
   exit 1
 fi
+if [ "$1" == "-h" ]; then
+  fDisplayOptions
+  exit 0
+fi
 DATABASESERVER=$1
 shift
 
@@ -64,6 +69,7 @@ DB_PASSWORD=${!DD}
 DD=WOV_${DATABASESERVER}_host
 DB_HOST=${!DD}
 DB_COMMAND=
+DB_OP=
 
 
 # ---------------------------------------------------------------------
@@ -96,8 +102,13 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == "-c" ]; then
     shift
-    DB_COMMAND="-c \"$1\""
+    DB_OP="command"
+    DB_COMMAND="$1"
     shift
+
+  elif [ "$1" == "--schema" ]; then
+    shift
+    DB_OP="schema"
 
   elif [ "$1" == "-H" ]; then
     shift
@@ -119,7 +130,7 @@ done
 
 
 
-echo "... connecting to ${DATABASESERVER} (${DB_HOST}) via vh (user ${DB_USERNAME} on ${DB_DATABASE})"
+if [ $DOECHO -ge 1 ]; then echo "... connecting to ${DATABASESERVER} (${DB_HOST}) via vh (user ${DB_USERNAME} on ${DB_DATABASE})"; fi
 
 
 # Check vh pod exists
@@ -131,8 +142,18 @@ fi
 
 if [ "${DB_TYPE}" == "postgres" ]; then
 
-  # Log into pod 'vh', run psql
-  kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} ${DB_COMMAND}"
+  if [ "${DB_OP}" == "schema" ]; then
+    # Log into pod 'vh', run pg_dump
+    kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s"
+
+  elif [ "${DB_OP}" == "command" ]; then
+    # Log into pod 'vh', run psql
+    kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND}\""
+
+  elif [ "${DB_OP}" == "" ]; then
+    # Log into pod 'vh', run psql
+    kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}"
+  fi
 
 else
   print "\n\nERROR: Unknown database type of '${DB_TYPE}'. Probably need to implement it in wov-db-connect, and ensure it is supported in vh container.\n"

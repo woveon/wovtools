@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+DOFORCE=0
+FOLD=140
+
+
+TODO: make wov-db-commit -push-check 
+  - this checks for wov-push, to see if db ready to push.
+  - put inside this function since all machinery alreayd here
+  - need to test by importing schema in and seeing if this all works
+
+
+# --------------------------------------------------------------------- 
+# Import Env 
+# --------------------------------------------------------------------- 
+wov-build -e
+pushenvargs=( "$@" )
+set ""
+. wov-env
+. wov-ns-check
+set -- "${pushenvargs[@]}"
+
+
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options] {databases...}
+
+This moves database changes for the current checked in code (pver) into the db registry for versioning.
+
+This does the following:
+1. if all main repo git checked in, continue (this ‘seals the database with the code’).
+2. move deltas into registry
+3. update registry entry for this pver
+4. update database pver number 
+
+By default, checks all database delta files that exist.
+
+Switches:
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+# Find delta files. Take from command line first, then if none, read directory
+DATABASES=$*
+if [ "$DATABASES" == "" ]; then
+  DATABASES=()
+  D=( $(cd ${WOV_BASEDIR}/wovtools/db && ls *.deltas 2> /dev/null ) )
+  if [ "${#D[@]}" == "0" ]; then
+    printf "\n\nERROR: no deltas found in wovtools/db.\n\n"
+    exit 1
+  fi
+  exit 
+  for i in "${D[@]}"; do
+    DATABASES+=("${i%.deltas}")
+  done
+fi
+# echo "DATABASES: ${DATABASES[@]}"
+
+
+# - 1 ----------------------------------------------------------------- 
+# ensure main git repo checked in
+# - this ensure that the code checked in (i.e. pver) is matched to this 
+#   database using that pver.
+R=$(wov-git-check ${WOV_BASEDIR})
+if [ "$?" != "0" ]; then
+  printf "\n\nERROR: check in main git repo, then continue with $1.\n"
+  exit 1
+fi
+
+# Ensure cache dir exists for these
+mkdir -p ${WOV_BASEDIR}/wovtools/cache/db
+
+
+# --------------------------------------------------------------------- 
+# NOTE: just hashes return, fail messages included!
+# --------------------------------------------------------------------- 
+function doHashDBSchema()
+{
+  local CHKSUM=$(wov-db-connect $1 --schema 2> /dev/null | shasum -a 256 | cut -d' ' -f1)
+  if [ "$?" != "0" ]; then printf "\n\nERROR: failed to connect to database server $i.\n"; exit 1; fi
+  echo ${CHKSUM}
+}
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function doGetDBPVER()
+{
+  local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" |  cut -d'|' -f5)
+  if [ "$?" != "0" ]; then 
+    printf "\n\nERROR: failed to find wovtools logs on database server $1.\n\n"; 
+    printf "  NOTE: if the datbaseserver is not inited, run:\n"
+    printf "    'wov-db -D ${1} -I'\n\n"   
+    exit 1; 
+  fi
+  echo ${DB_PVER}
+}
+
+
+# - 2-4 --------------------------------------------------------------- 
+# TODO: make these transactional, since if these don't complete, system 
+#       can be in a bad state
+# --------------------------------------------------------------------- 
+function doCommitDB()
+{
+  # check deltas exist
+  deltafile=${WOV_BASEDIR}/wovtools/db/$i.deltas
+  if [ ! -e $deltafile ]; then
+    printf "\n\nERROR: can't find deltas file: 'wovtools/db/$i.deltas'.\n\n"
+    exit 1
+  fi
+
+  # make sure directory exists for database
+  mkdir -p ${WOV_BASEDIR}/wovtools/db/registry/$i
+
+  # get current db checksum
+  CHKSUM=$(doHashDBSchema $i)
+
+  # get current db wovtools pver
+  DB_PVER=$(doGetDBPVER $i)
+
+  echo "Chksum : ${CHKSUM}  DBPVER: ${DB_PVER}  PVER: ${WOV_PVER}"
+
+  # - 2 ----------------------------------------------------------------- 
+  # --------------------------------------------------------------------- 
+  echo "  ... move deltas into registry"
+
+  # append delta to file
+  cat <<EOF >> ${WOV_BASEDIR}/wovtools/db/registry/$i/$i.deltas
+
+# - wov-db-commit -----------------------------------------------------
+# pver:${WOV_PVER} 
+# checksum: ${CHKSUM} 
+# date: $(date +%Y-%m-%dT%H:%M:%S%z)
+# ---------------------------------------------------------------------
+EOF
+  cat ${deltafile} >> ${WOV_BASEDIR}/wovtools/db/registry/$i/$i.deltas
+
+  echo "  ... cache deltas locally (in case of screw up)"
+  mv ${deltafile} ${WOV_BASEDIR}/wovtools/cache/db/$i.$WOV_PVER.$(date +%s).deltas
+
+
+  # - 3. update db registry entry for this pver -------------------------
+  # --------------------------------------------------------------------- 
+  echo "  ... updating db registry entry for this pver"
+  if [ ! -e ${WOV_BASEDIR}/wovtools/db/registry/$i.json ]; then
+    echo "    ... building registry for $i."
+    cat <<EOF > ${WOV_BASEDIR}/wovtools/db/registry/$i.json
+{
+  "wovtoolsversion": "$WOV_VERSION",
+  "versions"       : {}
+}
+EOF
+  fi
+  # append this entry
+  jq " .versions.\"${WOV_PVER}\"={ \"checksum\": \"${CHKSUM}\", \"parent\": { \"type\": \"pver\", \"pver\": \"${DB_PVER}\" } }" \
+     ${WOV_BASEDIR}/wovtools/db/registry/$i.json > ${WOV_BASEDIR}/wovtools/db/registry/$i.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/registry/$i.json.$$ ${WOV_BASEDIR}/wovtools/db/registry/$i.json && rm ${WOV_BASEDIR}/wovtools/db/registry/$i.json.$$
+
+
+  # - 4. update registry database pver number, with checksum ------------
+  # --------------------------------------------------------------------- 
+  echo "  ... update registry database pver number, with checksum"
+  R=$(wov-db-connect $i -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver ) VALUES ( '$i', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER} );")
+  if [ "$?" != "0" ]; then
+    printf "\n\nERROR: failed updating registry database pver number with checksum.\n"
+    exit 1
+  fi
+
+}
+
+
+# --------------------------------------------------------------------- 
+# Commit each database
+# --------------------------------------------------------------------- 
+for i in "${DATABASES[@]}"; do
+  doCommitDB $i
+done
+
