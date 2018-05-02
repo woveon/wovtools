@@ -37,8 +37,14 @@ _compWovComplete()
   local cur; local tmp;  local tmp_escaped; local i;
   _get_comp_words_by_ref cur;
   local _compreply=()
-  tmp=$(git rev-parse --show-toplevel)/wovtools/$1
-#  echo "tmp : ${tmp}"
+  # tmp=$(git rev-parse --show-toplevel)/wovtools/$1
+  tmp=$(git rev-parse --show-toplevel)/wovtools
+  if [ "${COMP_WORDS[1]}" == "-c" ]; then
+#    echo "...matching to cache" >> /tmp/wovcomplete
+    tmp=$tmp/cache
+  fi
+  tmp=$tmp/$1
+#  echo "tmp : '${tmp}'  COMP_CWORD ${COMP_CWORD} '${COMP_WORDS[@]}'" >> /tmp/wovcomplete
 #  tmp=~/tmp/
   tmp_escaped=${tmp//\//\\\/}
   cur=$tmp$cur;
@@ -48,6 +54,7 @@ _compWovComplete()
   else
     _filedir;
   fi;
+#  echo "COMPREPLY '${COMPREPLY[@]}'" >> /tmp/wovcomplete
   for i in "${COMPREPLY[@]}"; do
     [ -d "$i" ] && [ "$i" != "$tmp." ] && [ "$i" != "$tmp.." ] && i="$i/"
     _compreply=("${_compreply[@]}" "$i")

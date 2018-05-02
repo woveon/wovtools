@@ -18,13 +18,13 @@ set ""
 . wov-env
 #. wov-ns-check
 set -- "${buildargs[@]}"
-#set -x
 
 
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
 function fDisplayOptions()
 {
+  sleep .5 # pause to read the error above
   cat <<EOF | fold -w ${FOLD} -s
 
 
@@ -91,7 +91,8 @@ fi
 
 
 if [[ $1 == conf/* ]]     || [[ $1 == k8s/* ]]  || [[ $1 == containers/* ]] || 
-   [[ $1 == services/* ]] || [[ $1 == cmds/* ]] || [[ $1 == secrets/* ]]; then
+   [[ $1 == services/* ]] || [[ $1 == cmds/* ]] || [[ $1 == secrets/* ]] ||
+   [[ $1 == db/* ]]; then
   
   if [ "$#" != "1" ]; then
     printf "\nERROR: bad number of arguments for 'secrets'.\n"
@@ -110,4 +111,8 @@ if [[ $1 == conf/* ]]     || [[ $1 == k8s/* ]]  || [[ $1 == containers/* ]] ||
   fi
   $EDITOR ${P}
 
+else
+  printf "\n\nERROR: unknown wovtools directory of '"$(echo "$1" | cut -d "/" -f1)"'.\n"
+  fDisplayOptions
+  exit 1
 fi

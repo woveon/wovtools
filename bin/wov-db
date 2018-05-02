@@ -7,6 +7,7 @@ RETVAL=0
 
 WOVDB_DBNAME=
 WOVDB_RES=
+WOVDB_LAST_SGID=
 
 
 # ---------------------------------------------------------------------
@@ -31,25 +32,28 @@ function fDisplayOptions()
 usage: `basename $0` [options] 
 
 This manages database:
- - resources : subnets (SN), db subnet group (DSNG), security group (SG), db instance server (DBIS), db config (DBC)
+ - resources : subnets (SN), db subnet group (DBSNG), security group (SG), db instance server (DBIS), db config (DBC), dns entry (DNS)
  - push 
  - deploy
 
 
 State setup
   -D X         : sets stateful database server name
+  --res X       : set the resource type (SN,DBSNG,SG,DBIS,DBC,DNS)
 
-Resource Commands
-  -resv X Y    : verify resource of type X named Y exists
-  -resc X Y    : create resource of type X named Y
+Verbs on state
+  --name
+  --verify
+  --create
 
-
-
-
-Virtual commands. 
+DB Server commands. 
   -C           : creates the database server [{{cluster}}-{{namespace}}-{{dbservername}}]
-  -w           : wait for the database server to come online
-  -ver X       : get version of database (pver,sver)
+  -W           : wait for the database server to come online
+  -I           : initialize the database server
+  -ver         : get version of database (id,wovtoolsver,label,pver,sver,created_at)
+  --get-schema : dump schema of database
+
+DEV
   -tServer X   : check that the given server exists
   --snapshot X : loads snapshot X
   -h           : this help
@@ -71,14 +75,27 @@ function doCheckDBServer()
 }
 
 
+
 # [res] [dbserver]
+# NOTE: DB is for the RDS databse name, and 1st part of hostname
 function resName() 
 {
   local retval=
 
   if [ "$2" == "" ]; then printf "\n\nERROR: dbserver name not provided to resName.\n"; fDisplayOptions; exit 1; fi
   if [ "$1" == "SN" ]; then
-    retval="sn-${K8S_CONTEXT}-${2}-${WOV_apidb_instanceAvailabilityZone}"
+    # 3rd params sets availability zone
+    if [ "$3" != "" ]; then z=$3; else z=${WOV_apidb_instanceAvailabilityZone}; fi
+    retval="sn-${K8S_CONTEXT}-${2}-${z}"
+  elif [ "$1" == "DBSNG" ]; then
+    retval="dbsng-${K8S_CONTEXT}-${2}"
+  elif [ "$1" == "SG" ]; then
+    retval="SG-${K8S_CONTEXT}-${2}"
+  elif [ "$1" == "DB" ]; then
+    retval="db-${K8S_CONTEXT}-${2}"
+  elif [ "$1" == "DNS" ]; then
+    DBNAME=$(resName DB ${2})
+    retval=$(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.Address' --output text)
   else printf "\n\nERROR: unknown resource of ${1} to resName.\n"; fDisplayOptions; exit 1; fi
 
   echo $retval
@@ -97,6 +114,22 @@ function resVerify()
     R=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${2}" --query 'Subnets[0]')
     RR=$?
     if [ "$R" == "null" ]; then retval=0; else retval=1; fi
+
+  elif [ "$1" == "DBSNG" ]; then
+    R=$(aws rds describe-db-subnet-groups --db-subnet-group-name ${2} >& /dev/null )
+    RR=$?
+    if [ "$RR" == "0" ]; then retval=1; else retval=0; fi
+
+  elif [ "$1" == "SG" ]; then
+    SG=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=${2}" --query 'SecurityGroups[].GroupName' --output=text)
+    if [ "${SG}" == "" ]; then
+#      echo "  ... no existing secrurity group '${SG}'"
+      retval=0
+    else
+      retval=1
+    fi
+
+
   else
     printf "\n\nERROR: unknown resource of ${1} to resVerify.\n"
     fDisplayOptions
@@ -106,25 +139,34 @@ function resVerify()
   echo $retval
 }
 
+# [securitygroupname]
+function resQuerySecurityID()
+{
+  SGID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=${1}" --query 'SecurityGroups[].GroupId' --output=text)
+  echo ${SGID}
+}
 
 # ret: 1 if error
 # [res] [resname] {options}
 #   -resname, get from resName func
 function resCreate()
 {
-  local retval=0
+  local retval=1
 
   if [ "$2" == "" ]; then printf "\n\nERROR: resname name not provided to resVerify.\n"; fDisplayOptions; exit 1; fi
+
   if [ "$1" == "SN" ]; then
 
     if [ "$(resVerify $1 $2)" != "0" ]; then
-      # exists, so return error
+      if [ $DOECHO -ge 1 ]; then printf "WARNING: existing subnet: ${2}.\n" 1>&2; fi
       retval=1
     else
+      echo "SG does not exist"
 
-      C=WOV_apidb_subnet_${WOV_apidb_instanceAvailabilityZone}_block
-      if [ $DOECHO -ge 2 ]; then echo "  ... create and tag missing subnet, cidr-block: ${!C}, vpc: ${CL_VPC}, zone: ${CL_REGION}${WOV_apidb_instanceAvailabilityZone}" 1>&2 ; fi
-      R1=$(aws ec2 create-subnet --vpc-id ${CL_VPC} --cidr-block ${!C} --availability-zone ${CL_REGION}${WOV_apidb_instanceAvailabilityZone} )
+      if [ "$3" != "" ]; then z=$3; else z=${WOV_apidb_instanceAvailabilityZone}; fi
+      C=WOV_apidb_subnet_${z}_block
+      if [ $DOECHO -ge 2 ]; then echo "  ... create and tag missing subnet, cidr-block: ${!C}, vpc: ${CL_VPC}, zone: ${CL_REGION}${z}" 1>&2 ; fi
+      R1=$(aws ec2 create-subnet --vpc-id ${CL_VPC} --cidr-block ${!C} --availability-zone ${CL_REGION}${z} )
       RR1=$?
       if [ "$RR1" != "0" ]; then
         printf "\n\nERROR: could not create subnet. Subnet could exist, but not be correctly named. Check AWS>VPC>Subnet for a subnet with cidr-block ${!C} that is not named ${2}.\n"
@@ -140,8 +182,70 @@ function resCreate()
         printf "\n\nERROR: failed to name subnet '${2}' of id '${SNID}'. Unknown error.\n"
         printf "${R2}"
         exit 1
+      else
+        retval=0
       fi
       if [ $DOECHO -ge 2 ]; then echo "  ... created subnet '${2}' of SubnetId '${SNID}'" 1>&2; fi
+    fi
+
+  elif [ "$1" == "DBSNG" ]; then
+
+    if [ "$(resVerify $1 $2)" != "0" ]; then
+      # exists, so return error
+      if [ $DOECHO -ge 1 ]; then printf "WARNING: existing DB subnet group: ${2}.\n" 1>&2; fi
+      retval=1
+    else
+
+      local SNPAT=$(resName SN ${WOVDB_DBNAME} '*')
+#      echo "SNPAT=${SNPAT}" 1>&2
+      local SNIDS=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${SNPAT}" --query 'Subnets[*].SubnetId' --output text)
+#      echo "SNIDS=${SNIDS}" 1>&2
+
+      local R=$(aws rds create-db-subnet-group \
+        --db-subnet-group-name ${2} \
+        --db-subnet-group-description "DBSubnet for postgres database ${K8S_CONTEXT}-${2}." \
+        --subnet-ids ${SNIDS})
+      local RR=$?
+#      echo "R=$R" 1>&2
+#      echo "RR=$RR" 1>&2
+      if [ "$RR" == "0" ]; then retval=0; fi
+    fi
+
+  # Create database security group
+  elif [ "$1" == "SG" ]; then
+
+    if [ "$(resVerify $1 $2)" == "1" ]; then
+      # exists, so return error
+      if [ $DOECHO -ge 1 ]; then printf "WARNING: existing security group: ${2}.\n" 1>&2; fi
+      retval=1
+    else
+
+      local SGID=$(aws ec2 create-security-group \
+        --description "security group for apidb in vpc" \
+        --group-name ${2} \
+        --vpc-id ${CL_VPC} \
+        --output text 2> /dev/null)
+      local SGIDR=$?
+
+      if [ "${SGIDR}" != "0" ]; then 
+        printf "\n\nERROR: failed to create security group named '${2}'.\n" 1>&2
+        retval=1
+      elif [ "${SGID}" != "" ]; then
+#        echo "SG: ${SGID}" 1>&2
+#        echo "  ... created security group '${2}', of id '${SGID}', now add inbound rule" 1>&2
+        local SGIDRULE=$(aws ec2 authorize-security-group-ingress --group-id ${SGID} --protocol tcp --port 5432 --cidr ${WOV_apidb_subnet_cidr})
+        local SGIDRULE1=$?
+#        echo "SGIDRULE: '${SGIDRULE}' '${SGIDRULE1}'" 1>&2
+        if [ "${SGIDRULE1}" == "0" ]; then
+          retval=0
+        else
+          printf "\n\nERROR: failed to set security group inbound rule.\n" 1>&2
+          retval=1
+        fi
+      else
+        printf "\n\nERROR: failed to create security group named '${2}'.\n" 1>&2
+        retval=1
+      fi
     fi
 
   else
@@ -154,114 +258,155 @@ function resCreate()
 }
 
 
+# Create DNS record in Route53(AWS)
+# retval 1=error, 0=no error
+#function doCreateDBDNS()
+#{
+#  local retval=1
+#  echo "doCreateDNDNS" 1>&2
+#  set -x
+#  DBNAME=$1
+#  HOSTEDZONEID=$(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.HostedZoneId' --output text)
+#  HOSTADDR=$(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.Address' --output text)
+#  DBSTATUS=$(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].DBInstanceStatus' --output text)
+#
+#  if [ "${HOSTADDR}" == "None" ] ; then
+#    echo ""
+#    echo "ERROR: Database or hostaddress '${HOSTADDR}' not yet created. Just wait a bit if the instance is coming online."
+#    echo "  NOTE: status is currently '${DBSTATUS}'."
+#    echo ""
+#    while [ "$(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.Address' --output text)" == "None" ]; do
+#      echo "    ... waiting for database to get address."
+#      sleep 5
+#    done
+#  fi
+#
+#  F="${WOV_BASEDIR}/wovtools/cache/.file.dns.$$"
+#  cat <<EOF > ${F}
+#{
+#    "Comment": "Update record to reflect new database IP address",
+#    "Changes": [
+#        {
+#            "Action": "UPSERT",
+#            "ResourceRecordSet": {
+#                "Name": "${DBNAME}.woveon.com.",
+#                "Type": "CNAME",
+#                "TTL": 300,
+#                "ResourceRecords": [
+#                    {
+#                        "Value": "${HOSTADDR}"
+#                    }
+#                ]
+#           }
+#        }
+#    ]
+#}
+#EOF
+#  cat ${F} 1>&2
+#  aws route53 change-resource-record-sets --hosted-zone-id ${HOSTEDZONEID} --change-batch file://${F}
+#  set +x
+#
+#  echo $retval
+#}
+
+
+# [dbname]
 # Reads env vars from conf files: {1}.[sc]k8s
 function doCreateDBServer()
 {
 
-  # Create Subnets
-  SN1R1=$(resName SN ${WOVDB_DBNAME})
-  SN1R2=$(resCreate SN ${SNR1})
-  SN2R1=$(resName SN ${WOVDB_DBNAME})
-  SN2R2=$(resCreate SN ${SNR2})
-
-  # Ensure subnets exist for db
-  #   ex. sn-wov-aws-va-live-plem-cw-apidb-c
-  SNNAME=sn-${K8S_CONTEXT}-${1}-${WOV_apidb_instanceAvailabilityZone}
-  if [ "$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${SNNAME}" --query 'Subnets[0]')" == "null" ]; then 
-    C=WOV_apidb_subnet_${WOV_apidb_instanceAvailabilityZone}_block
-    echo "  ... create and tag missing subnet, cidr-block: ${!C}, vpc: ${CL_VPC}, zone: ${CL_REGION}${WOV_apidb_instanceAvailabilityZone}"
-#    echo "R=\$(aws ec2 create-subnet --vpc-id ${CL_VPC} --cidr-block ${!C} --availability-zone ${CL_REGION}${WOV_apidb_instanceAvailabilityZone} )"
-    R1=$(aws ec2 create-subnet --vpc-id ${CL_VPC} --cidr-block ${!C} --availability-zone ${CL_REGION}${WOV_apidb_instanceAvailabilityZone} )
-    RR1=$?
-    echo "R1=${R1}"
-    echo "RR1=${RR1}"
-    if [ "$RR1" != "0" ]; then
-      printf "\n\nERROR: could not create subnet. Subnet could exist, but not be correctly named. Check AWS>VPC>Subnet for a subnet with cidr-block ${!C} that is not named ${SNNAME}.\n"
-      printf "${R1}"
-      exit 1
-    fi
-#    echo "SNID=\$(cat ${R1} | jq '.Subnet.SubnetId' | sed -e 's/^"//' -e 's/"$//)"
-    SNID=$(echo ${R1} | jq '.Subnet.SubnetId' | sed -e 's/^"//' -e 's/"$//' )
-    echo "  ... add SNNAME tag of '${SNNAME}' to subnet '${SNID}'"
-    R2=$(aws ec2 create-tags --resources $SNID --tags "Key=Name,Value=${SNNAME}")
-    RR2=$?
-    echo "R2=${R2}"
-    echo "RR2=${RR2}"
-    if [ "$RR2" != "0" ]; then
-      printf "\n\nERROR: failed to name subnet '${SNNAME}' of id '${SNID}'. Unknown error.\n"
-      printf "${R2}"
-      exit 1
-    fi
-
-    echo "  ... created subnet '${SNNAME}' of SubnetId '${SNID}'"
-    set +x
-  else 
-    echo "  ... subnet exists (not creating)."
-  fi
-
-
+  # Ensure Creation of Subnets
+  SN1R1=$(resName SN ${1})
+#  echo "SN1R1 ${SN1R1}"
+  SN1R2=$(resCreate SN ${SN1R1})
+#  echo "SN1R2 ${SN1R2}"
+  SN2R1=$(resName SN ${1} ${WOV_apidb_instanceAvailabilityZoneAlt})
+#  echo "SN2R1 ${SN2R1}"
+  SN2R2=$(resCreate SN ${SN2R1} ${WOV_apidb_instanceAvailabilityZoneAlt})
+#  echo "SN2R2 ${SN2R2}"
 
   # Create database subnet group
-#    @if [ "`aws rds describe-db-subnet-groups --db-subnet-group-name $(SNG) &> /dev/null ; echo $$?`" != "0" ]; then \
-#    echo "    ... creating db subnet group : $(SNG)"; \
-#    aws rds create-db-subnet-group \
-#      --db-subnet-group-name $(SNG) \
-#      --db-subnet-group-description "Subnet for postgres database 'apidb'" \
-#      --subnet-ids $(shell aws ec2 describe-subnets --filters 'Name=tag:Name,Values=$(SNPAT)' --query 'Subnets[*].SubnetId' --output text); \
-#  else \
-#    echo "    ... existing db subnet group : $(SNG)"; \
-#  fi
+  DBSNGR1=$(resName DBSNG ${1})
+#  echo "DBSNGR1 ${DBSNGR1}"
+  DBSNGR2=$(resCreate DBSNG ${DBSNGR1})
+#  echo "DBSNGR2 ${DBSNGR2}"
 
+  # Create database security group
+  SG1=$(resName SG ${1})
+#  echo "SG1 ${SG1}"
+  SG2=$(resCreate SG ${SG1})
+#  echo "SG2 ${SG2}"
+  WOVDB_LAST_SGID=$(resQuerySecurityID $SG1)
+#  echo "WOVDB_LAST_SGID ${WOVDB_LAST_SGID}" 1>&2
 
-#  # Create database security group
-#    $(eval SGID:=$(shell aws ec2 create-security-group \
-#    --description "security group for apidb in vpc" \
-#    --group-name $(SG) \
-#    --vpc-id $(CL_VPC) \
-#    --output text 2> /dev/null ))
-#  @if [ "$(SGID)" != "" ]; then \
-#    echo "SGID: $(SGID)"; \
-#    echo "  ... created secrurity group '$(SG)', now add inbound rule"; \
-#    aws ec2 authorize-security-group-ingress --group-id $(SGID) --protocol tcp --port 5432 --cidr 0.0.0.0/0; \
-#  else \
-#    echo "  ... existing security group found"; \
-#  fi
-
+  echo "TODO: Route 53 to instance"
 
   # Create the database server
-  cat <<EOF
+
   aws rds create-db-instance \
-    --db-instance-identifier ${1} \
-    --allocated-storage ${WOV_apidb_instanceClass} \
-    --db-instance-class ${WOV_apidb_instanceStorage} \
+    --db-instance-identifier $(resName DB ${1}) \
+    --allocated-storage ${WOV_apidb_instanceStorage} \
+    --db-instance-class ${WOV_apidb_instanceClass} \
     --engine postgres \
     --master-username ${WOV_apidb_username} \
     --no-publicly-accessible \
     --master-user-password ${WOV_apidb_password} \
-    --db-subnet-group-name ${SNG} \
-    --vpc-security-group-ids  ${DBSG} \
-    --availability-zone ${WOV_apidb_instanceAvailabilityZone} \
+    --db-subnet-group-name ${DBSNGR1} \
+    --vpc-security-group-ids  ${WOVDB_LAST_SGID} \
+    --availability-zone ${CL_REGION}${WOV_apidb_instanceAvailabilityZone} \
     --storage-type gp2
-EOF
 
   doInitDB
-
 }
 
 # wovtools database on server with log table, with label, pver and sver columns
 function doInitDB
 {
   echo "  ... doInitDB"
-  cat <<EOF
+  FL=.file.wov-db
+
+  HOSTADDR=$(resName DNS ${WOVDB_DBNAME})
+
+  # easiest to write the script, cp to vh and run it
+  cat <<EOF > ${FL}
+#!/usr/bin/env bash
+
+# set password
+export PGPASSWORD=${WOV_apidb_password}
 
 # Create database if not exists 
-psql -U ${WOV_apidb_username} -tc "SELECT 1 FROM pg_database WHERE datname = 'wovtools'" | grep -q 1 || psql -U ${WOV_apidb_username} -c "CREATE DATABASE wovtools"
+psql -U ${WOV_apidb_username} -h ${HOSTADDR} -U ${WOV_apidb_username} -tc "SELECT 1 FROM pg_database WHERE datname = 'wovtools'" | grep -q 1 || psql -U ${WOV_apidb_username} -h ${WOV_apidb_host} -c "CREATE DATABASE wovtools"
 
 # Use database, and create the logs table, and insert a row
-use wovtools
-CREATE TABLE IF NOT EXISTS logs (id SERIAL NOT NULL PRIMARY KEY, wovtoolsver varchar, label varchar, pver integer, sver integer, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() );
-INSERT INTO logs (wovtoolsver, label, pver, sver ) VALUES ( ${WOV_VERSION}, ${WOV_PVER}_${WOV_SVER}, ${WOV_PVER}, ${WOV_SVER} );
+psql -U ${WOV_apidb_username} -h ${HOSTADDR} -U ${WOV_apidb_username} -d wovtools -tc "CREATE TABLE IF NOT EXISTS logs (id SERIAL NOT NULL PRIMARY KEY, wovtoolsver varchar, label varchar, pver integer, sver integer, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() );"
+psql -U ${WOV_apidb_username} -h ${HOSTADDR} -U ${WOV_apidb_username} -d wovtools -tc "INSERT INTO logs (wovtoolsver, label, pver, sver ) VALUES ( ${WOV_VERSION}, '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER} );"
 EOF
+
+
+  chmod 755 ${FL}
+  kubectl cp ${FL} vh:file.wov-db.$$
+  kubectl exec -it vh -- /bin/bash -c "./file.wov-db.$$"
+  kubectl exec -it vh -- /bin/bash -c "rm file.wov-db.$$"
+}
+
+
+# Wait for db to get address, meaning it is ready to go
+# [dbname]
+function doWaitDBServer()
+{
+  DBNAME=$1
+  HOSTADDR=$(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.Address' --output text)
+
+  if [ "${HOSTADDR}" == "None" ] ; then
+    echo ""
+    echo "ERROR: Database or hostaddress '${HOSTADDR}' not yet created. Just wait a bit if the instance is coming online."
+    echo "  NOTE: status is currently '${DBSTATUS}'."
+    echo ""
+    while [ "$(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.Address' --output text)" == "None" ]; do
+      echo "    ... waiting for database to get address."
+      sleep 5
+    done
+  fi
 }
 
 function doPushDB() 
@@ -295,15 +440,21 @@ function doGetDBVersion()
   echo "getDBverion"
 }
 
-function doWaitDBServer()
+function doGetSchemaDB()
 {
-  echo "wait not implemeneted yet" $1
+  HOSTADDR=$(resName DNS ${WOVDB_DBNAME})
+  set -x
+  kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${WOV_apidb_password} pg_dump \
+      -h ${HOSTADDR}  \
+      -U ${WOV_apidb_username} \
+      -d ${WOV_apidb_database}"
+  set +x
 }
 
 function doGetDBServerConfig()
 {
-  echo "wait not implemeneted yet" $1
-#  kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${PGPASSWORD} psql -h ${WOV_apidb_host} -U ${WOV_apidb_username} -d ${WOV_apidb_database}"
+  HOSTADDR=$(resName DNS ${WOVDB_DBNAME})
+  kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${WOV_apidb_password} psql -h ${HOSTADDR} -d wovtools -U ${WOV_apidb_username} --tuples-only  -c 'SELECT logs from logs order by id DESC limit 1;'"
 
 }
 
@@ -326,6 +477,7 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-D" ]; then
     shift
     WOVDB_DBNAME=$1
+    # TODO: here, when set DB, should take all WOV_apidb and put as WOVDB_* variables so it is not specific to apidb!
     eval $(wov-env --env ${WOVDB_DBNAME}.ck8s --env ${WOVDB_DBNAME}.sk8s)
     shift
 
@@ -342,32 +494,42 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--verify" ]; then
     shift
     R1=$(resName ${WOVDB_RES} ${WOVDB_DBNAME})
+    RR1=$?
+    if [ "$RR1" != "0" ]; then printf "ERROR: can not find resource name of type '${WOVDB_RES}' and database '${WOVDB_DBNAME}'.\n"; exit 1; fi
     R2=$(resVerify ${WOVDB_RES} ${R1})
     if [ ${DOECHO} -ge 2 ]; then echo "  ... verify ${WOVDB_RES} ${R1}"; fi
     if [ "$R2" == "1" ]; then echo "true"; else echo "false"; fi
 
   elif [ "$1" == "--create" ]; then
     shift
-    R1=$(resName ${WOVDB_RES} ${WOVDB_DBNAME})
+    R1=$(resName ${WOVDB_RES} ${WOVDB_DBNAME} )
+    RR1=$?
+    if [ "$RR1" != "0" ]; then printf "ERROR: can not find resource name of type '${WOVDB_RES}' and database '${WOVDB_DBNAME}'.\n"; exit 1; fi
     R2=$(resCreate ${WOVDB_RES} ${R1})
     if [ ${DOECHO} -ge 2 ]; then echo "  ... create ${WOVDB_RES} ${R1}"; fi
     if [ "$R2" == "0" ]; then echo "true"; else echo "false"; fi
 
 
 
-
   elif [ "$1" == "-C" ]; then
     shift
-    if [ "$1" == "" ]; then
-      printf "\n\nERROR: no database server name defined.\n"
-      fDisplayOptions
-      exit 1
-    fi
-    doCreateDBServer $1
-    shift
+    doCreateDBServer ${WOVDB_DBNAME}
 
   elif [ "$1" == '-I' ]; then
+    shift
     doInitDB
+
+  elif [ "$1" == "-W" ]; then
+    shift
+    doWaitDBServer ${WOVDB_DBNAME}
+    shift
+
+  elif [ "$1" == "--get-schema" ]; then
+    shift
+    doGetSchemaDB ${WOVDB_DBNAME}
+    shift
+
+
 
   elif [ "$1" == "-p" ] || [ "$1" == "--push" ]; then
     shift
@@ -383,10 +545,6 @@ while [[ $1 =~ ^- ]]; do
       echo "...db server does not exists"
     fi
 
-  elif [ "$1" == "-w" ]; then
-    shift
-    doWaitDBServer $1
-    shift
 
   elif [ "$1" == "-ver" ]; then
     shift

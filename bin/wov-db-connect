@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+FOLD=140
+DATABASESERVER=
+
+
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+pushenvargs=( "$@" )
+set ""
+. wov-env
+. wov-ns-check
+set -- "${pushenvargs[@]}"
+
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [databaseserver] {options}
+
+Connect to a database via vh (virtual host) pod in Kubernetes. Takes information from Woveon environment variables. If no commands are given (-c), then opens a shell.
+
+databaseserver - the name of a database server in the project. assumes conf/[database].[cs]k8s files.
+
+  -d [database] : sets the database inside the server
+  -U [user]     : login user
+  -p            : ask for password
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+# Set the default commands
+if [ "$#" == "0" ]; then
+  printf "\n\nERROR: need to provide the name of the database server.\n"
+  sleep .8
+  fDisplayOptions
+  exit 1
+fi
+DATABASESERVER=$1
+shift
+
+# load env vars
+eval $(wov-env --env ${DATABASESERVER}.ck8s --env ${DATABASESERVER}.sk8s )
+
+# set to env vars
+DD=WOV_${DATABASESERVER}_type
+DB_TYPE=${!DD}
+DD=WOV_${DATABASESERVER}_database
+DB_DATABASE=${!DD}
+DD=WOV_${DATABASESERVER}_username
+DB_USERNAME=${!DD}
+DD=WOV_${DATABASESERVER}_password
+DB_PASSWORD=${!DD}
+DD=WOV_${DATABASESERVER}_host
+DB_HOST=${!DD}
+DB_COMMAND=
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-p" ]; then
+    shift
+    read DB_PASSWORD
+    shift
+
+  elif [ "$1" == "-U" ]; then
+    shift
+    DB_USERNAME="$1"
+    shift
+
+  elif [ "$1" == "-d" ]; then
+    shift
+    DB_DATABASE="$1"
+    shift
+
+  elif [ "$1" == "-c" ]; then
+    shift
+    DB_COMMAND="-c \"$1\""
+    shift
+
+  elif [ "$1" == "-H" ]; then
+    shift
+    DB_HOST="$1"
+    shift
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+
+echo "... connecting to ${DATABASESERVER} (${DB_HOST}) via vh (user ${DB_USERNAME} on ${DB_DATABASE})"
+
+
+# Check vh pod exists
+wov-p vh >/dev/null
+if [ "$?" == "1" ]; then
+  printf "\n\nERROR: 'vh' has not been created. Run 'wov-v -s'.\n\n"
+  exit 1
+fi
+
+if [ "${DB_TYPE}" == "postgres" ]; then
+
+  # Log into pod 'vh', run psql
+  kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} ${DB_COMMAND}"
+
+else
+  print "\n\nERROR: Unknown database type of '${DB_TYPE}'. Probably need to implement it in wov-db-connect, and ensure it is supported in vh container.\n"
+  exit 1
+fi
+
