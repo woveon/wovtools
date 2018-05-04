@@ -140,6 +140,7 @@ if [ "${BLOCK}" == "0" ]; then
 
       wov-pushcontainer-check ${f}
       NEEDSBUILD=$?
+#      echo "NEEDSBUILD: ${NEEDSBUILD}"
       # printf "\n\n\n\nNEEDSBUILD: $NEEDSBUILD\n\n\n"
       #    echo "NEEDSBUILDOUT: $NEEDSBUILDOUT"
       #    if [ ${NEEDSBUILD} == 1 ] || [ $DOFORCE == 1 ]; then
@@ -159,12 +160,14 @@ if [ "${BLOCK}" == "0" ]; then
       #      NEEDSBUILD=1; 
       #    fi
       #
-      if [ "${NEEDSBUILD}" ==  "4" ]; then exit  ${NEEDSBUILD}; fi
+      # if [ "${NEEDSBUILD}" ==  "4" ]; then exit  ${NEEDSBUILD}; fi
       if [ "${NEEDSBUILD}" ==  "3" ]; then exit  ${NEEDSBUILD}; fi
       if [ "${NEEDSBUILD}" ==  "2" ]; then exit  ${NEEDSBUILD}; fi
 
-      # do actions 
+      # Build
+      JUSTBUILT=0
       if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then
+        JUSTBUILT=1
 
         echo "    ... creating container '${CONTAINER}'"
         if [ "${SSHKEY}" != "" ]; then
@@ -183,15 +186,25 @@ if [ "${BLOCK}" == "0" ]; then
         echo "    ... archiving build of container '${CONTAINER}'"
         mkdir -p ${ARCHDIR}
         rsync -ai --delete ${DESTDIR}/ ${ARCHDIR} &> /dev/null
+      fi
 
-        echo "    ... tag and push to repo"
+
+      # Tag and Push
+      if [ "${NEEDSBUILD}" == "1" ] || [ "${NEEDSBUILD}" == "4" ] || [ "${DOFORCE}" == "1" ]; then
+        echo "  ... tag repo"
         docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
 
-        echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+        echo "  ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
 
-        R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty )
-        RR=$?
-        echo "R: ${R}"
+        # If just built, dump log, since it will have to push a lot of data
+        if [ "${JUSTBUILT}" == "1" ]; then
+          R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty )
+          RR=$?
+        else
+          R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2> /dev/null )
+          RR=$?
+        fi
+#        echo "R: ${R}"
         if [[ $R == 'name unknown'* ]]; then
           printf "\n\n  ...${R}.\n"
           exit 1

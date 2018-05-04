@@ -196,35 +196,46 @@ elif [ ! -e ${ARCHDIR} ]; then
 
 else 
 
+# Echoes 1 if found, 0 not found, 2 unknown, 3 if no repo
   CH=$(fCheckForRemoteImage)
-  # echo "CH: ${CH}"
-  if [ "${CH}" != "1" ]; then
-    if [ "${CH}" == "0" ]; then
-      if [ $DOECHO -ge 1 ]; then echo "    ... no remote tagged image found."; fi
-      NEEDSBUILD=1
-    fi
-    if [ "${CH}" == "3" ]; then
-      if [ $DOECHO -ge 1 ]; then echo "    ... no repo found."; fi
-      NEEDSBUILD=3
-    fi
-    if [ "${CH}" == "2" ]; then
-      if [ $DOECHO -ge 1 ]; then echo "    ... some error or other."; fi
-      NEEDSBUILD=2
-    fi
+#  echo "CheckForRemoteImages: ${CH}"
+#  echo "  - Echoes 1 if found, 0 not found, 2 unknown, 3 if no repo"
 
-  # check remote repo version... since if the git version is diff from that, then need to build!!!
-  elif [ "$(fGetRepoLabel)" != "${WOV_STAGE}_${WOV_PVER}" ]; then
-    if [ $DOECHO -ge 1 ]; then echo "    ... remote repo is behind. Don't need to build, but do need to push..."; fi
-    NEEDSBUILD=1
-
-
-  # ok, so remote repo exists and no error, check for diffs
-  elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then
-    if [ $DOECHO -ge 1 ]; then echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"; fi
-    NEEDSBUILD=1
-
-  else
+  if [ "${CH}" == "1" ]; then
+    if [ $DOECHO -ge 1 ]; then echo "    ... repo found."; fi
     NEEDSBUILD=0
+
+  elif [ "${CH}" == "3" ]; then
+    if [ $DOECHO -ge 1 ]; then echo "    ... can't connect to repo. Repo not found."; fi
+    NEEDSBUILD=3
+
+  elif [ "${CH}" == "2" ]; then
+    if [ $DOECHO -ge 1 ]; then echo "    ... some error or other."; fi
+    NEEDSBUILD=2
+
+  elif [ "${CH}" == "1" ]; then
+      if [ $DOECHO -ge 1 ]; then echo "    ... no remote tagged image found."; fi
+
+  elif [ "${CH}" == "0" ]; then
+    # image not found for some reason
+
+    # ok, so remote repo exists and no error, check for diffs
+    if [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then
+      if [ $DOECHO -ge 1 ]; then echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"; fi
+      NEEDSBUILD=1
+
+    # check remote repo version... since if the git version is diff from that, then need to build!!!
+    elif [ "$(fGetRepoLabel)" != "${WOV_STAGE}_${WOV_PVER}" ]; then
+      if [ $DOECHO -ge 1 ]; then echo "  ... remote repo is behind. Don't need to build, but do need to push..."; fi
+      NEEDSBUILD=4
+
+    # else, no need to build 
+    else
+      NEEDSBUILD=0
+    fi
+  else
+    if [ $DOECHO -ge 1 ]; then echo "    ... unknown error: ${CH}."; fi
+    NEEDSBUILD=2
   fi
 fi
 

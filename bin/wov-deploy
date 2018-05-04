@@ -183,7 +183,8 @@ done
 
 # --------------------------------------------------------------------- 
 # Deploy the k8s files
-echo "... deploying files in ${DEPLOYDIR}/k8s"
+if [ $DOECHO -ge 1 ]; then echo "... deploying Kubernetes"; fi
+if [ $DOECHO -ge 2 ]; then echo "  ... from ${DEPLOYDIR}/k8s"; fi
 kubectl apply -f ${DEPLOYDIR}/k8s
 #FILES=$(cd ${DEPLOYDIR}/k8s; ls *.yaml)
 #for F in ${FILES}; do
