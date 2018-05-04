@@ -156,7 +156,8 @@ function fGetRepoLabel()
 {
   local retval=""
   if [[ $WOV_ARCHIVEREPOSITORY == *".amazonaws.com" ]]; then
-    retval=$(ecs-cli images api/apirest | awk '{print $2}' | sed -n '3p')
+    # retval=$(ecs-cli images ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} | awk '{print $2}' | sed -n '3p')
+    retval=$(ecs-cli images ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} | awk '{print $2}' | sort -k '1,1' | tail -1)
 #    echo "RETVAL: ${retval}"
   else
     printf "\n\nERROR: Unknown provider to check (only AWS known in wov-pushcontainer-check).\n" 1>&2&
@@ -196,7 +197,7 @@ elif [ ! -e ${ARCHDIR} ]; then
 else 
 
   CH=$(fCheckForRemoteImage)
-  #echo "CH: ${CH}"
+  # echo "CH: ${CH}"
   if [ "${CH}" != "1" ]; then
     if [ "${CH}" == "0" ]; then
       if [ $DOECHO -ge 1 ]; then echo "    ... no remote tagged image found."; fi
@@ -213,7 +214,7 @@ else
 
   # check remote repo version... since if the git version is diff from that, then need to build!!!
   elif [ "$(fGetRepoLabel)" != "${WOV_STAGE}_${WOV_PVER}" ]; then
-    if [ $DOECHO -ge 1 ]; then echo "    ... remote repo is behind."; fi
+    if [ $DOECHO -ge 1 ]; then echo "    ... remote repo is behind. Don't need to build, but do need to push..."; fi
     NEEDSBUILD=1
 
 

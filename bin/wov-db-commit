@@ -3,12 +3,9 @@
 DOECHO=1
 DOFORCE=0
 FOLD=140
+DOACTION="commit"
 
 
-TODO: make wov-db-commit -push-check 
-  - this checks for wov-push, to see if db ready to push.
-  - put inside this function since all machinery alreayd here
-  - need to test by importing schema in and seeing if this all works
 
 
 # --------------------------------------------------------------------- 
@@ -44,74 +41,16 @@ This does the following:
 By default, checks all database delta files that exist.
 
 Switches:
+  --any-push-blocks : checks if the database changes are checked in for pver, and ready to push to archive
   -h : this help
   -q/-v : quiet/verbose
 
 EOF
 }
 
-
-
-# ---------------------------------------------------------------------
-# Handle Params
-# ---------------------------------------------------------------------
-while [[ $1 =~ ^- ]]; do
-
-  if [ "$1" == "-q" ]; then
-    shift
-    DOECHO=0
-
-  elif [ "$1" == "-v" ]; then
-    shift
-    DOECHO=2
-
-  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-    fDisplayOptions
-    exit 0
-
-  else
-    echo
-    echo "***ERROR: unknown option '$1'."
-    echo
-    fDisplayOptions
-    exit 1
-  fi
-done
-
-
-# Find delta files. Take from command line first, then if none, read directory
-DATABASES=$*
-if [ "$DATABASES" == "" ]; then
-  DATABASES=()
-  D=( $(cd ${WOV_BASEDIR}/wovtools/db && ls *.deltas 2> /dev/null ) )
-  if [ "${#D[@]}" == "0" ]; then
-    printf "\n\nERROR: no deltas found in wovtools/db.\n\n"
-    exit 1
-  fi
-  exit 
-  for i in "${D[@]}"; do
-    DATABASES+=("${i%.deltas}")
-  done
-fi
-# echo "DATABASES: ${DATABASES[@]}"
-
-
-# - 1 ----------------------------------------------------------------- 
-# ensure main git repo checked in
-# - this ensure that the code checked in (i.e. pver) is matched to this 
-#   database using that pver.
-R=$(wov-git-check ${WOV_BASEDIR})
-if [ "$?" != "0" ]; then
-  printf "\n\nERROR: check in main git repo, then continue with $1.\n"
-  exit 1
-fi
-
-# Ensure cache dir exists for these
-mkdir -p ${WOV_BASEDIR}/wovtools/cache/db
-
-
 # --------------------------------------------------------------------- 
 # NOTE: just hashes return, fail messages included!
+# $1 = database name
 # --------------------------------------------------------------------- 
 function doHashDBSchema()
 {
@@ -134,6 +73,177 @@ function doGetDBPVER()
   echo ${DB_PVER}
 }
 
+# Create a list of databases to look at
+# 1. take from command line if they have it
+# 2. else, from all deltas files and registry files
+function doFindDatabases()
+{
+  DATABASES=$*
+  if [ "$DATABASES" == "" ]; then
+    DATABASES=()
+    D1=()
+    D2=()
+    DELTAS=( $(cd ${WOV_BASEDIR}/wovtools/db && ls *.deltas 2> /dev/null ) )
+    for d in "${DELTAS[@]}"; do
+      D1+=("${d%.deltas}")
+    done
+    REGFILES=( $(cd ${WOV_BASEDIR}/wovtools/db/registry && ls *.json 2> /dev/null ) )
+    for f in "${REGFILES[@]}"; do
+      D2+=("${f%.json}")
+    done
+
+    # Make sure only one entry : so add y, then every z not in y
+#    echo "D1: ${D1[@]}" 1>&2
+#    echo "D2: ${D2[@]}" 1>&2
+    i=0
+    for y in ${D2[@]}
+    do
+      DATABASES[i++]="$y"
+    done
+
+    # add in z's if not in y
+    for z in ${D1[@]}
+    do
+#      DATABASES[i++]="$z"
+      doskip=0
+      for y in ${D2[@]}
+      do
+        if [ "$z" == "$y" ]; then 
+          doskip=1
+        fi
+      done
+      if [ "${doskip}" == "0" ]; then
+#        echo "adding $z"
+        DATABASES[i++]="$z"
+      fi
+    done
+  fi
+#  echo "${DATABASES[@]}" 1>&2
+  echo "${DATABASES[@]}"
+#  exit 1
+}
+
+
+#  - this checks for wov-push, to see if db ready to push.
+#  - put inside this function since all machinery alreayd here
+#  - TODO: need to validate by importing schema in and seeing if this all works
+#   System States                    Success States
+#1. db schema changes                   T F
+#2. delta files exist                   F F
+#3. git repo changes                    F F
+#4. registry delta changes for pver     T F
+#5. registry git changes                F F
+#
+# $1 == db
+# return question: ?Any blocks to pushing?? 0=pass/true, 1=fail/false
+function doPushCheck()
+{
+  local chk_1=
+  local chk_2=
+  local chk_3=
+  local chk_4=
+  local chk_5=
+
+#  local DATABASES=( $(doFindDatabases $*) )
+#  echo "DATABASES: ${DATABASES[@]}"
+
+# 1 - compare current to parent checksum (reg value if exists, or then db (i.e. last checkin)
+  #   - current comes from the database hash
+  #   - parent comes from registry entry if exists,
+  #     or if nothing checked in yet, then db's pver is parent pver, so hash that
+  DB_HASH=$(doHashDBSchema $1)
+  DB_PVER=$(doGetDBPVER $1)
+  if [ ! -e ${WOV_BASEDIR}/wovtools/db/registry/${1}.json ]; then printf "\nERROR: no registry/${1}.json.\n"; return 1; fi
+  REG_HASH=$( jq -r " .versions.\"${WOV_PVER}\".checksum" ${WOV_BASEDIR}/wovtools/db/registry/${1}.json )
+#  echo "1. ${DB_HASH} ${REG_HASH} ${WOV_PVER} ${DB_PVER}"
+  if [ "${REG_HASH}" == "null" ]; then
+    if [ "$DOECHO" -ge 2 ]; then echo "no registry entry for pver ${WOV_PVER} so looking at DB as parent (pver:${DB_PVER})" 1>&2; fi
+    REG_HASH=$( jq -r " .versions.\"${DB_PVER}\".checksum" ${WOV_BASEDIR}/wovtools/db/registry/${1}.json )
+#    echo "2. ${DB_HASH} ${REG_HASH} ${WOV_PVER} ${DB_PVER}"
+  fi 
+#  echo "3. ${DB_HASH} ${REG_HASH} ${WOV_PVER} ${DB_PVER}"
+  if [ "${DB_HASH}" == "${REG_HASH}" ]; then chk_1=F; else chk_1=T; fi
+
+  # 2 - see if any files
+  local D=( $(cd ${WOV_BASEDIR}/wovtools/db && ls ${1}.deltas 2> /dev/null ) )
+  if [ "${#D[@]}" == "0" ]; then chk_2=F; else chk_2=T; fi
+
+  # 3 - check git of main
+  wov-git-check -q ${WOV_BASEDIR}
+  if [ "$?" == "0" ]; then chk_3=F; else chk_3=T; fi
+
+  # 4 - are there changes in the registry, for this database and pver
+  if [ -e ${WOV_BASEDIR}/wovtools/db/registry/${1}/${WOV_PVER}.deltas ]; then chk_4=T; else chk_4=F; fi
+
+  # 5 - check git of registry
+  wov-git-check -q ${WOV_BASEDIR}/wovtools/db/registry
+  if [ "$?" == "0" ]; then chk_5=F; else chk_5=T; fi
+
+  if [ $DOECHO -ge 1 ]; then
+    printf "  ... checking database '$1' for any blockage\n"
+  fi
+  if [ $DOECHO -ge 2 ]; then
+    printf "     1 : ${chk_1} - db schema changes\n"
+    printf "     2 : ${chk_2} - delta files exist\n"
+    printf "     3 : ${chk_3} - git repo changes\n"
+    printf "     4 : ${chk_4} - registry delta changes for pver\n"
+    printf "     5 : ${chk_5} - registry git changes\n"
+  fi
+
+  local retval=1
+  if [ "${chk_2}" == "F" ] &&  [ "${chk_3}" == "F" ] && [ "${chk_5}" == "F" ]; then
+    if [ "${chk_1}" == "T" ] && [ "${chk_4}" == "T" ]; then
+      retval=0
+    elif [ "${chk_1}" == "F" ] && [ "${chk_4}" == "T" ]; then
+      retval=0
+    elif [ "${chk_1}" == "F" ] && [ "${chk_4}" == "F" ]; then
+      retval=0
+    elif [ "${chk_1}" == "T" ]; then # 4 is false then
+      printf "FAILED: if you have db schema changes, you need to have deltas in registry to account.\n"
+#    elif [ "${chk_4}" == "T" ]; then # 1 is false then
+#      printf "FAILED: if you have deltas in registry, you need to have db schema changes to account.\n"
+    fi
+  else
+    if [ "${chk_2}" == "T" ] ; then printf "FAILED: you have ${1}.deltas in wovtools/db to commit.\n"; fi
+    if [ "${chk_3}" == "T" ] ; then printf "FAILED: project has changes to check into git.\n"; fi
+    if [ "${chk_5}" == "T" ] ; then printf "FAILED: wovtools/db/registry has changes to check into git.\n"; fi
+  fi
+
+  if [ $DOECHO -ge 1 ]; then
+    if [ "${retval}" == "0" ]; then echo "    ... no blocks"; else echo "    ... blocks found."; fi
+  fi
+
+  return $retval
+}
+
+function doCommit()
+{
+  # - 1 ----------------------------------------------------------------- 
+  # ensure main git repo checked in
+  # - this ensure that the code checked in (i.e. pver) is matched to this 
+  #   database using that pver.
+  R=$(wov-git-check ${WOV_BASEDIR})
+  if [ "$?" != "0" ]; then
+    printf "\n\nERROR: check in main git repo, then continue with $1.\n"
+    exit 1
+  fi
+
+  # Ensure cache dir exists for these
+  mkdir -p ${WOV_BASEDIR}/wovtools/cache/db
+
+  # --------------------------------------------------------------------- 
+  # Commit each database
+  # --------------------------------------------------------------------- 
+  for i in "${DATABASES[@]}"; do
+    if [ -e ${WOV_BASEDIR}/wovtools/db/$i.deltas ]; then
+      doCommitDB $i
+    else
+      if [ "${DOECHO}" -ge 2 ]; then
+        echo "  ... no deltas for : ${i} : ok"
+      fi
+    fi
+  done
+}
 
 # - 2-4 --------------------------------------------------------------- 
 # TODO: make these transactional, since if these don't complete, system 
@@ -164,7 +274,8 @@ function doCommitDB()
   echo "  ... move deltas into registry"
 
   # append delta to file
-  cat <<EOF >> ${WOV_BASEDIR}/wovtools/db/registry/$i/$i.deltas
+  appendfile=${WOV_BASEDIR}/wovtools/db/registry/$i/${WOV_PVER}.deltas
+  cat <<EOF >> ${appendfile}
 
 # - wov-db-commit -----------------------------------------------------
 # pver:${WOV_PVER} 
@@ -172,10 +283,10 @@ function doCommitDB()
 # date: $(date +%Y-%m-%dT%H:%M:%S%z)
 # ---------------------------------------------------------------------
 EOF
-  cat ${deltafile} >> ${WOV_BASEDIR}/wovtools/db/registry/$i/$i.deltas
+  cat ${deltafile} >> ${appendfile}
 
   echo "  ... cache deltas locally (in case of screw up)"
-  mv ${deltafile} ${WOV_BASEDIR}/wovtools/cache/db/$i.$WOV_PVER.$(date +%s).deltas
+  mv ${deltafile} ${WOV_BASEDIR}/wovtools/cache/db/$i.${WOV_PVER}.$(date +%s).deltas
 
 
   # - 3. update db registry entry for this pver -------------------------
@@ -192,7 +303,7 @@ EOF
   fi
   # append this entry
   jq " .versions.\"${WOV_PVER}\"={ \"checksum\": \"${CHKSUM}\", \"parent\": { \"type\": \"pver\", \"pver\": \"${DB_PVER}\" } }" \
-     ${WOV_BASEDIR}/wovtools/db/registry/$i.json > ${WOV_BASEDIR}/wovtools/db/registry/$i.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/registry/$i.json.$$ ${WOV_BASEDIR}/wovtools/db/registry/$i.json && rm ${WOV_BASEDIR}/wovtools/db/registry/$i.json.$$
+     ${WOV_BASEDIR}/wovtools/db/registry/$i.json > ${WOV_BASEDIR}/wovtools/db/registry/.$i.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/registry/.$i.json.$$ ${WOV_BASEDIR}/wovtools/db/registry/$i.json && rm ${WOV_BASEDIR}/wovtools/db/registry/.$i.json.$$
 
 
   # - 4. update registry database pver number, with checksum ------------
@@ -207,10 +318,65 @@ EOF
 }
 
 
-# --------------------------------------------------------------------- 
-# Commit each database
-# --------------------------------------------------------------------- 
-for i in "${DATABASES[@]}"; do
-  doCommitDB $i
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "--any-push-blocks" ]; then
+    shift
+    DOACTION="check"
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
 done
 
+
+
+DATABASES=( $(doFindDatabases $*) )
+#echo "DATABASES: ${DATABASES[@]}"
+
+
+retval=1
+if [ "$DOACTION" == "check" ]; then
+
+  # check each db
+  retval=0
+  for i in "${DATABASES[@]}"; do
+    doPushCheck $i
+    r=${?}
+    if [ "$r" != "0" ]; then retval=1; fi
+  done
+  # printf "\nAny blocks to pushing?:$R1\n\n"
+
+elif [ "$DOACTION" == "commit" ]; then
+  doCommit
+  retval=$?
+  echo $R
+else
+  printf "\n\nERROR: unknown action to take!?! '$DOACTION'.\n"
+  fDisplayOptions
+  exit 1
+fi
+
+#echo "retval $retval"
+exit $retval

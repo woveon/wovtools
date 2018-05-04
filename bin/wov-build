@@ -60,7 +60,12 @@ function fBuildSecret()
   # --------------------------------------------------------------------- 
   # Read config
   # --------------------------------------------------------------------- 
-  SECRETFILES=( `jq -r ".secrets.${WOV_STAGE}[] " ${WOV_BASEDIR}/wovtools/config.json` )
+  SECRETFILES=( $(jq -r ".secrets.${WOV_STAGE}[] " ${WOV_BASEDIR}/wovtools/config.json 2> /dev/null) )
+  if [ "$?" != "0" ]; then
+    printf "\n\nERROR: no entry for stage '${WOV_STAGE}' in config.json file '.secrets'.\n"
+    printf "  - You probably just need to create an entry, similar to the other stages.\n\n"
+    exit 1
+  fi
   # echo "SECRETFILES=${SECRETFILES[*]}"
 
 

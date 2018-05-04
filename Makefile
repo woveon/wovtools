@@ -1,7 +1,7 @@
 
 
 BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service wov-ed wov-ls wov-vh wov-pwait \
-	        wov-pshell wov-cmd wov-kui wov-git-check wov-pull-dir wov-db wov-db-commit wov-db-connect
+	        wov-pshell wov-cmd wov-kui wov-git-check wov-pull-dir wov-db wov-db-commit wov-db-connect wov-cd
 BINS=wov-env wov-ns-check wov-stage wov-build wov-compile \
 		 wov-pushcode-check wov-pushcontainer-check wov-pushenv-check wov-push-containers wov-push-env wov-push-secrets wov-push \
 		 wov-deploy wov-deploy-info \
@@ -29,6 +29,12 @@ install : /usr/local/etc/bash_completion.d/wovtools
 		if [ ! -e $(CURDIR)/bin/$$b ]; then echo "ERROR: can not find $$b... did you compile it as an app?"; fi; \
 		ln -f -s $(CURDIR)/bin/$$b $(HOME)/Library/Scripts/Applications/Terminal/$$b; \
 	done
+	@echo
+	@echo "NOTE!!!"
+	@echo "... for wcd to work, add this to your .bash_profile"
+	@echo "function wcd() {"
+	@echo '  . wov-cd $$*'
+	@echo "}"
 
 #	echo "    ... install wovmsdev, pointing to wovpshell"
 #	ln -f -s $(CURDIR)/bin/wovpshell /usr/local/bin/wovmsdev

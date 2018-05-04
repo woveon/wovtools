@@ -32,6 +32,8 @@ databaseserver - the name of a database server in the project. assumes conf/[dat
 
   -d [database] : sets the database inside the server
   -U [user]     : login user
+  -f [file]     : load file
+  -c [command]  : run command
   -p            : ask for password
   -h : this help
   -q/-v : quiet/verbose
@@ -70,6 +72,7 @@ DD=WOV_${DATABASESERVER}_host
 DB_HOST=${!DD}
 DB_COMMAND=
 DB_OP=
+DB_FILE=
 
 
 # ---------------------------------------------------------------------
@@ -98,6 +101,12 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-d" ]; then
     shift
     DB_DATABASE="$1"
+    shift
+
+  elif [ "$1" == "-f" ]; then
+    shift
+    DB_OP="file"
+    DB_FILE="$1"
     shift
 
   elif [ "$1" == "-c" ]; then
@@ -136,7 +145,7 @@ if [ $DOECHO -ge 1 ]; then echo "... connecting to ${DATABASESERVER} (${DB_HOST}
 # Check vh pod exists
 wov-p vh >/dev/null
 if [ "$?" == "1" ]; then
-  printf "\n\nERROR: 'vh' has not been created. Run 'wov-v -s'.\n\n"
+  printf "\n\nERROR: 'vh' has not been created. Run 'wov-vh -s'.\n\n"
   exit 1
 fi
 
@@ -150,13 +159,19 @@ if [ "${DB_TYPE}" == "postgres" ]; then
     # Log into pod 'vh', run psql
     kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND}\""
 
+  elif [ "${DB_OP}" == "file" ]; then
+    # copy file; exectute it in database, delete file
+    kubectl cp ${DB_FILE} vh:.${DATABASESERVER}.sql.$$
+    kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f .${DATABASESERVER}.sql.$$"
+    kubectl exec -i vh -- /bin/bash -c "rm -f .${DATABASESERVER}.sql.$$"
+
   elif [ "${DB_OP}" == "" ]; then
     # Log into pod 'vh', run psql
     kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}"
   fi
 
 else
-  print "\n\nERROR: Unknown database type of '${DB_TYPE}'. Probably need to implement it in wov-db-connect, and ensure it is supported in vh container.\n"
+  printf "\n\nERROR: Unknown database type of '${DB_TYPE}'. Probably need to implement it in wov-db-connect, and ensure it is supported in vh container.\n"
   exit 1
 fi
 
