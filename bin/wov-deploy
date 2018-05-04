@@ -158,9 +158,14 @@ FILES=$(cd ${DEPLOYDIR}/conf; ls *.ck8s 2> /dev/null)
 for F in ${FILES}; do
   f=${F%.ck8s}
   if [ $DOECHO -ge 1 ]; then echo "  ... creating ConfigMap ${f} from ${F}"; fi
-  DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[:space:]*#)/ { print "    --from-literal=" $0 , "\\" }')
+  DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 , "\\" }')
   kubectl delete configmap ${f} #2> /dev/null
   kubectl create configmap ${f} ${DATA}
+  if [ "$?" != "0" ]; then
+    printf "\nERROR: failed creating ConfigMap $f.\n"
+    printf " - check file ${DEPLOYDIR}/conf/${F}\n"
+    exit 1
+  fi
   kubectl label  configmap ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
 done
 
@@ -170,7 +175,7 @@ FILES=$(cd ${DEPLOYDIR}/conf; ls *.sk8s 2> /dev/null)
 for F in ${FILES}; do
   f=${F%.sk8s}
   if [ $DOECHO -ge 1 ]; then echo "  ... creating Secret ${f} from ${F}"; fi
-  DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[:space:]*#)/ { print "    --from-literal=" $0 , "\\" }')
+  DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 , "\\" }')
   kubectl delete secret ${f} #2> /dev/null
   kubectl create secret generic ${f} ${DATA}
   kubectl label  secret ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
