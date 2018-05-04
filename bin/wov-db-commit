@@ -41,7 +41,8 @@ This does the following:
 By default, checks all database delta files that exist.
 
 Switches:
-  --any-push-blocks : checks if the database changes are checked in for pver, and ready to push to archive
+  --checksum
+  --any-push-blockage : checks if the database changes are checked in for pver, and ready to push to archive
   -h : this help
   -q/-v : quiet/verbose
 
@@ -135,7 +136,7 @@ function doFindDatabases()
 #5. registry git changes                F F
 #
 # $1 == db
-# return question: ?Any blocks to pushing?? 0=pass/true, 1=fail/false
+# return question: ?Any blockage to pushing?? 0=pass/true, 1=fail/false
 function doPushCheck()
 {
   local chk_1=
@@ -210,7 +211,7 @@ function doPushCheck()
   fi
 
   if [ $DOECHO -ge 1 ]; then
-    if [ "${retval}" == "0" ]; then echo "    ... no blocks"; else echo "    ... blocks found."; fi
+    if [ "${retval}" == "0" ]; then echo "    ... no blockage"; else echo "    ... blockage found."; fi
   fi
 
   return $retval
@@ -333,7 +334,11 @@ while [[ $1 =~ ^- ]]; do
     shift
     DOECHO=2
 
-  elif [ "$1" == "--any-push-blocks" ]; then
+  elif [ "$1" == "--checksum" ]; then
+    shift
+    DOACTION="checksum"
+
+  elif [ "$1" == "--any-push-blockage" ]; then
     shift
     DOACTION="check"
 
@@ -366,7 +371,17 @@ if [ "$DOACTION" == "check" ]; then
     r=${?}
     if [ "$r" != "0" ]; then retval=1; fi
   done
-  # printf "\nAny blocks to pushing?:$R1\n\n"
+  # printf "\nAny blockage to pushing?:$R1\n\n"
+
+elif [ "$DOACTION" == "checksum" ]; then
+  # check each db
+  retval=0
+  for i in "${DATABASES[@]}"; do
+    CHKSUM=$(doHashDBSchema i)
+    r=${?}
+    if [ "$r" != "0" ]; then retval=1; fi
+    echo "${CHKSUM} $i"
+  done
 
 elif [ "$DOACTION" == "commit" ]; then
   doCommit

@@ -139,7 +139,7 @@ done
 
 
 
-if [ $DOECHO -ge 1 ]; then echo "... connecting to ${DATABASESERVER} (${DB_HOST}) via vh (user ${DB_USERNAME} on ${DB_DATABASE})"; fi
+#if [ $DOECHO -ge 1 ]; then echo "... connecting to ${DATABASESERVER} (${DB_HOST}) via vh (user ${DB_USERNAME} on ${DB_DATABASE})"; fi
 
 
 # Check vh pod exists
@@ -167,6 +167,13 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 
   elif [ "${DB_OP}" == "" ]; then
     # Log into pod 'vh', run psql
+    printf "\n\n"
+    figlet "${DATABASESERVER}"
+    printf "  Namespace: ${WOV_NS}\n"
+    printf "  Type     : ${DB_TYPE}\n"
+    printf "  User     : ${DB_USERNAME}\n"
+    printf "  Host     : ${DB_HOST}\n"
+    printf "  Database : ${DB_DATABASE}\n\n"
     kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}"
   fi
 
@@ -174,4 +181,5 @@ else
   printf "\n\nERROR: Unknown database type of '${DB_TYPE}'. Probably need to implement it in wov-db-connect, and ensure it is supported in vh container.\n"
   exit 1
 fi
+
 

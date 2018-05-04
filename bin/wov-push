@@ -27,7 +27,7 @@ wov-git-check ${WOV_BASEDIR}/wovtools/secrets
 R2=$?
 if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
 echo "  ... check database changes that block push"
-wov-db-commit --any-push-blocks
+wov-db-commit --any-push-blockage
 R3=$?
 if [ "$R3" != 0 ]; then exit 1; fi
 
