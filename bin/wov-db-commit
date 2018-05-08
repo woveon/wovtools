@@ -103,7 +103,15 @@ function doGetDBLastLogEntry()
 function doFindDatabases()
 {
   DATABASES=$*
-  if [ "$DATABASES" == "" ]; then
+  if [ ! -e ${WOV_BASEDIR}/wovtools/db ]; then
+    printf "\n\nERROR: no database directory in wovtools: '${WOV_BASEDIR}/wovtools/db' missing.\n" 1>&2
+    exit 1
+
+  elif [ ! -e ${WOV_BASEDIR}/wovtools/db/registry ]; then
+    printf "\n\nERROR: no database registry in wovtools/db: '${WOV_BASEDIR}/wovtools/db/registry' missing.\n" 1>&2
+    exit 1
+
+  elif [ "$DATABASES" == "" ]; then
     DATABASES=()
     D1=()
     D2=()
