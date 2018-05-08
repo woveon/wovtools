@@ -8,6 +8,10 @@ RETVAL=0
 WOVDB_DBNAME=
 WOVDB_RES=
 WOVDB_LAST_SGID=
+WOVDB_AVAILZONE=
+WOVDB_AVAILZONEALT=
+WOVDB_ROLLTARGET=
+THISCMD=$(basename $0)
 
 
 # ---------------------------------------------------------------------
@@ -39,19 +43,23 @@ This manages database:
 
 State setup
   -D X         : sets stateful database server name
-  --res X       : set the resource type (SN,DBSNG,SG,DBIS,DBC,DNS)
+  --res X      : set the resource type (SN,DBSNG,SG,DBIS,DBC,DNS)
+  --mod X      : add additional modifier to the verbs below (consumed on call)
 
 Verbs on state
   --name
   --verify
   --create
+  --is-inited  : 1 is error, not inited while 0 is no error, inited
 
 DB Server commands. 
   -C           : creates the database server [{{cluster}}-{{namespace}}-{{dbservername}}]
   -W           : wait for the database server to come online
   -I           : initialize the database server as a wovtools machine
-  -ver         : get version of database (id,wovtoolsver,label,pver,sver,created_at)
+  --ver        : get version of database (id,wovtoolsver,label,pver,sver,snapshot,created_at)
   --get-schema : dump schema of database
+  --dry-load-snapshot X    : prints commands to load the snapshot as this database server
+
 
 DEV
   -tServer X   : check that the given server exists
@@ -78,27 +86,36 @@ function doCheckDBServer()
 
 # [res] [dbserver]
 # NOTE: DB is for the RDS databse name, and 1st part of hostname
+# return : 0=success,1=fail
 function resName() 
 {
-  local retval=
+  local retval=""
 
-  if [ "$2" == "" ]; then printf "\n\nERROR: dbserver name not provided to resName.\n"; fDisplayOptions; exit 1; fi
-  if [ "$1" == "SN" ]; then
-    # 3rd params sets availability zone
-    if [ "$3" != "" ]; then z=$3; else z=${WOV_apidb_instanceAvailabilityZone}; fi
-    retval="sn-${K8S_CONTEXT}-${2}-${z}"
-  elif [ "$1" == "DBSNG" ]; then
-    retval="dbsng-${K8S_CONTEXT}-${2}"
-  elif [ "$1" == "SG" ]; then
-    retval="SG-${K8S_CONTEXT}-${2}"
-  elif [ "$1" == "DB" ]; then
-    retval="db-${K8S_CONTEXT}-${2}"
-  elif [ "$1" == "DNS" ]; then
-    DBNAME=$(resName DB ${2})
-    retval=$(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.Address' --output text)
-  else printf "\n\nERROR: unknown resource of ${1} to resName.\n"; fDisplayOptions; exit 1; fi
+  if [ "$2" == "" ]; then 
+    printf "\n\nERROR: dbserver name not provided to resName.\n"
+    retval=1
+  else
+    retval=0
+    if [ "$1" == "SN" ]; then
+      # 3rd params sets availability zone
+      if [ "$3" != "" ]; then z=$3; else z=${WOVDB_AVAILZONE}; fi
+      echo "sn-${K8S_CONTEXT}-${2}-${z}"
+    elif [ "$1" == "DBSNG" ]; then
+      echo "dbsng-${K8S_CONTEXT}-${2}"
+    elif [ "$1" == "SG" ]; then
+      echo "SG-${K8S_CONTEXT}-${2}"
+    elif [ "$1" == "DB" ]; then
+      echo "db-${K8S_CONTEXT}-${2}"
+    elif [ "$1" == "DNS" ]; then
+      DBNAME=$(resName DB ${2})
+      echo $(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.Address' --output text)
+    else 
+      printf "\n\nERROR: unknown resource of ${1} to resName.\n"
+      retval=1
+    fi
+  fi
 
-  echo $retval
+  return $retval
 }
 
 
@@ -163,7 +180,7 @@ function resCreate()
     else
       echo "SG does not exist"
 
-      if [ "$3" != "" ]; then z=$3; else z=${WOV_apidb_instanceAvailabilityZone}; fi
+      if [ "$3" != "" ]; then z=$3; else z=${WOVDB_AVAILZONE}; fi
       C=WOV_apidb_subnet_${z}_block
       if [ $DOECHO -ge 2 ]; then echo "  ... create and tag missing subnet, cidr-block: ${!C}, vpc: ${CL_VPC}, zone: ${CL_REGION}${z}" 1>&2 ; fi
       R1=$(aws ec2 create-subnet --vpc-id ${CL_VPC} --cidr-block ${!C} --availability-zone ${CL_REGION}${z} )
@@ -264,7 +281,6 @@ function resCreate()
 #{
 #  local retval=1
 #  echo "doCreateDNDNS" 1>&2
-#  set -x
 #  DBNAME=$1
 #  HOSTEDZONEID=$(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.HostedZoneId' --output text)
 #  HOSTADDR=$(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.Address' --output text)
@@ -304,7 +320,6 @@ function resCreate()
 #EOF
 #  cat ${F} 1>&2
 #  aws route53 change-resource-record-sets --hosted-zone-id ${HOSTEDZONEID} --change-batch file://${F}
-#  set +x
 #
 #  echo $retval
 #}
@@ -320,9 +335,9 @@ function doCreateDBServer()
 #  echo "SN1R1 ${SN1R1}"
   SN1R2=$(resCreate SN ${SN1R1})
 #  echo "SN1R2 ${SN1R2}"
-  SN2R1=$(resName SN ${1} ${WOV_apidb_instanceAvailabilityZoneAlt})
+  SN2R1=$(resName SN ${1} ${WOVDB_AVAILZONEALT})
 #  echo "SN2R1 ${SN2R1}"
-  SN2R2=$(resCreate SN ${SN2R1} ${WOV_apidb_instanceAvailabilityZoneAlt})
+  SN2R2=$(resCreate SN ${SN2R1} ${WOVDB_AVAILZONEALT})
 #  echo "SN2R2 ${SN2R2}"
 
   # Create database subnet group
@@ -353,23 +368,48 @@ function doCreateDBServer()
     --master-user-password ${WOV_apidb_password} \
     --db-subnet-group-name ${DBSNGR1} \
     --vpc-security-group-ids  ${WOVDB_LAST_SGID} \
-    --availability-zone ${CL_REGION}${WOV_apidb_instanceAvailabilityZone} \
+    --availability-zone ${CL_REGION}${WOVDB_AVAILZONE} \
     --storage-type gp2
 
   doInitDB
 }
 
+
+# --------------------------------------------------------------------- 
+# Checks if the wovtools database exists and then gets version
+# --------------------------------------------------------------------- 
+function doIsDBInited()
+{
+  local retval=1
+  local dbver=$(doGetDBServerConfig)
+  local R1=$?
+
+  if [ "${R1}" != "0" ] || [ "$dbver" == "" ]; then
+    echo $dbver
+  else
+    retval=0
+    echo $dbver
+  fi
+
+  return $retval
+}
+
+# --------------------------------------------------------------------- 
 # wovtools database on server with log table, with label, pver and sver columns
+# --------------------------------------------------------------------- 
 function doInitDB
 {
   echo "  ... doInitDB"
   FL=.file.wov-db
+  DELTAS=${WOV_BASEDIR}/wovtools/db/${WOVDB_DBNAME}.deltas
 
   HOSTADDR=$(resName DNS ${WOVDB_DBNAME})
 
   # easiest to write the script, cp to vh and run it
   cat <<EOF > ${FL}
 #!/usr/bin/env bash
+
+# doInitDB called for: ${WOVDB_DBNAME}
 
 # set password
 export PGPASSWORD=${WOV_apidb_password}
@@ -378,35 +418,49 @@ export PGPASSWORD=${WOV_apidb_password}
 psql -U ${WOV_apidb_username} -h ${HOSTADDR} -U ${WOV_apidb_username} -tc "SELECT 1 FROM pg_database WHERE datname = 'wovtools'" | grep -q 1 || psql -U ${WOV_apidb_username} -h ${WOV_apidb_host} -c "CREATE DATABASE wovtools"
 
 # Use database, and create the logs table, and insert a row
-psql -U ${WOV_apidb_username} -h ${HOSTADDR} -U ${WOV_apidb_username} -d wovtools -tc "CREATE TABLE IF NOT EXISTS logs (id SERIAL NOT NULL PRIMARY KEY, database varchar, wovtoolsver varchar, label varchar, pver integer, sver integer, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() );"
-#psql -U ${WOV_apidb_username} -h ${HOSTADDR} -U ${WOV_apidb_username} -d wovtools -tc "INSERT INTO logs (database, wovtoolsver, label, pver, sver ) VALUES ( databaseHere, ${WOV_VERSION}, '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER} );"
+psql -U ${WOV_apidb_username} -h ${HOSTADDR} -U ${WOV_apidb_username} -d wovtools -tc "CREATE TABLE IF NOT EXISTS logs (id SERIAL NOT NULL PRIMARY KEY, database varchar, wovtoolsver varchar, label varchar, pver integer, sver integer, snapshot varchar, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() );"
+#psql -U ${WOV_apidb_username} -h ${HOSTADDR} -U ${WOV_apidb_username} -d wovtools -tc "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( databaseHere, ${WOV_VERSION}, '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER}, '' );"
 EOF
 
-  echo "  ... running file: ${FL}"
-  cat ${FL}
+  # echo "  ... running file: ${FL}"
+  # cat ${FL}
 
-  set -x
   chmod 755 ${FL}
   kubectl cp ${FL} vh:file.wov-db.$$
   kubectl exec -it vh -- /bin/bash -c "./file.wov-db.$$"
   kubectl exec -it vh -- /bin/bash -c "rm file.wov-db.$$"
-  set +x
+
+  cat <<EOF >> ${DELTAS}
+
+# --------------------------------------------------------------------- 
+# doInitDB called for: ${WOVDB_DBNAME}
+# --------------------------------------------------------------------- 
+# 1) create wovtools database if not exist
+# 2) create the logs database in wovtools
+# --------------------------------------------------------------------- 
+
+EOF
+
+
+  echo "  ... cleaning up"
+  rm ${FL}
 }
 
 
+# --------------------------------------------------------------------- 
 # Wait for db to get address, meaning it is ready to go
 # [dbname]
+# --------------------------------------------------------------------- 
 function doWaitDBServer()
 {
-  DBNAME=$1
-  HOSTADDR=$(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.Address' --output text)
+  HOSTADDR=$(aws rds describe-db-instances --db-instance-identifier ${1} --query 'DBInstances[0].Endpoint.Address' --output text)
 
   if [ "${HOSTADDR}" == "None" ] ; then
     echo ""
     echo "ERROR: Database or hostaddress '${HOSTADDR}' not yet created. Just wait a bit if the instance is coming online."
     echo "  NOTE: status is currently '${DBSTATUS}'."
     echo ""
-    while [ "$(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.Address' --output text)" == "None" ]; do
+    while [ "$(aws rds describe-db-instances --db-instance-identifier ${1} --query 'DBInstances[0].Endpoint.Address' --output text)" == "None" ]; do
       echo "    ... waiting for database to get address."
       sleep 5
     done
@@ -439,31 +493,206 @@ function doDryRun()
 
 
 # wovtools database on server with log table, with label, pver and sver columns
-function doGetDBVersion() 
-{
-  echo "getDBverion"
-}
+#function doGetDBVersion() 
+#{
+#  echo "getDBverion"
+#  HOSTADDR=$(resName DNS ${WOVDB_DBNAME})
+#  kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${WOV_apidb_password} psql \
+#      -h ${HOSTADDR}  \
+#      -U ${WOV_apidb_username} \
+#      -d ${WOV_apidb_database}"
+#}
 
 function doGetSchemaDB()
 {
   HOSTADDR=$(resName DNS ${WOVDB_DBNAME})
-  set -x
   kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${WOV_apidb_password} pg_dump \
       -h ${HOSTADDR}  \
       -U ${WOV_apidb_username} \
       -d ${WOV_apidb_database}"
-  set +x
 }
 
+
+# returns 0 on success
 function doGetDBServerConfig()
 {
+  local retval=1
   HOSTADDR=$(resName DNS ${WOVDB_DBNAME})
-  kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${WOV_apidb_password} psql -h ${HOSTADDR} -d wovtools -U ${WOV_apidb_username} --tuples-only "\
-                                 " -c 'SELECT logs from logs database=order by id DESC limit 1;'"
+  RR1=${?}
+  if [ "${RR1}" != "0" ]; then
+    echo ${HOSTADDR}
+    retval=1
+  else
+    R=$(kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${WOV_apidb_password} psql -h ${HOSTADDR} -d wovtools -U ${WOV_apidb_username} --tuples-only -c \"SELECT * from logs order by id DESC limit 1;\"" 2> /dev/null )
+    R1=$?
+    if [ "${R1}" == "0" ] ; then
+      echo $R
+      retval=0
+    fi
+  fi
 
+  return $retval
 }
 
 
+
+# --------------------------------------------------------------------- 
+# Prints the instructinos for creating a database instance from a snapshot
+# --------------------------------------------------------------------- 
+function doLoadSnapshot() 
+{
+  local SNAPSHOT=$1
+
+  DELTAS=${WOV_BASEDIR}/wovtools/db/${WOVDB_DBNAME}.deltas
+  cat <<EOF >> ${DELTAS} | fold -w ${FOLD} -s
+
+# ---------------------------------------------------------------------
+# Loading DBS Snapshot: $1
+#          wov db name: ${WOVDB_DBNAME}
+#             res name: $(resName DB ${WOVDB_DBNAME})
+
+#   NOTE: currently, loading snapshots only list commands to run, so the
+#         snapshot may not have been loaded 
+# ---------------------------------------------------------------------
+
+EOF
+
+  cat <<EOF | fold -w ${FOLD} -s
+
+---------------------------------------------------------------------
+Loading DBS Snapshot : $1
+                   db: ${WOVDB_DBNAME}
+
+This is most likely called by the wv-db-set command.
+
+1. This loads the AWS snapshot for the database here. Since db is singular and snapshots can contain multiple, this might not work in all cases. 
+
+2. This is complicated, so for expediency, just echo instructions for the user to use for now.
+
+EOF
+
+  cat <<EOF | fold -w 220 -s
+Commands
+---------------------------------------------------------------------------
+
+
+ 1) make sure there is no existing db instance (see RDS->Instances)
+        - type: 'aws rds describe-db-instances \\
+                 --filters="Name=db-instance-id,Values=$(resName DB ${WOVDB_DBNAME})" \\
+                 | jq ".DBInstances[0]"'
+
+ 2) ensure all resources around the db are created
+
+   2.1) Ensure Subnets exist (see VPC->Subnet)
+        - $(resName SN ${WOVDB_DBNAME})
+EOF
+if [ "$(${THISCMD} -D ${WOVDB_DBNAME} --res SN  --verify)" == "true" ]; then 
+  echo "          ... exists"
+else
+  echo "          - create with: '${THISCMD} -D ${WOVDB_DBNAME} --res SN --create'"
+fi
+echo "        - $(resName SN ${WOVDB_DBNAME} ${WOVDB_AVAILZONEALT})"
+if [ "$(${THISCMD} -D ${WOVDB_DBNAME} --res SN --mod ${WOVDB_AVAILZONEALT} --verify)" == "true" ]; then 
+  echo "          ... exists"
+else
+  echo "          - create with: '${THISCMD} -D ${WOVDB_DBNAME} --res SN --mod ${WOVDB_AVAILZONEALT} --create'"
+fi
+  cat <<EOF | fold -w 220 -s
+
+   2.2) Ensure database subnet group exists (see RDS->Subnet Groups)
+        - $(resName DBSNG ${WOVDB_DBNAME})
+EOF
+if [ "$(${THISCMD} -D ${WOVDB_DBNAME} --res DBSNG --verify)" == "true" ]; then 
+  echo "          ... exists"
+else
+  echo "          - create with: '${THISCMD} -D ${WOVDB_DBNAME} --res DBSNG --create'"
+fi
+  cat <<EOF | fold -w 220 -s
+
+   2.3) Ensure database security group (see VPC->Security Groups)
+        - $(resName SG ${WOVDB_DBNAME})
+EOF
+if [ "$(${THISCMD} -D ${WOVDB_DBNAME} --res SG --verify)" == "true" ]; then 
+  echo "          ... exists"
+else
+  echo "          - create with: '${THISCMD} -D ${WOVDB_DBNAME} --res SG --create'"
+fi
+  cat <<EOF | fold -w 220 -s
+
+ 2.4) Make sure you have the security group id
+EOF
+SGID=$(resQuerySecurityID $(resName SG ${WOVDB_DBNAME}))
+if [ "$SGID" != "" ]; then
+  echo "          ... exists: ${SGID}"
+else
+  echo "          *** missing ***"
+fi
+  cat <<EOF | fold -w 220 -s
+
+ 2.5) Make sure the snapshot exists
+EOF
+aws rds describe-db-snapshots --db-snapshot-identifier ${SNAPSHOT} > /dev/null 2>&1
+if [ "$?" == "0" ]; then
+  echo "          ... exists"
+else
+  echo "          *** missing ***"
+fi
+  cat <<EOF | fold -w 220 -s
+
+
+ 3) restore from snapshot
+        - type: aws rds restore-db-instance-from-db-snapshot \\
+           --db-instance-identifier $(resName DB ${WOVDB_DBNAME}) \\
+           --db-instance-class ${WOV_apidb_instanceClass} \\
+           --engine postgres \\
+           --db-subnet-group-name $(resName DBSNG ${WOVDB_DBNAME}) \\
+           --storage-type gp2 \\
+           --no-publicly-accessible \\
+           --availability-zone ${CL_REGION}${WOVDB_AVAILZONE} \\
+           --db-snapshot-identifier $SNAPSHOT 
+
+ 4) set db security group
+        - type: aws rds modify-db-instance --vpc-security-group-ids ${SGID} \\
+                   --db-instance-identifier $(resName DB ${WOVDB_DBNAME})
+
+ 5) woveon init database (if not inited)
+        - type: ${THISCMD} -D ${WOVDB_DBNAME} -I
+
+ 6) set logs as being a snapshot
+    - 'wov-db-connect ${WOVDB_DBNAME} -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( '${WOVDB_DBNAME}', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER}, '${SNAPSHOT}' );'
+
+---------------------------------------------------------------------
+EOF
+
+set -x
+
+}
+
+# ---------------------------------------------------------------------
+# Roll from current version to $1
+# retval : 1-fail, 0-no errors
+# ---------------------------------------------------------------------
+function doRoll()
+{
+  local retval=1
+  local TARGETPVER=$1
+  local CURPVER=$(doGetDBServerConfig)
+  if [ "$TARGETPVER" == "" ]; then
+    echo "  ...target pver is empty"
+  elif [ "$CURPVER" == "" ]; then
+    echo "  ...db is not inited"
+  else
+    echo "  ... roll ${CURPVER} -> ${TARGETPVER} --- never tested/run!!!"
+    local v=${TARGETPVER}
+    while [ "$v" != "" ]; do
+      echo "    ... v:$v"
+      REG_HASH=$( jq -r " .versions.\"${v}\".parent.pver" ${WOV_BASEDIR}/wovtools/db/registry/${WOVDB_DBNAME}.json )
+      echo "    ...   hash:$REG_HASH"
+      v=$REG_HASH
+    done
+  fi
+  return $retval
+}
 
 # ---------------------------------------------------------------------
 # Handle Params
@@ -484,6 +713,9 @@ while [[ $1 =~ ^- ]]; do
     WOVDB_DBNAME=$1
     # TODO: here, when set DB, should take all WOV_apidb and put as WOVDB_* variables so it is not specific to apidb!
     eval $(wov-env --env ${WOVDB_DBNAME}.ck8s --env ${WOVDB_DBNAME}.sk8s)
+    WOVDB_AVAILZONE=${WOV_apidb_instanceAvailabilityZone}
+    WOVDB_AVAILZONEALT=${WOV_apidb_instanceAvailabilityZoneAlt}
+    WOVDB_ROLLTARGET=${WOV_PVER}
     shift
 
   elif [ "$1" == "--res" ]; then
@@ -498,27 +730,38 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == "--verify" ]; then
     shift
-    R1=$(resName ${WOVDB_RES} ${WOVDB_DBNAME})
+    R1=$(resName ${WOVDB_RES} ${WOVDB_DBNAME} ${MOD})
     RR1=$?
     if [ "$RR1" != "0" ]; then printf "ERROR: can not find resource name of type '${WOVDB_RES}' and database '${WOVDB_DBNAME}'.\n"; exit 1; fi
     R2=$(resVerify ${WOVDB_RES} ${R1})
+    MOD=
     if [ ${DOECHO} -ge 2 ]; then echo "  ... verify ${WOVDB_RES} ${R1}"; fi
     if [ "$R2" == "1" ]; then echo "true"; else echo "false"; fi
 
   elif [ "$1" == "--create" ]; then
     shift
-    R1=$(resName ${WOVDB_RES} ${WOVDB_DBNAME} )
+    R1=$(resName ${WOVDB_RES} ${WOVDB_DBNAME} ${MOD} )
     RR1=$?
     if [ "$RR1" != "0" ]; then printf "ERROR: can not find resource name of type '${WOVDB_RES}' and database '${WOVDB_DBNAME}'.\n"; exit 1; fi
-    R2=$(resCreate ${WOVDB_RES} ${R1})
+    R2=$(resCreate ${WOVDB_RES} ${R1} ${MOD})
+    MOD=
     if [ ${DOECHO} -ge 2 ]; then echo "  ... create ${WOVDB_RES} ${R1}"; fi
     if [ "$R2" == "0" ]; then echo "true"; else echo "false"; fi
 
-
+  elif [ "$1" == "--mod" ]; then
+    shift
+    MOD=$1
+    shift
 
   elif [ "$1" == "-C" ]; then
     shift
     doCreateDBServer ${WOVDB_DBNAME}
+
+  elif [ "$1" == "--is-inited" ]; then
+    shift
+    if [ "$WOVDB_DBNAME" == "" ]; then printf "\n\nERROR: database name not set. Use '-D' option.\n\n"; fDisplayOptions; exit 1; fi
+    R=$(doIsDBInited)
+    RETVAL=$?
 
   elif [ "$1" == '-I' ]; then
     shift
@@ -526,14 +769,43 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == "-W" ]; then
     shift
-    doWaitDBServer ${WOVDB_DBNAME}
+    R1=$(resName DB ${WOVDB_DBNAME})
+    RR1=$?
+    echo "R: ${R1}"
+    if [ "$RR1" != "0" ]; then printf "ERROR: can not find database '${WOVDB_DBNAME}'.\n"; exit 1; fi
+    doWaitDBServer ${R1}
+    # TODO : unnecessry shift?
     shift
 
   elif [ "$1" == "--get-schema" ]; then
     shift
     doGetSchemaDB ${WOVDB_DBNAME}
+    # TODO : unnecessry shift?
     shift
 
+
+  elif [ "$1" == "--dry-load-snapshot" ]; then
+    shift
+    if [ "$1" == "" ]; then
+      printf "\nERROR: no snapshot named provided.\n"
+      fDisplayOptions
+      exit 1
+    elif [ "${WOVDB_DBNAME}" == "" ]; then
+      printf "\nERROR: no db name provided.\n"
+      fDisplayOptions
+      exit 1
+    else
+      R=$(doLoadSnapshot ${1})
+      R1=$?
+      if [ "$R1" != "0" ]; then 
+        printf "ERROR: snapshot load failure.\n"
+        exit 1
+      else 
+        printf "$R\n"
+      fi
+
+      shift
+    fi
 
 
   elif [ "$1" == "-p" ] || [ "$1" == "--push" ]; then
@@ -550,10 +822,22 @@ while [[ $1 =~ ^- ]]; do
       echo "...db server does not exists"
     fi
 
-
-  elif [ "$1" == "-ver" ]; then
+  elif [ "$1" == "--roll" ]; then
     shift
-    doGetDBServerConfig $1
+    echo "--dry run only--"
+    doRoll ${WOVDB_ROLLTARGET}
+
+  elif [ "$1" == "--ver" ]; then
+    shift
+    if [ "$WOVDB_DBNAME" == "" ]; then printf "\n\nERROR: database name not set. Use '-D' option.\n\n"; fDisplayOptions; exit 1; fi
+    R=$(doGetDBServerConfig)
+    R1=$?
+    if [ "${R1}" != "0" ] || [ "$R" == "" ]; then
+      RETVAL=$R
+      echo "...db is not inited"
+    else
+      echo "${R}"
+    fi
     shift
 
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then

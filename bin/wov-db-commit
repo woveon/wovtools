@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
 
-DOECHO=1
-DOFORCE=0
-FOLD=140
-DOACTION="commit"
-
-
 
 
 # --------------------------------------------------------------------- 
@@ -19,6 +13,10 @@ set ""
 set -- "${pushenvargs[@]}"
 
 
+DOECHO=1
+DOFORCE=0
+FOLD=$(tput cols)
+DOACTION="commit"
 
 
 # ---------------------------------------------------------------------
@@ -42,7 +40,7 @@ By default, checks all database delta files that exist.
 
 Switches:
   --checksum
-  --any-push-blockage : checks if the database changes are checked in for pver, and ready to push to archive
+  -pc|--push-check|--any-push-blockage : checks if the database changes are checked in for pver, and ready to push to archive
   -h : this help
   -q/-v : quiet/verbose
 
@@ -60,18 +58,43 @@ function doHashDBSchema()
   echo ${CHKSUM}
 }
 
+
 # --------------------------------------------------------------------- 
+# returns 1 on error
 # --------------------------------------------------------------------- 
 function doGetDBPVER()
 {
-  local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" |  cut -d'|' -f5)
+  local retval=1
+  local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null |  cut -d'|' -f5)
   if [ "$?" != "0" ]; then 
     printf "\n\nERROR: failed to find wovtools logs on database server $1.\n\n"; 
     printf "  NOTE: if the datbaseserver is not inited, run:\n"
     printf "    'wov-db -D ${1} -I'\n\n"   
-    exit 1; 
+  else
+    retval=0
+    echo ${DB_PVER}
   fi
-  echo ${DB_PVER}
+
+  return $retval
+}
+
+# --------------------------------------------------------------------- 
+# returns 1 on error
+# --------------------------------------------------------------------- 
+function doGetDBLastLogEntry()
+{
+  local retval=1
+  local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null)
+  if [ "$?" != "0" ]; then 
+    printf "\n\nERROR: failed to find wovtools logs on database server $1.\n\n"; 
+    printf "  NOTE: if the datbaseserver is not inited, run:\n"
+    printf "    'wov-db -D ${1} -I'\n\n"   
+  else
+    retval=0
+    echo ${DB_PVER}
+  fi
+
+  return $retval
 }
 
 # Create a list of databases to look at
@@ -136,7 +159,7 @@ function doFindDatabases()
 #5. registry git changes                F F
 #
 # $1 == db
-# return question: ?Any blockage to pushing?? 0=pass/true, 1=fail/false
+# return question: ?Any blockage to pushing?? 0=no-blockage, 1=blockage, 2=error
 function doPushCheck()
 {
   local chk_1=
@@ -144,74 +167,97 @@ function doPushCheck()
   local chk_3=
   local chk_4=
   local chk_5=
+  local retval=0
 
 #  local DATABASES=( $(doFindDatabases $*) )
 #  echo "DATABASES: ${DATABASES[@]}"
 
-# 1 - compare current to parent checksum (reg value if exists, or then db (i.e. last checkin)
+  # 1 - compare current to parent checksum (reg value if exists, or then db (i.e. last checkin)
   #   - current comes from the database hash
   #   - parent comes from registry entry if exists,
   #     or if nothing checked in yet, then db's pver is parent pver, so hash that
-  DB_HASH=$(doHashDBSchema $1)
-  DB_PVER=$(doGetDBPVER $1)
-  if [ ! -e ${WOV_BASEDIR}/wovtools/db/registry/${1}.json ]; then printf "\nERROR: no registry/${1}.json.\n"; return 1; fi
-  REG_HASH=$( jq -r " .versions.\"${WOV_PVER}\".checksum" ${WOV_BASEDIR}/wovtools/db/registry/${1}.json )
-#  echo "1. ${DB_HASH} ${REG_HASH} ${WOV_PVER} ${DB_PVER}"
-  if [ "${REG_HASH}" == "null" ]; then
-    if [ "$DOECHO" -ge 2 ]; then echo "no registry entry for pver ${WOV_PVER} so looking at DB as parent (pver:${DB_PVER})" 1>&2; fi
-    REG_HASH=$( jq -r " .versions.\"${DB_PVER}\".checksum" ${WOV_BASEDIR}/wovtools/db/registry/${1}.json )
-#    echo "2. ${DB_HASH} ${REG_HASH} ${WOV_PVER} ${DB_PVER}"
-  fi 
-#  echo "3. ${DB_HASH} ${REG_HASH} ${WOV_PVER} ${DB_PVER}"
-  if [ "${DB_HASH}" == "${REG_HASH}" ]; then chk_1=F; else chk_1=T; fi
+  if [ "$retval" == "0" ]; then
+    DB_HASH=$(doHashDBSchema $1)
+    DB_PVER=$(doGetDBPVER $1)
+    if [ "$?" != "0" ] || [ "$DB_PVER" == "" ]; then
+      printf "\n\nERROR: could not get database version.\n"
+      printf "  - is it inited? 'wov-db -D $1 --is-inited'\n"
+      printf "  - what version? 'wov-db -D $1 --ver' to get version\n"
+      retval=2
+    elif [ ! -e ${WOV_BASEDIR}/wovtools/db/registry/${1}.json ]; then 
+      printf "\nERROR: no registry/${1}.json.\n"; 
+      retval=2 
+    else
+      REG_HASH=$( jq -r " .versions.\"${WOV_PVER}\".checksum" ${WOV_BASEDIR}/wovtools/db/registry/${1}.json )
+      if [ "${REG_HASH}" == "null" ]; then
+        if [ "$DOECHO" -ge 2 ]; then echo "no registry entry for pver ${WOV_PVER} so looking at DB as parent (pver:${DB_PVER})" 1>&2; fi
+        REG_HASH=$( jq -r " .versions.\"${DB_PVER}\".checksum" ${WOV_BASEDIR}/wovtools/db/registry/${1}.json )
+      fi 
+      if [ "${DB_HASH}" == "${REG_HASH}" ]; then chk_1=F; else chk_1=T; fi
+    fi
+    set +x
+  fi
+
 
   # 2 - see if any files
-  local D=( $(cd ${WOV_BASEDIR}/wovtools/db && ls ${1}.deltas 2> /dev/null ) )
-  if [ "${#D[@]}" == "0" ]; then chk_2=F; else chk_2=T; fi
+  if [ "$retval" == "0" ]; then
+    local D=( $(cd ${WOV_BASEDIR}/wovtools/db && ls ${1}.deltas 2> /dev/null ) )
+    if [ "${#D[@]}" == "0" ]; then chk_2=F; else chk_2=T; fi
+  fi
 
   # 3 - check git of main
-  wov-git-check -q ${WOV_BASEDIR}
-  if [ "$?" == "0" ]; then chk_3=F; else chk_3=T; fi
+  if [ "$retval" == "0" ]; then
+    wov-git-check -q ${WOV_BASEDIR}
+    if [ "$?" == "0" ]; then chk_3=F; else chk_3=T; fi
+  fi
 
   # 4 - are there changes in the registry, for this database and pver
-  if [ -e ${WOV_BASEDIR}/wovtools/db/registry/${1}/${WOV_PVER}.deltas ]; then chk_4=T; else chk_4=F; fi
+  if [ "$retval" == "0" ]; then
+    if [ -e ${WOV_BASEDIR}/wovtools/db/registry/${1}/${WOV_PVER}.deltas ]; then chk_4=T; else chk_4=F; fi
+  fi
 
   # 5 - check git of registry
-  wov-git-check -q ${WOV_BASEDIR}/wovtools/db/registry
-  if [ "$?" == "0" ]; then chk_5=F; else chk_5=T; fi
-
-  if [ $DOECHO -ge 1 ]; then
-    printf "  ... checking database '$1' for any blockage\n"
-  fi
-  if [ $DOECHO -ge 2 ]; then
-    printf "     1 : ${chk_1} - db schema changes\n"
-    printf "     2 : ${chk_2} - delta files exist\n"
-    printf "     3 : ${chk_3} - git repo changes\n"
-    printf "     4 : ${chk_4} - registry delta changes for pver\n"
-    printf "     5 : ${chk_5} - registry git changes\n"
+  if [ "$retval" == "0" ]; then
+    wov-git-check -q ${WOV_BASEDIR}/wovtools/db/registry
+    if [ "$?" == "0" ]; then chk_5=F; else chk_5=T; fi
   fi
 
-  local retval=1
-  if [ "${chk_2}" == "F" ] &&  [ "${chk_3}" == "F" ] && [ "${chk_5}" == "F" ]; then
-    if [ "${chk_1}" == "T" ] && [ "${chk_4}" == "T" ]; then
-      retval=0
-    elif [ "${chk_1}" == "F" ] && [ "${chk_4}" == "T" ]; then
-      retval=0
-    elif [ "${chk_1}" == "F" ] && [ "${chk_4}" == "F" ]; then
-      retval=0
-    elif [ "${chk_1}" == "T" ]; then # 4 is false then
-      printf "FAILED: if you have db schema changes, you need to have deltas in registry to account.\n"
-#    elif [ "${chk_4}" == "T" ]; then # 1 is false then
-#      printf "FAILED: if you have deltas in registry, you need to have db schema changes to account.\n"
+  # Determine outcome
+  if [ "$retval" == "0" ]; then
+    retval=1
+    if [ $DOECHO -ge 1 ]; then
+      printf "  ... checking database '$1' for any blockage\n"
     fi
-  else
-    if [ "${chk_2}" == "T" ] ; then printf "FAILED: you have ${1}.deltas in wovtools/db to commit.\n"; fi
-    if [ "${chk_3}" == "T" ] ; then printf "FAILED: project has changes to check into git.\n"; fi
-    if [ "${chk_5}" == "T" ] ; then printf "FAILED: wovtools/db/registry has changes to check into git.\n"; fi
-  fi
+    if [ $DOECHO -ge 2 ]; then
+      printf "     1 : ${chk_1} - db schema changes\n"
+      printf "     2 : ${chk_2} - delta files exist\n"
+      printf "     3 : ${chk_3} - git repo changes\n"
+      printf "     4 : ${chk_4} - registry delta changes for pver\n"
+      printf "     5 : ${chk_5} - registry git changes\n"
+    fi
 
-  if [ $DOECHO -ge 1 ]; then
-    if [ "${retval}" == "0" ]; then echo "    ... no blockage"; else echo "    ... blockage found."; fi
+    if [ "${chk_2}" == "F" ] &&  [ "${chk_3}" == "F" ] && [ "${chk_5}" == "F" ]; then
+      if [ "${chk_1}" == "T" ] && [ "${chk_4}" == "T" ]; then
+        retval=0
+      elif [ "${chk_1}" == "F" ] && [ "${chk_4}" == "T" ]; then
+        retval=0
+      elif [ "${chk_1}" == "F" ] && [ "${chk_4}" == "F" ]; then
+        retval=0
+      elif [ "${chk_1}" == "T" ]; then # 4 is false then
+        printf "FAILED: if you have db schema changes, you need to have deltas in registry to account.\n"
+        printf "\n  run: 'wov-db-commit -v --any-push-blockage' for more info.\n"
+  #    elif [ "${chk_4}" == "T" ]; then # 1 is false then
+  #      printf "FAILED: if you have deltas in registry, you need to have db schema changes to account.\n"
+      fi
+    else
+      if [ "${chk_2}" == "T" ] ; then printf "FAILED: you have ${1}.deltas in wovtools/db to commit.\n"; fi
+      if [ "${chk_3}" == "T" ] ; then printf "FAILED: project has changes to check into git.\n"; fi
+      if [ "${chk_5}" == "T" ] ; then printf "FAILED: wovtools/db/registry has changes to check into git.\n"; fi
+    fi
+
+    if [ $DOECHO -ge 1 ]; then
+      if [ "${retval}" == "0" ]; then echo "    ... no blockage"; else echo "    ... blockage found."; fi
+    fi
   fi
 
   return $retval
@@ -249,34 +295,50 @@ function doCommit()
 # - 2-4 --------------------------------------------------------------- 
 # TODO: make these transactional, since if these don't complete, system 
 #       can be in a bad state
+# returns: 0 on success, 1-not inited, 2-database has no parent, 3-could not update database with this commit
 # --------------------------------------------------------------------- 
 function doCommitDB()
 {
+  local retval=0
+
   # check deltas exist
-  deltafile=${WOV_BASEDIR}/wovtools/db/$i.deltas
+  deltafile=${WOV_BASEDIR}/wovtools/db/$1.deltas
   if [ ! -e $deltafile ]; then
-    printf "\n\nERROR: can't find deltas file: 'wovtools/db/$i.deltas'.\n\n"
+    printf "\n\nERROR: can't find deltas file: 'wovtools/db/$1.deltas'.\n\n"
     exit 1
   fi
 
   # make sure directory exists for database
-  mkdir -p ${WOV_BASEDIR}/wovtools/db/registry/$i
+  mkdir -p ${WOV_BASEDIR}/wovtools/db/registry/$1
 
-  # get current db checksum
-  CHKSUM=$(doHashDBSchema $i)
 
   # get current db wovtools pver
-  DB_PVER=$(doGetDBPVER $i)
+  DB_ENTRY=$(doGetDBLastLogEntry $1)
+#  DB_PVER=$(doGetDBPVER $1)
+  if [ "$?" != "0" ]; then
+    printf "\n\n***ERROR: database not inited.\n"
+    retval=1
+  elif [ "${DB_ENTRY}" == "" ]; then
+    printf "\n\n***ERROR: database has no parent.\n"
+    retval=2
+  fi
+  DB_ENTRY=( $(echo $DB_ENTRY |  sed 's/ | / /g' ) )
+  DB_PVER="${DB_ENTRY[4]}"
 
-  echo "Chksum : ${CHKSUM}  DBPVER: ${DB_PVER}  PVER: ${WOV_PVER}"
+  if [ "$retval" == "0" ]; then
 
-  # - 2 ----------------------------------------------------------------- 
-  # --------------------------------------------------------------------- 
-  echo "  ... move deltas into registry"
+    # get current db checksum
+    CHKSUM=$(doHashDBSchema $1)
 
-  # append delta to file
-  appendfile=${WOV_BASEDIR}/wovtools/db/registry/$i/${WOV_PVER}.deltas
-  cat <<EOF >> ${appendfile}
+    echo "Chksum : ${CHKSUM}  DBPVER: ${DB_PVER}  PVER: ${WOV_PVER}"
+
+    # - 2 ----------------------------------------------------------------- 
+    # --------------------------------------------------------------------- 
+    echo "  ... move deltas into registry"
+
+    # append delta to file
+    appendfile=${WOV_BASEDIR}/wovtools/db/registry/$1/${WOV_PVER}.deltas
+    cat <<EOF >> ${appendfile}
 
 # - wov-db-commit -----------------------------------------------------
 # pver:${WOV_PVER} 
@@ -284,38 +346,48 @@ function doCommitDB()
 # date: $(date +%Y-%m-%dT%H:%M:%S%z)
 # ---------------------------------------------------------------------
 EOF
-  cat ${deltafile} >> ${appendfile}
+    cat ${deltafile} >> ${appendfile}
 
-  echo "  ... cache deltas locally (in case of screw up)"
-  mv ${deltafile} ${WOV_BASEDIR}/wovtools/cache/db/$i.${WOV_PVER}.$(date +%s).deltas
+    echo "  ... cache deltas locally (in case of screw up)"
+    mv ${deltafile} ${WOV_BASEDIR}/wovtools/cache/db/$1.${WOV_PVER}.$(date +%s).deltas
 
 
-  # - 3. update db registry entry for this pver -------------------------
-  # --------------------------------------------------------------------- 
-  echo "  ... updating db registry entry for this pver"
-  if [ ! -e ${WOV_BASEDIR}/wovtools/db/registry/$i.json ]; then
-    echo "    ... building registry for $i."
-    cat <<EOF > ${WOV_BASEDIR}/wovtools/db/registry/$i.json
+    # - 3. update db registry entry for this pver -------------------------
+    # --------------------------------------------------------------------- 
+    echo "  ... updating db registry entry for this pver"
+    if [ ! -e ${WOV_BASEDIR}/wovtools/db/registry/$1.json ]; then
+      echo "    ... building registry for $1."
+      cat <<EOF > ${WOV_BASEDIR}/wovtools/db/registry/$1.json
 {
   "wovtoolsversion": "$WOV_VERSION",
   "versions"       : {}
 }
 EOF
+    fi
+    # append this entry
+    jq " .versions.\"${WOV_PVER}\"={ \"checksum\": \"${CHKSUM}\", \"parent\": { \"type\": \"pver\", \"pver\": \"${DB_PVER}\" } }" \
+       ${WOV_BASEDIR}/wovtools/db/registry/$1.json > ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/registry/$1.json && rm ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$
+    echo "DBENTRY snapshot : ${DB_ENTRY[6]}" 1>&2
+    set -x
+    if [ "$DB_ENTRY[6]" != "" ]; then
+      echo "DBENTRY append snapshot : ${DB_ENTRY[6]}" 1>&2
+      jq " .versions.\"${WOV_PVER}\".parent.snapshot=\"${DB_ENTRY[6]}\"" \
+       ${WOV_BASEDIR}/wovtools/db/registry/$1.json > ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/registry/$1.json && rm ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$
+    fi
+    set +x
+
+
+    # - 4. update registry database pver number, with checksum ------------
+    # --------------------------------------------------------------------- 
+    echo "  ... update registry database pver number, with checksum"
+    R=$(wov-db-connect $1 -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver ) VALUES ( '$1', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER} );")
+    if [ "$?" != "0" ]; then
+      printf "\n\nERROR: failed updating registry database pver number with checksum.\n"
+      retval=3
+    fi
   fi
-  # append this entry
-  jq " .versions.\"${WOV_PVER}\"={ \"checksum\": \"${CHKSUM}\", \"parent\": { \"type\": \"pver\", \"pver\": \"${DB_PVER}\" } }" \
-     ${WOV_BASEDIR}/wovtools/db/registry/$i.json > ${WOV_BASEDIR}/wovtools/db/registry/.$i.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/registry/.$i.json.$$ ${WOV_BASEDIR}/wovtools/db/registry/$i.json && rm ${WOV_BASEDIR}/wovtools/db/registry/.$i.json.$$
 
-
-  # - 4. update registry database pver number, with checksum ------------
-  # --------------------------------------------------------------------- 
-  echo "  ... update registry database pver number, with checksum"
-  R=$(wov-db-connect $i -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver ) VALUES ( '$i', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER} );")
-  if [ "$?" != "0" ]; then
-    printf "\n\nERROR: failed updating registry database pver number with checksum.\n"
-    exit 1
-  fi
-
+  return $retval
 }
 
 
@@ -338,7 +410,7 @@ while [[ $1 =~ ^- ]]; do
     shift
     DOACTION="checksum"
 
-  elif [ "$1" == "--any-push-blockage" ]; then
+  elif [ "$1" == "--any-push-blockage" ] || [ "$1" == "-pc" ] || [ "$1" == "--push-check" ]; then
     shift
     DOACTION="check"
 
@@ -357,12 +429,11 @@ done
 
 
 
-DATABASES=( $(doFindDatabases $*) )
-#echo "DATABASES: ${DATABASES[@]}"
-
-
 retval=1
 if [ "$DOACTION" == "check" ]; then
+
+  DATABASES=( $(doFindDatabases $*) )
+  #echo "DATABASES: ${DATABASES[@]}"
 
   # check each db
   retval=0
@@ -374,6 +445,10 @@ if [ "$DOACTION" == "check" ]; then
   # printf "\nAny blockage to pushing?:$R1\n\n"
 
 elif [ "$DOACTION" == "checksum" ]; then
+
+  DATABASES=( $(doFindDatabases $*) )
+  #echo "DATABASES: ${DATABASES[@]}"
+
   # check each db
   retval=0
   for i in "${DATABASES[@]}"; do
@@ -384,6 +459,10 @@ elif [ "$DOACTION" == "checksum" ]; then
   done
 
 elif [ "$DOACTION" == "commit" ]; then
+
+  DATABASES=( $(doFindDatabases $*) )
+  echo "DATABASES: ${DATABASES[@]}"
+
   doCommit
   retval=$?
   echo $R

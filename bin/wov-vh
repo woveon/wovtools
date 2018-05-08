@@ -129,7 +129,7 @@ Created virtual machine for developemnt. (type 'wov-ns' to see)
 
            Connect: 'wov-pshell vh'   <-- wovpshell is a utility
                                             to connect to any K8s pod
-                or: 'wov-v -l'          <-- shortcut
+                or: 'wov-vh -l'          <-- shortcut
 
 =====================================================================
 
