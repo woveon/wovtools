@@ -48,10 +48,12 @@ Here we have a mysecret.json file which generates two files, one for code (confi
 		"prod": {"url": "my.site.com"}, "token": "lDLMNXFoUmsuFddX6D" }
 }
 
-<config.ck8s>
+<${WOV_BASE}/wovtools/conf/config.ck8s>
+# regular environment variables go here
 MY_SITE_URL=\{{my.{{STAGE}}.url}}
 
-<config.sk8s>
+<${WOV_BASE}/wovtools/conf/config.sk8s>
+# sensitive environment variables go here
 MY_SITE_TOKEN=\{{my.{{STAGE}}.token}}
 
 <healthcheck.sh>
@@ -62,6 +64,12 @@ curl ${MY_SITE_URL}/api/v1/health
 . $(wov-env --conf) # equivalent to $(wov-env --env config.ck8s --env config.sk8s)
 curl ${MY_SITE_URL}/api/v1/foo&token=${MY_SITE_TOKEN}
 ```
+
+**Q. How do you manage secrets?**
+
+A. We use Git to versions secrets. This gives us a SVER number which we pair with the PVER to create a label when pushing content to the Archive.
+
+NOTE: So, PLEASE make sure you trust your repository location (i.e. Github (and likely other free services) are not secure). Also, our preprocessing data is pushed to a `projectroot/wovtools/cache` directory restricted to only the user. You should probably encrypt your harddrive for another layer of secrity if someone goes around this restriction.
 
 **Q. How to you manage databases?**
 
