@@ -22,7 +22,7 @@ A. You develop code. You run it locally and it works. How do you get that into K
 
 A. Each developer is treated as their own stage of production, and that stage used in Kubernetes namespaces. So, each developer has their own git branch and runs code in separate namespaces. Merging branches allows you to push to dev and production.
 
-**Q. How do you handle the massive amount of configuration, for local as well as in the cloud running?
+**Q. How do you handle the massive amount of configuration, for local as well as in the cloud running?**
 
 A. Kubernetes is great once it runs. Getting something running locally requires a lot of work before it runs in a development stage of your Kubernetes cluster, and still more configuration changes when it rolls to production. We handle this by...
     - place all your configuration data into json files
@@ -31,7 +31,7 @@ A. Kubernetes is great once it runs. Getting something running locally requires 
     - WovTools maintains an up-to-date configuration environment, by rebuilding the configuration as necessary (`wov-build`)
     - version the configuration (WOV_SVER) and use it to generate Kubernetes ConfigMaps and Secrets for running pods
 
-**Q. Wait, how do you manage configuration?
+**Q. Wait, how do you manage configuration?**
 
 A. Every script, system, pod, blah... needs some configuration. It's a nightmare. So, json is the source and we generate all configuration with preprocessor statements. Then, you restrict who has which json files so only certain people have dev and production stage access. By storing data in json in a hierarchy including the stage, then using a first handlebars pass to direct handlebar expressions to a particular stage, then we have a dynamic configuration environment. Of course, by versioning it and keeping it in the Archive, we can apply it to the running Kubernetes system as well a use locally. You don't have separate configuration environments, you just change your Kubernetes context and it changes with you. 
 
