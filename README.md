@@ -27,8 +27,10 @@
 
 **Step 3: Deploy to Cluster**
 - Select the version of your system to deploy (defaults to most recent)
-- download all Kubernetes files locally as a package
-- push Kubernets files to cluster
+- Downloads Kubernetes files and pushes to running cluster
+- Use Wovtools CLI to peer into, modify and tinker with running cluster
+- Debug a service locally (port forwarding) or on a development pod (Service rerouting) 
+- Return to step 1 as needed
 
 **Step 4: Merge to next Stage**
 - Change git branch and Kubernetes context to next stage (i.e. 'dev', 'prod', 'security', etc)
