@@ -1,6 +1,38 @@
 # WovTools
 
-> WovTools manages the different staging environments a team working on microservices for a Kubernetes environment will use, moving from a user space, to a production environment. It manages code, secrets and configuration for source code, dev/running environments and Kubernetes. At Woveon, we use WovTools to manage our systems.
+> WovTools manages the configuration and staging for a Kubernetes development/devOps team; moving from a single dev's environment, to a production environment. This is the tool between writing code on your dev machine and tweaking Kubernetes yaml files on the cluster.
+
+### Guiding Philosophies: 
+
+- Kubernetes is great when it runs but getting there is tricky.
+- Keep as much in the existing tools people already use as possible (sit on them and update them, don't overwrite).
+- There are multiple developers on a team, that work individually and collaboratively in later stages.
+- Toggling local directories breaks you out of your task and really isn't relevant when you're thinking in the cluster.
+
+### Approach to Development
+
+**Step 1: Local Development**
+- create/select your stage (i.e. I use my initials to name it)
+- write code (like in the olden days!)
+- store your configuration and secrets in JSON files (environment variables generated for you)
+- update your databases and schemas (database deltas)
+- build containers to run in the cluster
+
+**Step 2: Push to Archive**
+- push code and configuration/secrets to Git (secure repo for configuration/secrets)
+- push generated Kubernetes yaml files (Deployments, ConfigMaps, Secrets, Ingress, Services, etc) to secure repository
+- push containers to Docker repository
+- push database deltas to repository
+
+**Step 3: Deploy to Cluster**
+- Select the version of your system to deploy (defaults to most recent)
+- download all Kubernetes files locally as a package
+- push Kubernets files to cluster
+
+**Step 4: Merge to next Stage**
+- Change git branch and Kubernetes context to next stage (i.e. 'dev', 'prod', 'security', etc)
+- Merge in git repos to this stage (code, configuration, database deltas)
+- go to step 1.
 
 > Read the Wiki for more information: [Wiki Home](https://github.com/woveon/wovtools/wiki)
 
