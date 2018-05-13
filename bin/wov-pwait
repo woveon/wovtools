@@ -5,7 +5,6 @@ WAITTIME=3
 WAITFIRST=0
 NAMESPACE=
 
-#set -x
 
 function fDoDisplay()
 {

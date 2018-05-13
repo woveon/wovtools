@@ -62,7 +62,7 @@ function InitProject()
   git config user.email "${WOV_USEREMAIL}"
 
   # Ensure lines in .gitignore
-  LINES=("*.swp" ".DS_Store" "wovtools/secrets" "wovtools/cache" "wovtools/db/*.deltas")
+  LINES=("*.swp" ".DS_Store" "wovtools/secrets" "wovtools/cache" "wovtools/db/*.deltas" "config_local.json")
   for f in "${LINES[@]}"; do
     echo "  ... adding to .gitignore: $f"
     if ! grep -qF "${f}" .gitignore ; then echo "${f}" >> .gitignore ; fi
@@ -259,9 +259,7 @@ EOF
 echo "... ensure directory structure"
 if [ "$(wov-env &> /dev/null ; echo $?)" == "1" ]; then
   echo "... creating new wovtools project in this directory."
-#  set -x
   InitProject
-#  set +x
 fi
 
 echo "... importing the existing wovtools project in this directory."
@@ -312,7 +310,6 @@ if [ "${A}" != "" ]; then WOV_ARCHIVEENV=${A}; fi
 
 
 echo "... writing 'wovtools/config.json'"
-set -x
 jq ' .ver='${WOV_VERSION}' | .project.type="'"${WOV_PROJECTTYPE}"'" | .project.project="'"${WOV_PROJECT}"'"  | .project.title="'"${WOV_PROJECTTITLE}"'"  | .project.description="'"${WOV_PROJECTDESCRIPTION}"'" | .secrets={ "'${WOV_GSTAGE}'": [ "base.json" ] } | .operation={} | .archive.env="'"${WOV_ARCHIVEENV}"'" | .archive.repository="'"${WOV_ARCHIVEREPOSITORY}"'"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json.$$ && cp ${WOV_BASEDIR}/wovtools/.config.json.$$ ${WOV_BASEDIR}/wovtools/config.json
 rm ${WOV_BASEDIR}/wovtools/.config.json.*
 

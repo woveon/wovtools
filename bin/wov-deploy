@@ -9,17 +9,22 @@ FOLD=80
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
-pushenvargs=( "$@" )
+deployenvargs=( "$@" )
 set ""
 . wov-env
 . wov-ns-check
-set -- "${pushenvargs[@]}"
+set -- "${deployenvargs[@]}"
 
 
+K8SFILES=
 
 # Cache the current values
 WOV_CUR_PVER=${WOV_PVER}
 WOV_CUR_SVER=${WOV_SVER}
+
+printf "\n"
+figlet wov-deploy
+printf " version: ${WOV_STAGE}_${WOV_CUR_PVER}_${WOV_CUR_SVER}\n"
 
 
 if [ "${WOV_STAGE}" == "prod" ]; then
@@ -35,7 +40,6 @@ if [ "${WOV_STAGE}" == "prod" ]; then
 fi
 
 
-#set -x
 
 
 # ---------------------------------------------------------------------
@@ -45,9 +49,11 @@ function fDisplayOptions()
   cat <<EOF | fold -w ${FOLD} -s
 
 
-usage: `basename $0` [options]
+usage: `basename $0` [options] {files ...}
 
 Deploys a running kubernetes project from an archive.
+
+files : all by default, or type them here and do individual only
 
   --pver|--sver X : sets the Project and Secret version for roll-backs
   -r|--retain : retains the deployment values locally (potential security risk)
@@ -105,25 +111,32 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
+# Little more feedback
+if [ "${WOV_CUR_PVER}" != "${WOV_PVER}" ] || [ "${WOV_CUR_SVER}" != "${WOV_SVER}" ]; then
+  printf " deploying version: ${WOV_STAGE}_${WOV_CUR_PVER}_${WOV_CUR_SVER}\n"
+fi
+printf "\n"
+
+
 ## all args gone by now so not backing up args
 #. wov-push
 
 
 # If deploying the latest PVER, check that all code is pushed to archive
 if [ "${WOV_CUR_PVER}" == "${WOV_PVER}" ]; then
-  wov-git-check -q ${WOV_BASEDIR}
+  wov-git-check ${WOV_BASEDIR}
   R1=$?
-  wov-git-check -q ${WOV_BASEDIR}/wovtools/secrets
+  wov-git-check ${WOV_BASEDIR}/wovtools/secrets
   R2=$?
   if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
 fi
 
 # If deploying the latest SVER, check that all env is pushed to archive
 if [ "${WOV_CUR_SVER}" == "${WOV_SVER}" ]; then
-  pushenvargs=( "$@" )
+  deployenvargs=( "$@" )
   set ""
   . wov-push-env -q
-  set -- "${pushenvargs[@]}"
+  set -- "${deployenvargs[@]}"
 fi
 
 ARCHBASE=${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}
@@ -158,9 +171,17 @@ FILES=$(cd ${DEPLOYDIR}/conf; ls *.ck8s 2> /dev/null)
 for F in ${FILES}; do
   f=${F%.ck8s}
   if [ $DOECHO -ge 1 ]; then echo "  ... creating ConfigMap ${f} from ${F}"; fi
-  DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 , "\\" }')
+
+  #DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 }' | gsed ':a;N;$!ba;s/\n/ /g')
+  DATA=()
+  while read l; do
+    #echo ":$l"
+    d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
+    if [ "$d" != "" ]; then DATA+=("$d"); fi
+  done <${DEPLOYDIR}/conf/${F}
+
   kubectl delete configmap ${f} #2> /dev/null
-  kubectl create configmap ${f} ${DATA}
+  kubectl create configmap ${f} "${DATA[@]}"
   if [ "$?" != "0" ]; then
     printf "\nERROR: failed creating ConfigMap $f.\n"
     printf " - check file ${DEPLOYDIR}/conf/${F}\n"
@@ -175,9 +196,16 @@ FILES=$(cd ${DEPLOYDIR}/conf; ls *.sk8s 2> /dev/null)
 for F in ${FILES}; do
   f=${F%.sk8s}
   if [ $DOECHO -ge 1 ]; then echo "  ... creating Secret ${f} from ${F}"; fi
-  DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 , "\\" }')
+#  DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 , "\\" }')
+  #DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 }' | gsed ':a;N;$!ba;s/\n/ /g')
+  DATA=()
+  while read l; do
+    #echo ":$l"
+    d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
+    if [ "$d" != "" ]; then DATA+=("$d"); fi
+  done <${DEPLOYDIR}/conf/${F}
   kubectl delete secret ${f} #2> /dev/null
-  kubectl create secret generic ${f} ${DATA}
+  kubectl create secret generic ${f} "${DATA[@]}"
   kubectl label  secret ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
 done
 
@@ -185,7 +213,21 @@ done
 # Deploy the k8s files
 if [ $DOECHO -ge 1 ]; then echo "... deploying Kubernetes"; fi
 if [ $DOECHO -ge 2 ]; then echo "  ... from ${DEPLOYDIR}/k8s"; fi
-kubectl apply -f ${DEPLOYDIR}/k8s
+
+if [ "$#" != "0" ]; then
+  K8SFILES=( $* )
+  for f in "${K8SFILES[@]}"; do
+    if [ ! -e ${DEPLOYDIR}/k8s/$f.yaml ]; then
+      printf "ERROR: unknown k8s file '$f.yaml'.\n"
+    else
+      kubectl apply -f ${DEPLOYDIR}/k8s/$f.yaml
+    fi
+  done
+else
+  kubectl apply -f ${DEPLOYDIR}/k8s
+fi
+
+#kubectl apply -f ${DEPLOYDIR}/k8s
 #FILES=$(cd ${DEPLOYDIR}/k8s; ls *.yaml)
 #for F in ${FILES}; do
 #  f=${F%.yaml}

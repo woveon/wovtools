@@ -21,7 +21,7 @@ function DoDisplay {
   wov-git-check ${WOV_BASEDIR}
   wov-git-check ${WOV_BASEDIR}/wovtools/secrets
   echo
-  echo "- namespaces - (of stage -${WOV_STAGE}) -----------------------------------------------"
+  echo "- namespaces, other- (of stage -${WOV_STAGE}) ---------------------------------"
   kubectl get namespaces | grep "\-${WOV_STAGE}" | awk '{print $1}' | tr '\n' ' '
   echo 
   echo 
@@ -29,20 +29,20 @@ function DoDisplay {
   kubectl get --no-headers -n "$WOV_NS" -o wide ingress
   echo 
   echo "- deployments -------------------------------------------------------"
-  kubectl get --no-headers -n "$WOV_NS" deployments
+  kubectl get --no-headers -n "$WOV_NS" deployments --show-labels=true
   echo 
   echo "- services ----------------------------------------------------------"
-  kubectl get --no-headers -n "$WOV_NS" services
+  kubectl get --no-headers -n "$WOV_NS" services --show-labels=true
   echo 
   echo "- pods --------------------------------------------------------------"
-  kubectl get --no-headers -n "$WOV_NS" pods
+  kubectl get --no-headers -n "$WOV_NS" pods --show-labels=true
   echo 
   echo "- endpoints ---------------------------------------------------------"
-  kubectl get --no-headers -n "$WOV_NS" endpoints
+  kubectl get --no-headers -n "$WOV_NS" endpoints --show-labels=true
   echo 
   echo "- secrets and configmaps --------------------------------------------"
-  kubectl get --no-headers -n "$WOV_NS" secrets
-  kubectl get --no-headers -n "$WOV_NS" configmaps
+  kubectl get --no-headers -n "$WOV_NS" secrets --show-labels=true
+  kubectl get --no-headers -n "$WOV_NS" configmaps --show-labels=true
 }
 
 

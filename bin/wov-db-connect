@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 
-DOECHO=1
-FOLD=140
-DATABASESERVER=
 
 
 # ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
-wov-build -e
+wov-build -i -e
 pushenvargs=( "$@" )
 set ""
 . wov-env
-. wov-ns-check
+#. wov-ns-check
 set -- "${pushenvargs[@]}"
 
+DOECHO=1
+FOLD=$(tput cols)
+DATABASESERVER=
 
 
 # ---------------------------------------------------------------------
@@ -57,7 +57,8 @@ DATABASESERVER=$1
 shift
 
 # load env vars
-eval $(wov-env --env ${DATABASESERVER}.ck8s --env ${DATABASESERVER}.sk8s )
+#eval $(wov-env --env ${DATABASESERVER}.ck8s --env ${DATABASESERVER}.sk8s )
+eval $(wov-env --conf)
 
 # set to env vars
 DD=WOV_${DATABASESERVER}_type
@@ -74,6 +75,16 @@ DB_COMMAND=
 DB_OP=
 DB_FILE=
 
+function doDatabaseConnectMessage()
+{
+  printf "\n\n"
+  figlet "${DATABASESERVER}"
+  printf "  Namespace: ${WOV_NS}\n"
+  printf "  Type     : ${DB_TYPE}\n"
+  printf "  User     : ${DB_USERNAME}\n"
+  printf "  Host     : ${DB_HOST}\n"
+  printf "  Database : ${DB_DATABASE}\n\n"
+}
 
 # ---------------------------------------------------------------------
 # Handle Params
@@ -167,14 +178,41 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 
   elif [ "${DB_OP}" == "" ]; then
     # Log into pod 'vh', run psql
-    printf "\n\n"
-    figlet "${DATABASESERVER}"
-    printf "  Namespace: ${WOV_NS}\n"
-    printf "  Type     : ${DB_TYPE}\n"
-    printf "  User     : ${DB_USERNAME}\n"
-    printf "  Host     : ${DB_HOST}\n"
-    printf "  Database : ${DB_DATABASE}\n\n"
+    doDatabaseConnectMessage
     kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}"
+  fi
+
+elif [ "${DB_TYPE}" == "mongo" ]; then
+
+  if [ "${DB_OP}" == "schema" ]; then
+    # NOTE: mongo has no schema, so taking from first returned object
+    DB_COMMAND=$(cat <<EOF
+function printSchema(obj) {
+  for (var key in obj) {
+    print(' ', key, typeof obj[key]) ;
+  }
+};
+db.getCollectionNames().forEach(function(collname) {
+  print('COLLECTION:', collname);
+  // printSchema(db[collname].findOne()); // NOTE: not calling since if there is no object, then no schema
+})
+EOF)
+    kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
+
+  elif [ "${DB_OP}" == "command" ]; then
+    kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
+  elif [ "${DB_OP}" == "file" ]; then
+    printf "\nFile: untested\n\n";
+    kubectl cp ${DB_FILE} vh:.${DATABASESERVER}.sql.$$
+    kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} ${DBSERVER}.sql.$$"
+    kubectl exec -i vh -- /bin/bash -c "rm -f .${DATABASESERVER}.sql.$$"
+  elif [ "${DB_OP}" == "" ]; then
+    doDatabaseConnectMessage
+    if [ "${WOV_DEVMODE}" == "local" ]; then
+      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}
+    else
+      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"
+    fi
   fi
 
 else

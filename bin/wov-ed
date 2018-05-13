@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
   
-DOECHO=1
-
-FOLD=80
-HAS_SECRET=0
-HAS_BUILDENV=0
-SECRETDIFF=1
-DONEW=0
-EDPATH=''
 
 
 # --------------------------------------------------------------------- 
@@ -19,6 +11,14 @@ set ""
 #. wov-ns-check
 set -- "${buildargs[@]}"
 
+DOECHO=1
+FOLD=80
+HAS_SECRET=0
+HAS_BUILDENV=0
+SECRETDIFF=1
+DONEW=0
+EDPATH=''
+NEWWINDOW=0
 
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
@@ -38,6 +38,7 @@ NOTE: this will test for '.wov' extension if needed.
 
   -n : new, creates the file
   -s : edit the src file
+  -x : open in new window
   -c : edit the cached file
   -h : this help
 
@@ -65,6 +66,10 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-s" ]; then
     shift
     EDPATH=''
+
+  elif [ "$1" == "-x" ]; then
+    shift
+    NEWWINDOW=1
 
   elif [ "$1" == "-c" ]; then
     shift
@@ -109,7 +114,11 @@ if [[ $1 == conf/* ]]     || [[ $1 == k8s/* ]]  || [[ $1 == containers/* ]] ||
       exit 1
     fi
   fi
-  $EDITOR ${P}
+  if [ "${NEWWINDOW}" == "1" ]; then
+    x $EDITOR ${P}
+  else
+    $EDITOR ${P}
+  fi
 
 else
   printf "\n\nERROR: unknown wovtools directory of '"$(echo "$1" | cut -d "/" -f1)"'.\n"

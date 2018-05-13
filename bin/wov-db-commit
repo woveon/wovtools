@@ -203,7 +203,6 @@ function doPushCheck()
       fi 
       if [ "${DB_HASH}" == "${REG_HASH}" ]; then chk_1=F; else chk_1=T; fi
     fi
-    set +x
   fi
 
 
@@ -376,13 +375,11 @@ EOF
     jq " .versions.\"${WOV_PVER}\"={ \"checksum\": \"${CHKSUM}\", \"parent\": { \"type\": \"pver\", \"pver\": \"${DB_PVER}\" } }" \
        ${WOV_BASEDIR}/wovtools/db/registry/$1.json > ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/registry/$1.json && rm ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$
     echo "DBENTRY snapshot : ${DB_ENTRY[6]}" 1>&2
-    set -x
     if [ "$DB_ENTRY[6]" != "" ]; then
       echo "DBENTRY append snapshot : ${DB_ENTRY[6]}" 1>&2
       jq " .versions.\"${WOV_PVER}\".parent.snapshot=\"${DB_ENTRY[6]}\"" \
        ${WOV_BASEDIR}/wovtools/db/registry/$1.json > ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/registry/$1.json && rm ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$
     fi
-    set +x
 
 
     # - 4. update registry database pver number, with checksum ------------
@@ -469,7 +466,7 @@ elif [ "$DOACTION" == "checksum" ]; then
 elif [ "$DOACTION" == "commit" ]; then
 
   DATABASES=( $(doFindDatabases $*) )
-  echo "DATABASES: ${DATABASES[@]}"
+#  echo "DATABASES: ${DATABASES[@]}"
 
   doCommit
   retval=$?

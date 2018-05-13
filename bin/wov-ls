@@ -12,7 +12,6 @@ lsargs=( "$@" )
 set ""
 . wov-env
 set -- "${lsargs[@]}"
-#set -x
 
 
 

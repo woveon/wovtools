@@ -1,9 +1,10 @@
-#!/usr/bin/env bash
+#!/usr/bin/env /usr/local/bin/bash
 
 FOLD=80
 WOV_VERSION=0
 WOV_BASEDIR=$(git rev-parse --show-toplevel)
 export WOV_BASEDIR
+
 
 if [ "$1" == "--vh-label" ]; then
   echo "0.1"
@@ -37,6 +38,11 @@ usage: `basename $0` [options]
   -h/--help    : display these options
   -v/--version : version of wovtools
   --vh-label   : vh label in DockerHub repo
+  --conf       : load all the configuration as environment variables (one line)
+  --envs       : load all the configuration as environment variables (sep lines)
+  --devmode X  : sets the delopment mode to 'local' or 'remote'
+   --local     : same as '--devmode local'
+   --remote    : same as '--devmode remote'
   --env X      : echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
   --cmd X      : for commands on one line, echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
   --qcmd X     :   ", quoted
@@ -74,9 +80,7 @@ WOV_REGION=${array[2]}
 WOV_PROVIDER=${array[1]}
 WOV_CLTYPE=${array[0]}
 WOV_CLUSTER=${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}
-WOV_DEVMODE=
 
-#set -x 
 # vars from git, if in project directory
 WOV_PVER=$(git rev-list --count $(git rev-parse --abbrev-ref HEAD))
 WOV_SVER=$(cd ${WOV_BASEDIR}/wovtools/secrets && git rev-list --count $(git rev-parse --abbrev-ref HEAD))
@@ -109,6 +113,11 @@ export WOV_PROJECTTYPE
 export WOV_PROJECTTITLE
 export WOV_PROJECTDESCRIPTION
 
+# Track which mode we are in
+WOV_DEVMODE=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.devmode') 
+if [ "$WOV_DEVMODE" == "" ]; then WOV_DEVMODE="remote"; fi
+export WOV_DEVMODE
+
 WOV_ARCHIVEREPOSITORY=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.archive.repository') 
 WOV_ARCHIVEENV=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.archive.env') 
 export WOV_ARCHIVEREPOSITORY
@@ -120,13 +129,13 @@ WOV_STAGE=$WOV_GSTAGE
 export WOV_GSTAGE
 export WOV_STAGE
 
-# Set DEVMODE 
-if [[ ${WOV_GSTAGE} == "${WOV_KSTAGE}-l" ]]; then
-  WOV_DEVMODE=local
-elif [[ ${WOV_GSTAGE} == "${WOV_KSTAGE}-v" ]]; then
-  WOV_DEVMODE=virtual
-fi
-export WOV_DEVMODE
+## Set DEVMODE 
+#if [[ ${WOV_GSTAGE} == "${WOV_KSTAGE}-l" ]]; then
+#  WOV_DEVMODE=local
+#elif [[ ${WOV_GSTAGE} == "${WOV_KSTAGE}-v" ]]; then
+#  WOV_DEVMODE=virtual
+#fi
+#export WOV_DEVMODE
 
 WOV_PROJECT=${WOV_WPROJECT}
 export WOV_PROJECT
@@ -195,6 +204,25 @@ function fDoCluster()
   export CL_VPC
 }
 
+
+function doLoadConf()
+{
+  CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf/ && ls *.ck8s *.sk8s 2> /dev/null) )
+
+  for c in "${CONFS[@]}"; do
+    doCmd $c
+  done
+}
+function doLoadEnv()
+{
+  CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf/ && ls *.ck8s *.sk8s 2> /dev/null) )
+
+  for c in "${CONFS[@]}"; do
+    doEnv $c
+  done
+}
+
+
 function doEnv() 
 {
   if [ -e ${WOV_BASEDIR}/wovtools/cache/conf/${1} ]; then
@@ -254,6 +282,42 @@ function fConvertRegionCodeAWS()
   esac
 }
 
+
+# Toggle local and remote
+# --------------------------------------------------------------------- 
+function doManageDevmode()
+{
+  if [ "$1" == "local" ] || [ "$1" == "remote" ]; then
+    cat ${WOV_BASEDIR}/wovtools/config.json | jq ".project.devmode=\"$1\"" > \
+       ${WOV_BASEDIR}/wovtools/.config.json.$$ && \
+       mv ${WOV_BASEDIR}/wovtools/.config.json.$$ \
+          ${WOV_BASEDIR}/wovtools/config.json
+    touch ${WOV_BASEDIR}/wovtools/secrets/*
+
+    # kill all port forwards
+    if [ -e "${WOV_BASEDIR}/wovtools/cache/.portforwards" ]; then
+      local PFPIDS=( $(cat ${WOV_BASEDIR}/wovtools/cache/.portforwards ) )
+#      echo "PFPIDS ${PFPIDS}"
+      for p in "${PFPIDS[@]}"; do
+        ps -ef | grep "[k]ubectl port-forward" 2>&1 > /dev/null
+        if [ "$?" == "0" ]; then # found it
+          kill $p 2>/dev/null
+          echo "  ... killing port forward pid $p"
+        fi
+      done
+      rm ${WOV_BASEDIR}/wovtools/cache/.portforwards
+    fi
+
+    if [ -e ${WOV_BASEDIR}/wovtools/cmds/onDevmode${1^} ]; then
+      wov-cmd onDevmode${1^}
+    else
+      echo "  ... no 'onDevmode${1^}' command found (no worries)."
+    fi
+
+  fi
+
+}
+
 # --------------------------------------------------------------------- 
 # Command line processing
 while [[ $1 =~ ^- ]]; do
@@ -261,6 +325,12 @@ while [[ $1 =~ ^- ]]; do
     ECHOMODE=1
   elif [ "$1" == '-c' ] || [ "$1" == '--cluster' ]; then
     fDoCluster
+
+  elif [ "$1" == "--conf" ]; then
+    doLoadConf
+
+  elif [ "$1" == "--envs" ]; then
+    doLoadEnv
 
   elif [ "$1" == "--env" ]; then
     shift
@@ -277,6 +347,18 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--sl" ]; then
     shift
     doStringLiteral $1
+
+  elif [ "$1" == "--devmode" ]; then
+    shift
+    doManageDevmode $1
+
+  elif [ "$1" == "--local" ]; then
+    shift
+    doManageDevmode local
+
+  elif [ "$1" == "--remote" ]; then
+    shift
+    doManageDevmode remote
 
   elif [ "$1" == "--rcAWS" ]; then
     shift

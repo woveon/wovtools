@@ -20,12 +20,25 @@ set ""
 set -- "${pushargs[@]}"
 
 
+if [ "$WOV_DEVMODE" != "remote" ]; then
+  printf "\nERROR: Can not push when is devmode '${WOV_DEVMODE}'. Run 'wov-env --remote'.\n\n"
+  exit 1
+fi
+
+printf "\n"
+figlet wov-push
+printf " version: ${WOV_STAGE}_${WOV_PVER}_${WOV_SVER}\n\n"
+
+
 # Check local code is checked in and pushed
 wov-git-check ${WOV_BASEDIR}
 R1=$?
 wov-git-check ${WOV_BASEDIR}/wovtools/secrets
 R2=$?
-if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
+if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then 
+  printf "\nERROR: wov-push exiting\n" 1>&2
+  exit 1
+fi
 echo "  ... check for database changes that could block the push"
 wov-db-commit --any-push-blockage
 R3=$?
