@@ -15,8 +15,9 @@
 - create/select your stage (i.e. I use my initials to name it)
 - write code (like in the olden days!)
 - store your configuration and secrets in JSON files (environment variables generated for you)
-- update your databases and schemas (database deltas)
-- build containers to run in the cluster
+- update your databases and schemas (i.e. database deltas)
+- write Dockerfiles (with Handlebars expressions to insert configuration data)
+- write Kubernetes files (with Handlebars expressions to insert configuration data)
 
 **Step 2: Push to Archive**
 - push code and configuration/secrets to Git (secure repo for configuration/secrets)
