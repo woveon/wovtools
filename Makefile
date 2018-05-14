@@ -1,7 +1,8 @@
 
 
 BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service wov-ed wov-ls wov-vh wov-pwait \
-	        wov-pshell wov-cmd wov-kui wov-git-check wov-pull-dir wov-db wov-db-commit wov-db-connect wov-cd
+	        wov-pshell wov-cmd wov-kui wov-git-check wov-pull-dir wov-db wov-db-commit wov-db-connect wov-cd \
+					wov-portforward
 BINS=wov-env wov-ns-check wov-stage wov-build wov-compile \
 		 wov-pushcode-check wov-pushcontainer-check wov-pushenv-check wov-push-containers wov-push-env wov-push-secrets wov-push \
 		 wov-deploy wov-deploy-info \

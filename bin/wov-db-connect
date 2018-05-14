@@ -179,7 +179,11 @@ if [ "${DB_TYPE}" == "postgres" ]; then
   elif [ "${DB_OP}" == "" ]; then
     # Log into pod 'vh', run psql
     doDatabaseConnectMessage
+#    if [ "${DB_HOST}" == "localhost" ]; then
+#      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
+#    else
     kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}"
+#    fi
   fi
 
 elif [ "${DB_TYPE}" == "mongo" ]; then
@@ -208,11 +212,11 @@ EOF)
     kubectl exec -i vh -- /bin/bash -c "rm -f .${DATABASESERVER}.sql.$$"
   elif [ "${DB_OP}" == "" ]; then
     doDatabaseConnectMessage
-    if [ "${WOV_DEVMODE}" == "local" ]; then
-      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}
-    else
-      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"
-    fi
+#    if [ "${DB_HOST}" == "localhost" ]; then
+#      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}
+#    else
+    kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"
+#    fi
   fi
 
 else

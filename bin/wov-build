@@ -34,11 +34,15 @@ Builds the environment information of a WovTools distribution. Specifically, the
 
   -q : quiet
   -v : verbose
+  --mod X : stage modifier X used to build this (and export location). ex. '--mod local'
   -l : use local variables in build
   -s : build the secret file
   -e : build the environment files (-s assumed)
   -g : build an environment grouping file 
   --clean : cleans the cache
+
+Stage Modifiers:
+Developing locally requires port forwarding to the cluster, but also changes to configuration so that your code connects to local ports an hosts, as opposed to what it would try in the cluster. The '--mod X' switch incorporates the {{STAGE-X}} items in the secrets, and produces configuration files for conf-X.
 
 EOF
 }
@@ -50,8 +54,11 @@ EOF
 # --------------------------------------------------------------------- 
 SECRET_CACHE_DIR=${WOV_BASEDIR}/wovtools/cache/secrets
 SECRETFILE=${SECRET_CACHE_DIR}/current.json
-LSECRETFILE=${SECRET_CACHE_DIR}/current_local.json
+#LSECRETFILE=${SECRET_CACHE_DIR}/current_local.json
 SECRETFILELAST=${SECRET_CACHE_DIR}/last.json
+STAGEMOD=
+SECRETMODFILE=
+SECRETMODFILELAST=
 
 
 # --------------------------------------------------------------------- 
@@ -127,18 +134,34 @@ EOF
     mv ${SECRETFILE}.1 ${SECRETFILE}
   done
 
-  if [ "${WOV_DEVMODE}" == "local" ]; then
-    touch ${LSECRETFILE}
-    chmod 600 ${LSECRETFILE}
-    touch ${LSECRETFILE}.1
-    chmod 600 ${LSECRETFILE}.1
+
+#  echo "stagemod ${STAGEMOD}"
+  if [ "${STAGEMOD}" != "" ]; then
+    SECRETMODFILE=${SECRET_CACHE_DIR}/current-${STAGEMOD}.json
+    SECRETMODFILELAST=${SECRET_CACHE_DIR}/last-${STAGEMOD}.json
+    touch ${SECRETMODFILE}
+    chmod 600 ${SECRETMODFILE}
+    touch ${SECRETMODFILE}.1
+    chmod 600 ${SECRETMODFILE}.1
     # build local secret
     # walk the keys below - then remove -local on keys, then merge... so in my build script, I merge this output with the original so that this output appends and overwrites
-    cat ${SECRETFILE} | jq 'walk(if type=="object" then with_entries( if .key|=match("[\\w]*-local]") then .key=(.key|sub("(?<a>[\\w]*)-local"; .a )) else . end) else . end)' > ${LSECRETFILE}
-    jq -s ".[0] * .[1]" ${SECRETFILE} ${LSECRETFILE} > ${LSECRETFILE}.1
-    mv ${LSECRETFILE}.1 ${SECRETFILE}
-    rm ${LSECRETFILE}
+    cat ${SECRETFILE} | jq 'walk(if type=="object" then with_entries( if .key|=match("[\\w]*-'${STAGEMOD}']") then .key=(.key|sub("(?<a>[\\w]*)-'${STAGEMOD}'"; .a )) else . end) else . end)' > ${SECRETMODFILE}
+    jq -s ".[0] * .[1]" ${SECRETFILE} ${SECRETMODFILE} > ${SECRETMODFILE}.1
+    mv ${SECRETMODFILE}.1 ${SECRETMODFILE}
   fi
+
+#  if [ "${WOV_DEVMODE}" == "local" ]; then
+#    touch ${LSECRETFILE}
+#    chmod 600 ${LSECRETFILE}
+#    touch ${LSECRETFILE}.1
+#    chmod 600 ${LSECRETFILE}.1
+#    # build local secret
+#    # walk the keys below - then remove -local on keys, then merge... so in my build script, I merge this output with the original so that this output appends and overwrites
+#    cat ${SECRETFILE} | jq 'walk(if type=="object" then with_entries( if .key|=match("[\\w]*-local]") then .key=(.key|sub("(?<a>[\\w]*)-local"; .a )) else . end) else . end)' > ${LSECRETFILE}
+#    jq -s ".[0] * .[1]" ${SECRETFILE} ${LSECRETFILE} > ${LSECRETFILE}.1
+#    mv ${LSECRETFILE}.1 ${SECRETFILE}
+#    rm ${LSECRETFILE}
+#  fi
 
 
   # Is secret different from last run?
@@ -186,43 +209,55 @@ function fBuildEnv()
   mkdir -p ${WOV_BASEDIR}/wovtools/cache/k8s
   chmod 700 ${WOV_BASEDIR}/wovtools/cache
 
-  fBuildEnvDir conf
-  fBuildEnvDir k8s
+
+  # build conf (and if stagemod, do that as well)
+  fBuildEnvDir conf conf ${SECRETFILE}
+  if [ "$STAGEMOD" != "" ]; then
+    fBuildEnvDir conf conf-${STAGEMOD} ${SECRETMODFILE}
+  fi
+
+  # build k8s (no stagemod (will I regret this?... dunno))
+  fBuildEnvDir k8s k8s ${SECRETFILE}
 
   # mark as done
   HAS_BUILDENV=1
 
   # Update secret since it was used
   cp ${SECRETFILE} ${SECRETFILELAST}
+  if [ "${STAGEMOD}" != "" ]; then
+    cp ${SECRETMODFILE} ${SECRETMODFILELAST}
+  fi
 }
 
 
 # --------------------------------------------------------------------- 
 # build all .wov files 
 #   from ${WOV_BASEDIR}/wovtools/$1 
-#     to ${WOV_BASEDIR}/wovtools/cache/$1
+#     to ${WOV_BASEDIR}/wovtools/cache/$2
 # --------------------------------------------------------------------- 
 fBuildEnvDir()
 {
 
-  DEST=${WOV_BASEDIR}/wovtools/cache/$1/${f%.wov}
+  mkdir -p ${WOV_BASEDIR}/wovtools/cache/$2
+  DEST=${WOV_BASEDIR}/wovtools/cache/$2/${f%.wov}
 
   # Find src files to compile
   WOVFILES=$(cd ${WOV_BASEDIR}/wovtools/$1; ls *.wov 2> /dev/null)
-  if [ "${WOVFILES}" == "" ]; then echo "  ... no $1 files found ( in wovtools/$1/*.wov)."; fi
+  if [ "${WOVFILES}" == "" ]; then echo "  ... no files found in wovtools/$1/*.wov."; fi
 
   # Compile them
   for f in ${WOVFILES}; do
 
     SRC=${WOV_BASEDIR}/wovtools/$1/${f}
-    DEST=${WOV_BASEDIR}/wovtools/cache/$1/${f%.wov}
+    DEST=${WOV_BASEDIR}/wovtools/cache/$2/${f%.wov}
+    USESECRET=$3
 
     # check if need to compile
     if [ "${SRC}" -nt "${DEST}" ] || [ "$SECRETDIFF" == "1" ]; then
       if [ "$DOECHO" == "2" ] || [ "$DOECHO" == "2" ]; then echo "  ... build ${SRC}"; fi
       #echo " --- `basename ${DEST}` needs to be built"
 #      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
-      wov-compile ${SECRETFILE} ${SRC} > ${DEST}
+      wov-compile ${USESECRET} ${SRC} > ${DEST}
     else
       if [ "$DOECHO" == "2" ]; then echo "  ... skipping ${SRC}"; fi
     fi
@@ -246,6 +281,14 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-i" ]; then
     shift
     DONSIGNORE=1
+
+  elif [ "$1" == "--mod" ]; then
+    shift
+    # sets the modifier and resets secrets and buildenv settings
+    STAGEMOD=$1
+    HAS_SECRET=0
+    HAS_BUILDENV=0
+    shift
 
   elif [ "$1" == "-v" ]; then
     shift

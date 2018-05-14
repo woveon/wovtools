@@ -202,13 +202,15 @@ if [ "${BLOCK}" == "0" ]; then
         echo "  ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
 
         # If just built, dump log, since it will have to push a lot of data
-        if [ "${JUSTBUILT}" == "1" ]; then
+#        if [ "${JUSTBUILT}" == "1" ]; then
+        set -x
           R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty )
           RR=$?
-        else
-          R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 )
-          RR=$?
-        fi
+        set +x
+#        else
+#          R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 )
+#          RR=$?
+#        fi
         # echo "R: ${R} RR=${RR}"
         if [[ $R == 'name unknown'* ]]; then
           printf "\n\n  ...${R}.\n"

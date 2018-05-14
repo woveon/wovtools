@@ -1,9 +1,11 @@
 #!/usr/bin/env /usr/local/bin/bash
 
-FOLD=80
+FOLD=$(tput cols)
 WOV_VERSION=0
 WOV_BASEDIR=$(git rev-parse --show-toplevel)
 export WOV_BASEDIR
+STAGEMOD=
+STAGEMODSPACE=
 
 
 if [ "$1" == "--vh-label" ]; then
@@ -38,11 +40,9 @@ usage: `basename $0` [options]
   -h/--help    : display these options
   -v/--version : version of wovtools
   --vh-label   : vh label in DockerHub repo
+  --mod X      : modifies the stage to use 'conf-X' files
   --conf       : load all the configuration as environment variables (one line)
   --envs       : load all the configuration as environment variables (sep lines)
-  --devmode X  : sets the delopment mode to 'local' or 'remote'
-   --local     : same as '--devmode local'
-   --remote    : same as '--devmode remote'
   --env X      : echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
   --cmd X      : for commands on one line, echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
   --qcmd X     :   ", quoted
@@ -114,9 +114,9 @@ export WOV_PROJECTTITLE
 export WOV_PROJECTDESCRIPTION
 
 # Track which mode we are in
-WOV_DEVMODE=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.devmode') 
-if [ "$WOV_DEVMODE" == "" ]; then WOV_DEVMODE="remote"; fi
-export WOV_DEVMODE
+#WOV_DEVMODE=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.project.devmode') 
+#if [ "$WOV_DEVMODE" == "" ]; then WOV_DEVMODE="remote"; fi
+#export WOV_DEVMODE
 
 WOV_ARCHIVEREPOSITORY=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.archive.repository') 
 WOV_ARCHIVEENV=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.archive.env') 
@@ -171,7 +171,7 @@ function fDoEcho()
   echo WOV_KSTAGE="$WOV_KSTAGE"
   echo WOV_GSTAGE="$WOV_GSTAGE"
   echo WOV_STAGE="$WOV_STAGE"
-  echo WOV_DEVMODE="${WOV_DEVMODE}"
+#  echo WOV_DEVMODE="${WOV_DEVMODE}"
   if [ "$RANCLUSTER" == "1" ]; then
     echo CL_REGION="$CL_REGION"
     echo CL_ZONES="${CL_ZONES}"
@@ -207,7 +207,7 @@ function fDoCluster()
 
 function doLoadConf()
 {
-  CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf/ && ls *.ck8s *.sk8s 2> /dev/null) )
+  CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/ && ls *.ck8s *.sk8s 2> /dev/null) )
 
   for c in "${CONFS[@]}"; do
     doCmd $c
@@ -215,7 +215,7 @@ function doLoadConf()
 }
 function doLoadEnv()
 {
-  CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf/ && ls *.ck8s *.sk8s 2> /dev/null) )
+  CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/ && ls *.ck8s *.sk8s 2> /dev/null) )
 
   for c in "${CONFS[@]}"; do
     doEnv $c
@@ -225,8 +225,8 @@ function doLoadEnv()
 
 function doEnv() 
 {
-  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf/${1} ]; then
-    cat ${WOV_BASEDIR}/wovtools/cache/conf/${1} | sed -e 's/#.*$//' -e '/^$/d'
+  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
+    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | sed -e 's/#.*$//' -e '/^$/d'
   else
     echo
     echo "ERROR: no environment file ${1} in cache."
@@ -236,8 +236,8 @@ function doEnv()
 }
 function doQCmd() 
 {
-  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf/${1} ]; then
-    cat ${WOV_BASEDIR}/wovtools/cache/conf/${1} | sed -e 's/#.*$//' -e '/^$/d' -e 's/^/'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
+  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
+    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | sed -e 's/#.*$//' -e '/^$/d' -e 's/^/'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
   else
     echo
     echo "ERROR: no environment file ${1} in cache."
@@ -248,8 +248,8 @@ function doQCmd()
 
 function doCmd() 
 {
-  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf/${1} ]; then
-    cat ${WOV_BASEDIR}/wovtools/cache/conf/${1} | sed -e 's/#.*$//' -e '/^$/d' | tr '\n' ' '
+  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
+    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | sed -e 's/#.*$//' -e '/^$/d' | tr '\n' ' '
   else
     echo
     echo "ERROR: no environment file ${1} in cache."
@@ -260,8 +260,8 @@ function doCmd()
 
 function doStringLiteral() 
 {
-  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf/${1} ]; then
-    cat ${WOV_BASEDIR}/wovtools/cache/conf/${1} | sed -e 's/#.*$//' -e '/^$/d' -e 's/^/\$'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
+  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
+    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | sed -e 's/#.*$//' -e '/^$/d' -e 's/^/\$'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
   else
     echo
     echo "ERROR: no environment file ${1} in cache."
@@ -285,38 +285,39 @@ function fConvertRegionCodeAWS()
 
 # Toggle local and remote
 # --------------------------------------------------------------------- 
-function doManageDevmode()
-{
-  if [ "$1" == "local" ] || [ "$1" == "remote" ]; then
-    cat ${WOV_BASEDIR}/wovtools/config.json | jq ".project.devmode=\"$1\"" > \
-       ${WOV_BASEDIR}/wovtools/.config.json.$$ && \
-       mv ${WOV_BASEDIR}/wovtools/.config.json.$$ \
-          ${WOV_BASEDIR}/wovtools/config.json
-    touch ${WOV_BASEDIR}/wovtools/secrets/*
+#function doManageDevmode()
+#{
+#  if [ "$1" == "local" ] || [ "$1" == "remote" ]; then
+#    cat ${WOV_BASEDIR}/wovtools/config.json | jq ".project.devmode=\"$1\"" > \
+#       ${WOV_BASEDIR}/wovtools/.config.json.$$ && \
+#       mv ${WOV_BASEDIR}/wovtools/.config.json.$$ \
+#          ${WOV_BASEDIR}/wovtools/config.json
+#    touch ${WOV_BASEDIR}/wovtools/secrets/*
+#
+#    # kill all port forwards
+#    if [ -e "${WOV_BASEDIR}/wovtools/cache/.portforwards" ]; then
+#      local PFPIDS=( $(cat ${WOV_BASEDIR}/wovtools/cache/.portforwards ) )
+##      echo "PFPIDS ${PFPIDS}"
+#      for p in "${PFPIDS[@]}"; do
+#        ps -ef | grep "[k]ubectl port-forward" 2>&1 > /dev/null
+#        if [ "$?" == "0" ]; then # found it
+#          kill $p 2>/dev/null
+#          echo "  ... killing port forward pid $p"
+#        fi
+#      done
+#      rm ${WOV_BASEDIR}/wovtools/cache/.portforwards
+#    fi
+#
+#    if [ -e ${WOV_BASEDIR}/wovtools/cmds/onDevmode${1^} ]; then
+#      wov-cmd onDevmode${1^}
+#    else
+#      echo "  ... no 'onDevmode${1^}' command found (no worries)."
+#    fi
+#
+#  fi
+#
+#}
 
-    # kill all port forwards
-    if [ -e "${WOV_BASEDIR}/wovtools/cache/.portforwards" ]; then
-      local PFPIDS=( $(cat ${WOV_BASEDIR}/wovtools/cache/.portforwards ) )
-#      echo "PFPIDS ${PFPIDS}"
-      for p in "${PFPIDS[@]}"; do
-        ps -ef | grep "[k]ubectl port-forward" 2>&1 > /dev/null
-        if [ "$?" == "0" ]; then # found it
-          kill $p 2>/dev/null
-          echo "  ... killing port forward pid $p"
-        fi
-      done
-      rm ${WOV_BASEDIR}/wovtools/cache/.portforwards
-    fi
-
-    if [ -e ${WOV_BASEDIR}/wovtools/cmds/onDevmode${1^} ]; then
-      wov-cmd onDevmode${1^}
-    else
-      echo "  ... no 'onDevmode${1^}' command found (no worries)."
-    fi
-
-  fi
-
-}
 
 # --------------------------------------------------------------------- 
 # Command line processing
@@ -348,23 +349,29 @@ while [[ $1 =~ ^- ]]; do
     shift
     doStringLiteral $1
 
-  elif [ "$1" == "--devmode" ]; then
-    shift
-    doManageDevmode $1
+#  elif [ "$1" == "--devmode" ]; then
+#    shift
+#    doManageDevmode $1
 
-  elif [ "$1" == "--local" ]; then
-    shift
-    doManageDevmode local
+#  elif [ "$1" == "--local" ]; then
+#    shift
+#    doManageDevmode local
 
-  elif [ "$1" == "--remote" ]; then
-    shift
-    doManageDevmode remote
+#  elif [ "$1" == "--remote" ]; then
+#    shift
+#    doManageDevmode remote
 
   elif [ "$1" == "--rcAWS" ]; then
     shift
     fConvertRegionCodeAWS $1
     echo "$cRC"
     shift
+
+  elif [ "$1" == "--mod" ]; then
+    shift
+    # sets the modifier and resets secrets and buildenv settings
+    STAGEMODSPACE="-"
+    STAGEMOD="$1"
 
   elif [ "$1" == '--var' ]; then
     shift 

@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+
+
+wov-build --mod local -e
+
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+portforwardargs=( "$@" )
+set ""
+. wov-env --mod local
+set -- "${portforwardargs[@]}"
+
+
+DOECHO=1
+FOLD=$(tput cols)
+
+
+function fDisplayOptions()
+{
+cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options] [services...]
+
+Forwards ports of certain services to their local ports.
+
+  -c|--clean : stop all port forwarding
+  -q : quiet
+  -v : verbose
+
+NOTE: Pids for processes doing the forwards are in: WOVTOOLS/cache/.portforwards.
+
+EOF
+}
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function doCleanPortForwards()
+{
+  if [ -e "${WOV_BASEDIR}/wovtools/cache/.portforwards" ]; then
+    local pid
+    local service
+    local port
+    while read -r pid service port; do
+      kill $pid 2>/dev/null
+      if [ "$?" == "0" ]; then # found it
+        echo "  ... killed forwarding of $service on $port, pid:$pid"
+      else
+        echo "  ... failed killing forwarding of $service on $port, pid:$pid"
+      fi
+    done < ${WOV_BASEDIR}/wovtools/cache/.portforwards
+    rm ${WOV_BASEDIR}/wovtools/cache/.portforwards
+
+  fi
+  if [ "$(ps -ef | grep "[k]ubectl port-forward" 2> /dev/null)" != "" ]; then
+    printf "... warning: remaining port-forwards\n"
+    ps -ef | grep "[k]ubectl port-forward"
+  fi
+}
+
+
+# --------------------------------------------------------------------- 
+# Command line processing
+while [[ $1 =~ ^- ]]; do
+  if [ "$1" == '-q' ] || [ "$1" == '--quiet' ]; then
+    DOECHO=0
+    shift
+
+  elif [ "$1" == '-v' ] || [ "$1" == '--verbose' ]; then
+    DOECHO=2
+    shift
+
+  elif [ "$1" == '-c' ] || [ "$1" == '--clean' ]; then
+    doCleanPortForwards
+    shift
+
+  elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    exit 1
+  fi
+done
+
+
+
+for s in $*; do
+  echo "s: $s"
+  ports=( $(kubectl get svc -o json | jq '.items[] | select(.metadata.labels.app=="'$s'") | .spec.ports[].port ') )
+  if [ "$?" == "0" ] && [ "$ports" != "" ]; then
+    echo "${ports[@]}"
+    pod=$(wov-p $s)
+    if [ "$?" == "0" ] && [ "$pod" != "" ]; then
+      for p in $ports; do
+        kubectl port-forward $pod $p:$p &
+        PP="$!"
+        if [ "$?" == "0" ]; then
+          printf "$PP\t$s\t$p\n" >> ${WOV_BASEDIR}/wovtools/cache/.portforwards
+          echo "  ...success: '$s:$p'"
+        else
+          echo "  ...error forwarding the service port: '$s:$p'"
+        fi
+      done
+    else
+      echo "  ...error finding pod to forward to: '$s'"
+    fi
+  else
+    echo "  ...error finding ports on service: '$s'"
+  fi
+
+done
