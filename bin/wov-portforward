@@ -92,17 +92,25 @@ done
 
 for s in $*; do
   echo "s: $s"
-  ports=( $(kubectl get svc -o json | jq '.items[] | select(.metadata.labels.app=="'$s'") | .spec.ports[].port ') )
+  ports=( $(kubectl get svc -o json | jq -r '.items[] | select(.metadata.labels.app=="'$s'") | .spec.ports[] | [ .port, .targetPort] | @csv') )
   if [ "$?" == "0" ] && [ "$ports" != "" ]; then
-    echo "${ports[@]}"
+#    echo "ports: ${#ports[@]} ${ports[@]}"
     pod=$(wov-p $s)
     if [ "$?" == "0" ] && [ "$pod" != "" ]; then
-      for p in $ports; do
-        kubectl port-forward $pod $p:$p &
+      for p in "${ports[@]}"; do
+        echo "p: ${p}"
+        portvals=( ${ports//,/ } )
+#        portvals=( $(echo "${p[@]}" | jq '(.port, .targetPort)' ) )
+        echo "${#portvals[@]} ${portvals[@]}"
+        tp=$(echo ${portvals[1]} | tr -d '"' )
+        if [ "$tp" == "mongodb" ]; then
+          tp=27017
+        fi
+        kubectl port-forward $pod ${tp}:${tp} &
         PP="$!"
         if [ "$?" == "0" ]; then
           printf "$PP\t$s\t$p\n" >> ${WOV_BASEDIR}/wovtools/cache/.portforwards
-          echo "  ...success: '$s:$p'"
+          echo "  ...success: '$s: $pod ${tp}:${tp}'"
         else
           echo "  ...error forwarding the service port: '$s:$p'"
         fi
@@ -113,5 +121,6 @@ for s in $*; do
   else
     echo "  ...error finding ports on service: '$s'"
   fi
+  set +x
 
 done

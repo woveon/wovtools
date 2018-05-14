@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
 
-DOECHO=1
-DOFORCE=0
-FOLD=80
-BLOCK=0
-SSHKEY=
-RECIPES=( )
-
 
 # --------------------------------------------------------------------- 
 # Import Env 
@@ -16,6 +9,13 @@ set ""
 . wov-env
 . wov-ns-check
 set -- "${pushcontainersargs[@]}"
+
+DOECHO=1
+DOFORCE=0
+FOLD=$(tput cols)
+BLOCK=0
+SSHKEY=
+RECIPES=( )
 
 
 # Check local code is checked in and pushed
@@ -113,7 +113,7 @@ if [ "${BLOCK}" == "0" ]; then
   # Build containers if needed
   for f in ${RECIPES}; do
 
-    if [ $DOECHO -ge 1 ]; then echo "... build container ${f}."; fi
+    if [ $DOECHO -ge 1 ]; then printf "\n%-${FOLD}s\n" "-" | tr ' ' '-' ; echo "... build container ${f}."; fi
 
     SRCDIR=${WOV_BASEDIR}
     DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${f}
@@ -127,8 +127,8 @@ if [ "${BLOCK}" == "0" ]; then
     # build the content in wovtools/cache/containers/$f
     mkdir -p ${DESTDIR}
     echo "  ... recipe $f"
-    echo "    ... DESTDIR=${DESTDIR}"
-    echo "    ... CONTAINER=${CONTAINER}"
+#    echo "    ... DESTDIR=${DESTDIR}"
+#    echo "    ... CONTAINER=${CONTAINER}"
     if [[ ! -x "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
       echo "ERROR: recipe for container ${f} not executable (${WOV_BASEDIR}/wovtools/containers/$f).";
     else
@@ -203,10 +203,8 @@ if [ "${BLOCK}" == "0" ]; then
 
         # If just built, dump log, since it will have to push a lot of data
 #        if [ "${JUSTBUILT}" == "1" ]; then
-        set -x
           R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty )
           RR=$?
-        set +x
 #        else
 #          R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 )
 #          RR=$?
