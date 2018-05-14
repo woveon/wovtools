@@ -41,13 +41,21 @@
 
 ## Overview
 
-WovTools tightly integrates git, Docker and Kubernetes, trying to create as little new overhead as possible. It has three data tracks it manages: secrets, env and code. **Secrets** are stored in multiple JSON files and used to compile the **Env** files which are used to configure environment variables, build scripts and Kubernetes yaml configuration files. **Code** is all managed in git repos and we separate out our stages into different branches of git, deployed to our cluster in separate namespaces. WovTools pushes secrets, env and code through three distinct steps: development, archive and deploy. This involves compiling files for archive in git, AWS S3 and Docker repositories, eventually to be deployed. The general operation of WovTools requires you to make use of a set of commands that operate on configurations in WovTools, git, Docker and Kubernets.
+WovTools tightly integrates Git, Docker and Kubernetes, trying to create as little new overhead as possible during development. It does this by relying on structures and naming conventions in these tools, and managing data in three tracks: secrets, env and code: 
+
+- **Secrets** are stored in multiple JSON files and used to compile the,
+
+- **Env** files which are used to configure environment variables, build scripts and Kubernetes yaml files; and
+
+- **Code** is all managed in git repo branches.
+
+The data tracts are moved through three distinct steps: development (in Git repos), archive (in AWS S3 and Docker repositories) and deployment (in a running cluster). WovTools provides command line tools to support its development, as well as general tools that probably should exist for Kubernetes anyway.
 
 ### Example Usage of our Facebook Plugin
 
-Our Facebook plugin connects to Facebook, listening for updates and pushing content. We run it in our own cluster that we call *wov-aws-va-live*, in its own project *plfb*, which we manage in three Kubernetes namespaces of *plfb-cw* (cw is my private namespace), *plfb-dev* and *plfb-prod*. Here's how the naming convetions play out in detail:
+Our Facebook plugin connects to Facebook, listening for updates and pushing content. We run it in our own cluster that we call *wov-aws-va-live*, in its own project *plfb*, which we manage in three Kubernetes namespaces of *plfb-cw* (cw is my private namespace, where 'cw' are my initials), *plfb-dev* and *plfb-prod*. Here's how the naming convetions play out in detail:
 
-The Kubernetes *context* for the production running Facebook plugin is `wov-aws-va-live-plfb-prod`. This means the cluster name is `wov-aws-va-live`, implying this cluster is the main Woveon cluster (wov), on Amazon Web Services (aws) in us-east-1 (i.e. that is in Virginia (va)) on our main cluster (live). (NOTE: We could make another cluster with flavor 'top' or 'brown' if we wanted, to test cluster deployment.) The plugin is one project, plfb, and follows our internal naming convetion of starting plugins with 'pl' followed by the plugin's short code, 'fb' for Facebook. There is one github repo for this project, and each namespace is its own branch (cw, dev, prod). Inside the project, there are three microservices (i.e. three Kubernetes deployments) that append their microservice code to the project to generate its name (wl - plfbwl - the Facebook plugin WoveonListener, rl - plfbrl - the Facebook plugin RemoteListener, etc.). Each microservice will have its own implementation, either a Helm chart or its own Deployment with its own container (plfbwl, plfbrl, etc.). Our cluster has two nodes, which we use _kube-aws_ to manage and at the moment, because we have not set up roles, one user (admin).
+The Kubernetes *context* for the production running Facebook plugin is `wov-aws-va-live-plfb-prod`. This means the cluster name is `wov-aws-va-live`, implying this cluster is the main Woveon cluster (sys=wov), on Amazon Web Services (provider=aws) in AWS's region us-east-1 (regioncode=va) (i.e. that is in Virginia (va)), on our main cluster (flavor=live) (We could make another cluster with flavor 'top' or 'brown' if we wanted, to experiment with cluster deployment, but chose 'live' for now). The plugin is one project, plfb (short for plugin Facebook), and follows our internal naming convetion of starting plugins with 'pl' followed by the plugin's short code, 'fb' for Facebook. There is one github repo for this project, and each namespace is its own branch (cw, dev, prod). Inside the project, there are three microservices (i.e. three Kubernetes deployments) that append their microservice code to the project to generate its name (wl - plfbwl - the Facebook plugin WoveonListener, rl - plfbrl - the Facebook plugin RemoteListener, etc.). Each microservice will have its own implementation, either a Helm chart or its own Deployment with its own container (plfbwl, plfbrl, etc.). Our cluster has two nodes, which we use _kube-aws_ to manage and at the moment, because we have not set up roles, one user (admin).
 
 ## FAQ
 
@@ -57,20 +65,28 @@ A. You develop code. You run it locally and it works. How do you get that into K
 
 **Q. How do you handle multiple developers on a project and Kubernetes?**
 
-A. Each developer is treated as their own stage of production, and that stage used in Kubernetes namespaces. So, each developer has their own git branch and runs code in separate namespaces. Merging branches allows you to push to dev and production.
+A. Each developer is treated as their own stage of production, and that stage used in Kubernetes namespaces to separate them. So, each developer has their own git branch and runs code in separate namespaces. Merging branches allows you to push to dev and production.
 
-**Q. How do you handle the massive amount of configuration, for local as well as in the cloud running?**
+**Q. Doesn't this mean a developer could impact production by too many pods?**
 
-A. Kubernetes is great once it runs. Getting something running locally requires a lot of work before it runs in a development stage of your Kubernetes cluster, and still more configuration changes when it rolls to production. We handle this by...
-    - place all your configuration data into json files
-    - instrument configuration files (basically bash environment variables and k8s yaml) with two-pass handlebars expresssions 
-      - the first pass converts the expression to the appropriate stage of the environment
-    - WovTools maintains an up-to-date configuration environment, by rebuilding the configuration as necessary (`wov-build`)
-    - version the configuration (WOV_SVER) and use it to generate Kubernetes ConfigMaps and Secrets for running pods
+A. Yes, by using too many resources in the cluster, but they can't screw up something in another namespace. If you can't live with that, set your development team to use a different cluster flavor. (How slick was that?)
+
+**Q. What does WovTools do to my development environment?**
+
+A. We create a 'wovtools' directory, where we place our files. We also modify your Git config to have 'dev' and 'prod' branches, with 'prod' being master. For databases, we create a database in the database, named wovtools, where we log versions. You will want to move your Kubernetes files into wovtools/k8s. 
+
+**Q. How do you handle the massive amount of configuration, for local as well as running in the cluster?**
+
+A. Kubernetes is great once it runs. Getting something running locally requires a lot of work before it runs in a development stage of your Kubernetes cluster, and still more configuration changes when it rolls to production. We handle this...
+    - ... by placing all your configuration data into json files (organize them as you like, they get merged together later anyway);
+    - ... by instrumenting configuration files (environment variables and k8s yaml) with two-pass handlebars expresssions, with the first pass converting expressions to the appropriate stage; 
+    - ... by maintaining an up-to-date configuration environment (we rebuild the configuration as necessary with `wov-build`); and
+    - ...by versioning the configuration (WOV_SVER) and use it to generate Kubernetes ConfigMaps and Secrets for running pods.
 
 **Q. Wait, how do you manage configuration?**
 
-A. Every script, system, pod, blah... needs some configuration. It's a nightmare. So, json is the source and we generate all configuration with preprocessor statements. Then, you restrict who has which json files so only certain people have dev and production stage access. By storing data in json in a hierarchy including the stage, then using a first handlebars pass to direct handlebar expressions to a particular stage, then we have a dynamic configuration environment. Of course, by versioning it and keeping it in the Archive, we can apply it to the running Kubernetes system as well a use locally. You don't have separate configuration environments, you just change your Kubernetes context and it changes with you. 
+A. TL;DR: *You don't have separate configuration environments, you just change your Kubernetes context and it changes with you.* 
+A. Every script, system, pod, blah... needs some configuration. It's a nightmare. So, json is the source and we generate all configuration with preprocessor statements. Then, in your organization, you restrict who has which json files so only certain people have dev and production stage access. By storing data in json in a hierarchy including the stage, then using a first handlebars pass to direct handlebar expressions to a particular stage, then we have a dynamic configuration environment. Of course, by versioning it and keeping it in the Archive, we can apply it to the running Kubernetes system as well a use locally. 
 
 **Q. Can you give an example of how configuration works?**
 Here we have a mysecret.json file which generates two files, one for code (config.ck8s) and one for secrets (config.sk8s). They are loaded into two different scripts (healthcheck.sh and getdata.sh) with the `wov-env` command. Now, if you need to call 'healthcheck.sh', it never needs to know about your Kubernetes context (and wov-env does a wov-build check so never becomes out of sync). 
