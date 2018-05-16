@@ -91,17 +91,17 @@ done
 
 
 for s in $*; do
-  echo "s: $s"
+  #echo "s: $s"
   ports=( $(kubectl get svc -o json | jq -r '.items[] | select(.metadata.labels.app=="'$s'") | .spec.ports[] | [ .port, .targetPort] | @csv') )
   if [ "$?" == "0" ] && [ "$ports" != "" ]; then
 #    echo "ports: ${#ports[@]} ${ports[@]}"
     pod=$(wov-p $s)
     if [ "$?" == "0" ] && [ "$pod" != "" ]; then
       for p in "${ports[@]}"; do
-        echo "p: ${p}"
+        #echo "p: ${p}"
         portvals=( ${ports//,/ } )
 #        portvals=( $(echo "${p[@]}" | jq '(.port, .targetPort)' ) )
-        echo "${#portvals[@]} ${portvals[@]}"
+        #echo "${#portvals[@]} ${portvals[@]}"
         tp=$(echo ${portvals[1]} | tr -d '"' )
         if [ "$tp" == "mongodb" ]; then
           tp=27017

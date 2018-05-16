@@ -45,7 +45,7 @@ if [ "${PODNAME}" == "" ]; then
   if [ "${ITH}" != "1" ]; then
     (>&2 echo "ERROR: Either no pod of that name, or none at the position '${ITH}'.")
   else
-    (>&2 echo "ERROR: No pod of that name.")
+    (>&2 echo "ERROR: No pod of that name: $1.")
   fi
   exit 1
 else

@@ -1,4 +1,4 @@
-#!/usr/bin/env /usr/local/bin/bash
+#!/usr/bin/env bash
 
 FOLD=$(tput cols)
 WOV_VERSION=0
@@ -8,6 +8,7 @@ STAGEMOD=
 STAGEMODSPACE=
 
 
+# Used to select between vh containers
 if [ "$1" == "--vh-label" ]; then
   echo "0.1"
   exit 0
@@ -191,6 +192,40 @@ function fDoEcho()
   echo WOV_WPROJECT="$WOV_WPROJECT"
 }
 
+function fDoBashEcho() 
+{
+  printf "WOV_VERSION=\"${WOV_VERSION}\" "
+  printf "WOV_BASEDIR=\"${WOV_BASEDIR}\" "
+  printf "WOV_ARCHIVEREPOSITORY=\"${WOV_ARCHIVEREPOSITORY}\" "
+  printf "WOV_ARCHIVEENV=\"${WOV_ARCHIVEENV}\" "
+  printf "K8S_CONTEXT=\"$K8S_CONTEXT\" "
+  printf "WOV_CLUSTER=\"$WOV_CLUSTER\" "
+  printf "WOV_NS=\"$WOV_NS\" "
+  printf "WOV_CLTYPE=\"$WOV_CLTYPE\" "
+  printf "WOV_PROVIDER=\"$WOV_PROVIDER\" "
+  printf "WOV_REGION=\"$WOV_REGION\" "
+  printf "WOV_FLAVOR=\"$WOV_FLAVOR\" "
+  printf "WOV_PROJECT=\"$WOV_PROJECT\" "
+  printf "WOV_KSTAGE=\"$WOV_KSTAGE\" "
+  printf "WOV_GSTAGE=\"$WOV_GSTAGE\" "
+  printf "WOV_STAGE=\"$WOV_STAGE\" "
+  printf "WOV_PVER=\"$WOV_PVER\" "
+  printf "WOV_SVER=\"$WOV_SVER\" "
+  printf "WOV_USERNAME=\"$WOV_USERNAME\" "
+  printf "WOV_USEREMAIL=\"$WOV_USEREMAIL\" "
+  printf "WOV_PROJECT=\"$WOV_PROJECT\" "
+  printf "WOV_PROJECTTYPE=\"$WOV_PROJECTTYPE\" "
+  printf "WOV_PROJECTTITLE=\"$WOV_PROJECTTITLE\" "
+  printf "WOV_PROJECTDESCRIPTION=\"$WOV_PROJECTDESCRIPTION\" "
+  printf "WOV_KPROJECT=\"$WOV_KPROJECT\" "
+  printf "WOV_WPROJECT=\"$WOV_WPROJECT\" "
+  if [ "$RANCLUSTER" == "1" ]; then
+    printf "CL_REGION=\"$CL_REGION\" "
+    printf "CL_ZONES=\"${CL_ZONES}\" "
+    printf "CL_VPC=\"${CL_VPC}\" "
+  fi
+}
+
 # TODO: fill this function in, and remove from WIAAS
 function fDoCluster()
 {
@@ -324,6 +359,9 @@ function fConvertRegionCodeAWS()
 while [[ $1 =~ ^- ]]; do
   if [ "$1" == '-e' ] || [ "$1" == '--echo' ]; then
     ECHOMODE=1
+  elif [ "$1" == '-E' ] || [ "$1" == '--bash-echo' ]; then
+    ECHOMODE=2
+
   elif [ "$1" == '-c' ] || [ "$1" == '--cluster' ]; then
     fDoCluster
 
@@ -397,6 +435,10 @@ while [[ $1 =~ ^- ]]; do
 done
 
 # if user never asked to show any individual variables, show all
-if [ "$DOALL" == "1" ] && [ "$ECHOMODE" == "1" ]; then
-  fDoEcho
+if [ "$DOALL" == "1" ]; then
+  if [ "$ECHOMODE" == "1" ]; then
+    fDoEcho
+  elif [ "$ECHOMODE" == "2" ]; then
+    fDoBashEcho
+  fi
 fi

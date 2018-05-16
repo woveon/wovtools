@@ -31,7 +31,8 @@ Virtual commands.
 
   -s : start the virtual machine
   --config : mount all secrets and configmaps to the vh
-  --route-service [service] [pod] - patches the service to point to the given pod
+  --route-service [service] - patches the service to point to vh
+  --unroute-service [service] - puts service back to deplpoyment
   -l : login (alias for wov-pshell vh)
   -n|--namespace
   -h : this help
@@ -168,10 +169,25 @@ function doConfig()
 # ---------------------------------------------------------------------
 function doRouteService()
 {
+  local RETVAL=1
   local patch="{ \"spec\" : { \"selector\" : { \"app\" : \"$2\" }}}"
   # echo "PATCH: $patch"
-  kubectl -n ${NAMESPACE} patch service $1 -p "$patch"
 
+  printf "... route service '$1' to '$2'.\n"
+  kubectl -n ${NAMESPACE} patch service $1 -p "$patch"
+  if [[ $? != 0 ]]; then
+    printf "  ... success\n"
+    RETVAL=0
+  fi
+
+#  printf "...deleting deployment '$1'.\n"
+#  printf "  NOTE: 'wov-deploy $1' to get it running again.\n"
+#  printf "        or 'kubectl apply -f ${WOV_BASEDIR}/wovtools/cache/k8s/$1.yaml'.\n"
+#  kubectl delete deployment $1
+
+  DIDCOMMAND=1
+
+  return $RETVAL
 }
 
 
@@ -207,11 +223,27 @@ while [[ $1 =~ ^- ]]; do
     shift
     doConfig
 
+  elif [ "$1" == "--unroute-service" ]; then
+    shift 
+    if [ "$1" != "" ]; then
+      doRouteService $1 $1
+      shift 
+    else
+      printf "ERROR: --route-service requires 1 param.\n" 1>&2
+      fDisplayOptions
+      exit 1
+    fi
+
   elif [ "$1" == "--route-service" ]; then
     shift 
-    doRouteService $1 $2
-    shift
-    shift
+    if [ "$1" != "" ]; then
+      doRouteService $1 vh
+      shift
+    else
+      printf "ERROR: --route-service requires 1 params.\n" 1>&2
+      fDisplayOptions
+      exit 1
+    fi
 
 #  elif [ "$1" == "--pull-dir" ]; then
 #    shift

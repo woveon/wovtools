@@ -1,12 +1,13 @@
 
 
+BINS-GLOBAL=wovg-dir
 BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service wov-ed wov-ls wov-vh wov-pwait \
-	        wov-pshell wov-cmd wov-kui wov-git-check wov-pull-dir wov-db wov-db-commit wov-db-connect wov-cd \
-					wov-portforward
+	        wov-pshell wov-cmd wov-kui wov-git-check wov-vh-pulldir wov-db wov-db-commit wov-db-connect wov-cd \
+					wov-portforward wov-envg wov-project
 BINS=wov-env wov-ns-check wov-stage wov-build wov-compile \
 		 wov-pushcode-check wov-pushcontainer-check wov-pushenv-check wov-push-containers wov-push-env wov-push-secrets wov-push \
 		 wov-deploy wov-deploy-info \
-		 $(BINS-UTIL)
+		 $(BINS-UTIL) $(BINS-GLOBAL)
 
 .PHONY: vh
 
@@ -17,7 +18,7 @@ install :
 # ---------------------------------------------------------------------
 # Install scripts
 # ---------------------------------------------------------------------
-install : /usr/local/etc/bash_completion.d/wovtools
+install : preinstall /usr/local/etc/bash_completion.d/wovtools
 	@echo "- $(@) --------------------------------------------------------------"
 	@echo "  ... install bins in /usr/local/bin, via ln"
 	@for b in $(BINS); do \
@@ -60,6 +61,8 @@ install : /usr/local/etc/bash_completion.d/wovtools
 	fi
 	ln -f -s $(CURDIR)/completion/wovtools /usr/local/etc/bash_completion.d/wovtools
 
+preinstall : 
+	@which figlet || ( printf "\nERROR: can not find 'figlet', do : 'brew install figlet'." ; exit 1)
 
 # Creates the vh Docker container
 vh : $(shell find vh -type f)

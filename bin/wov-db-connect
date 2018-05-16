@@ -168,7 +168,10 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 
   elif [ "${DB_OP}" == "command" ]; then
     # Log into pod 'vh', run psql
-    kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND}\""
+    echo "dbcommand : \"${DB_COMMAND}\""
+#    VARS=( "PGPASSWORD=${DB_PASSWORD}" "psql" "--tuples-only" "-h" "${DB_HOST}" "-U" "${DB_USERNAME}" "-d" "${DB_DATABASE}" "-c" "${DB_COMMAND}" )
+#    kubectl exec -i vh -- /bin/bash -c "${VARS[@]}"
+    kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c ${DB_COMMAND}"
 
   elif [ "${DB_OP}" == "file" ]; then
     # copy file; exectute it in database, delete file

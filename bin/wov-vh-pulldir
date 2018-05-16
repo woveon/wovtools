@@ -5,10 +5,10 @@
 #  - 1st arg sets remote branch
 #
 # ex. if in directry 'mygitrepo', and on vh have dir /usr/src/app/mygitrepo,
-#       `wov-pull-dir` will copy all from vh:mygitrepo .
+#       `wov-vh-pulldir` will copy all from vh:mygitrepo .
 #     
 # ex. if in directry 'mygitrepo', and on vh have dir /usr/src/app/path/to/mygitrepo,
-#       `wov-pull-dir path/to/mygitrepo` will copy all from vh:path/to/mygitrepo .
+#       `wov-vh-pulldir path/to/mygitrepo` will copy all from vh:path/to/mygitrepo .
 # 
 # NOTE: moves node_modules and .git out of the way, then puts back to speed cp and aovid cp errors
 
