@@ -29,6 +29,8 @@ usage: `basename $0` [options] resource/file
 
 Virtual commands. 
 
+NOTE: see the wiki regarding 'service re-routing' for development: https://github.com/woveon/wovtools/wiki/Developing-a-Microservice#service-re-routing.
+
   -s : start the virtual machine
   --config : mount all secrets and configmaps to the vh
   --route-service [service] - patches the service to point to vh
@@ -145,7 +147,7 @@ function doConfig()
 {
 #  echo "for now, echo it"
 
-  V_S=( $(kubectl get secrets | sed -n '3,$p' | awk '{print $1}') )
+  V_S=( $(kubectl get secrets | sed -n '2,$p' | awk '{print $1}' | sed '/^default-token-/d') )
   V_CM=( $(kubectl get cm | sed -n '2,$p' | awk '{print $1}') )
 #  echo "$V_S"
 #  echo "$V_CM"
