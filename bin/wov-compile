@@ -154,12 +154,15 @@ touch $TMPFILE
 chmod 600 $TMPFILE
 SEDCMD=''$WARNINGLINE"i$WARNING"
 
-# 1stpass (stage)
-#echo "ECHO: handlebars $SCF  < $TEMPLATEFILE  >> $TMPFILE"
-handlebars $SCF  < $TEMPLATEFILE  >> $TMPFILE
+## 1stpass (stage)
+##echo "ECHO: handlebars $SCF  < $TEMPLATEFILE  >> $TMPFILE"
+#wov-hbs $SCF  < $TEMPLATEFILE  >> $TMPFILE
+#
+## 2ndpass
+##echo "ECHO: handlebars $SCF  < $TMPFILE  | $SED \"$SEDCMD\""
+#wov-hbs $SCF  < $TMPFILE  | $SED "$SEDCMD"
 
-# 2ndpass
-#echo "ECHO: handlebars $SCF  < $TMPFILE  | $SED \"$SEDCMD\""
-handlebars $SCF  < $TMPFILE  | $SED "$SEDCMD"
+# 1st and 2nd passes at once
+wov-hbs -sf $SCF  < $TEMPLATEFILE  | $SED "$SEDCMD"
 
 rm $TMPFILE

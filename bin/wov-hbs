@@ -1,0 +1,71 @@
+#!/usr/bin/env node
+
+let fs             = require('fs');
+let h              = require('handlebars');
+let ArgumentParser = require('argparse').ArgumentParser;
+let parser         = new ArgumentParser({
+  version     : '0.0.1',
+  addHelp     : true,
+  description : `
+Uses Handlebars to parse the .wov files (.ck8s.wov and .sk8s.wov). This does two passes so {{STAGE}} can be interpreted as a parameter to inputs.
+  
+  ex. with JSON { "myplugin": { "dev" : { "value" : 1 }, "prod" : { "value" : 2 } } }. 
+      with file text : A=\{{myplugin.{{STAGE}}.value}} 
+      results in "A=1" if WOV_STAGE is 'dev', "A=2" if WOV_STAGE is 'prod' and "A=" otherwise.
+
+  NOTE: Added in "if_eq" helper as well. 
+`,
+});
+parser.addArgument(['-sf', '--secret-file'], {help : 'secrets file location (JSON format)'});
+
+let progargs = parser.parseArgs();
+let args = JSON.parse(fs.readFileSync(progargs.secret_file).toString());
+// console.dir(args);
+
+
+/*
+if (args._.length) {
+    try {
+        args = JSON.parse(fs.readFileSync(args._[0]).toString());
+    } catch (e) { }
+}
+else for (var key in args) {
+    try {
+        args[key] = JSON.parse(args[key]);
+    } catch (e) {
+    }
+}
+*/
+
+function readInputStream(s, done) {
+    let bufs = [];
+    s.on('data', function(d) {bufs.push(d);});
+    s.on('end', function() {done(null, Buffer.concat(bufs));});
+    s.resume();
+}
+
+
+readInputStream(process.stdin, function(err, tmpl) {
+  function handle(tmpl, args) {
+
+    h.registerHelper('include', function(file, context, opt) {
+      let context = null == context ? args : context;
+      let f = fs.readFileSync(file);
+      return handle(f, context);
+    });
+
+    // https://code-maven.com/handlebars-conditionals
+    h.registerHelper('if_eq', function(a, b, opts) {
+      if (a == b) {return opts.fn(this);}
+      else {return opts.inverse(this);}
+    });
+
+    // This does 2 passes, so stage can be handled.
+    let pass1template= h.compile(tmpl.toString());
+    let pass1result = pass1template(args);
+    let pass2template= h.compile(pass1result);
+    let pass2result = pass2template(args);
+    return pass2result;
+  }
+  process.stdout.write(handle(tmpl, args));
+});

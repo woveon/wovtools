@@ -31,7 +31,11 @@ Virtual commands.
 
 NOTE: see the wiki regarding 'service re-routing' for development: https://github.com/woveon/wovtools/wiki/Developing-a-Microservice#service-re-routing.
 
-  -s : start the virtual machine
+NOTE: i really need a better name for vh... thinking 'virtual development, but that acronym is 'vd'...
+
+  -s : start the virtual host
+  --restart : stop, then start the virtual host
+
   --config : mount all secrets and configmaps to the vh
   --route-service [service] - patches the service to point to vh
   --unroute-service [service] - puts service back to deplpoyment
@@ -193,6 +197,14 @@ function doRouteService()
 }
 
 
+# ---------------------------------------------------------------------
+# Stops the running vh node. 
+# ---------------------------------------------------------------------
+function doStop() 
+{
+  kubectl delete pod vh
+}
+
 
 
 # ---------------------------------------------------------------------
@@ -211,6 +223,11 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-l" ]; then
     shift
     wov-pshell vh
+
+  elif [ "$1" == "--restart" ]; then
+    shift
+    doStop
+    doStart
 
   elif [ "$1" == "-s" ]; then
     shift

@@ -43,8 +43,10 @@ usage: `basename $0` [options]
   --vh-label   : vh label in DockerHub repo
   --mod X      : modifies the stage to use 'conf-X' files
   --conf       : load all the configuration as environment variables (one line)
+  --exports    : runs all the configuration as environment variables (no output, sourced)
   --envs       : load all the configuration as environment variables (sep lines)
   --env X      : echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
+  --export X   : export the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
   --cmd X      : for commands on one line, echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
   --qcmd X     :   ", quoted
   --sl X       :   ", string literal output
@@ -256,12 +258,31 @@ function doLoadEnv()
     doEnv $c
   done
 }
+function doLoadExports()
+{
+  CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/ && ls *.ck8s *.sk8s 2> /dev/null) )
+
+  for c in "${CONFS[@]}"; do
+    doExport $c
+  done
+}
 
 
 function doEnv() 
 {
   if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
     cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | sed -e 's/#.*$//' -e '/^$/d'
+  else
+    echo
+    echo "ERROR: no environment file ${1} in cache."
+    echo
+    exit 1
+  fi
+}
+function doExport() 
+{
+  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
+    $(cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | sed -e 's/#.*$//' -e '/^$/d' |sed  's/^/export &/')
   else
     echo
     echo "ERROR: no environment file ${1} in cache."
@@ -370,6 +391,9 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == "--envs" ]; then
     doLoadEnv
+
+  elif [ "$1" == "--exports" ]; then
+    doLoadExports
 
   elif [ "$1" == "--env" ]; then
     shift

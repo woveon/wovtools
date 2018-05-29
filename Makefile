@@ -3,10 +3,10 @@
 BINS-GLOBAL=wovg-dir
 BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service wov-ed wov-ls wov-vh wov-pwait \
 	        wov-pshell wov-cmd wov-kui wov-git-check wov-vh-pulldir wov-db wov-db-commit wov-db-connect wov-cd \
-					wov-portforward wov-envg wov-project
+					wov-portforward wov-envg wov-project wov-vh-pushgit
 BINS=wov-env wov-ns-check wov-stage wov-build wov-compile \
 		 wov-pushcode-check wov-pushcontainer-check wov-pushenv-check wov-push-containers wov-push-env wov-push-secrets wov-push \
-		 wov-deploy wov-deploy-info \
+		 wov-deploy wov-deploy-info wov-hbs \
 		 $(BINS-UTIL) $(BINS-GLOBAL)
 
 .PHONY: vh
@@ -31,6 +31,8 @@ install : preinstall /usr/local/etc/bash_completion.d/wovtools
 		if [ ! -e $(CURDIR)/bin/$$b ]; then echo "ERROR: can not find $$b... did you compile it as an app?"; fi; \
 		ln -f -s $(CURDIR)/bin/$$b $(HOME)/Library/Scripts/Applications/Terminal/$$b; \
 	done
+	@echo "  ... install node modules."
+	@npm install -g argparse handlebars 
 	@echo
 	@echo "NOTE!!!"
 	@echo "... for wcd to work, add this to your .bash_profile"

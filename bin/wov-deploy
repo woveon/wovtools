@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
 
-DOECHO=1
-DOFORCE=0
-DORETAIN=0
-FOLD=80
-
 
 # --------------------------------------------------------------------- 
 # Import Env 
@@ -15,6 +10,12 @@ set ""
 . wov-ns-check
 set -- "${deployenvargs[@]}"
 
+DOECHO=1
+DOFORCE=0
+DORETAIN=0
+FOLD=$(tput cols)
+DRYRUN=0
+CONFONLY=0
 
 K8SFILES=
 
@@ -22,24 +23,110 @@ K8SFILES=
 WOV_CUR_PVER=${WOV_PVER}
 WOV_CUR_SVER=${WOV_SVER}
 
-printf "\n"
-figlet wov-deploy
-printf " version: ${WOV_STAGE}_${WOV_CUR_PVER}_${WOV_CUR_SVER}\n"
 
-
-if [ "${WOV_STAGE}" == "prod" ]; then
-  printf "\n\n**** deploying to production *********************************\n\n"
-  printf "   Are you sure? (yes|NO) "
-  read $A
-  if [ "$A" == "yes" ] || [ "$A" == "YES" ]; then
-    printf "  ... ok, continuing.\n"
-  else
-    printf "\n  ... stopping.\n"
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function doAddLabels()
+{
+  # --------------------------------------------------------------------- 
+  # Add labels
+  if [ $DOECHO -ge 1 ]; then echo "  ... labeling namespace"; fi
+  R=$(kubectl get namespaces | grep ${WOV_NS})
+  if [ "$?" != "0" ]; then
+    printf "\n\nERROR: missing namespace '${WOV_NS}'. Type : 'kubectl create namespace ${WOV_NS}' to create one.\n\n"
     exit 1
   fi
-fi
+  kubectl label namespace ${WOV_NS} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+}
 
 
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function doDeployConf()
+{
+  # --------------------------------------------------------------------- 
+  # Deploy the conf ConfigMap files
+  FILES=$(cd ${DEPLOYDIR}/conf; ls *.ck8s 2> /dev/null)
+  for F in ${FILES}; do
+    f=${F%.ck8s}
+    if [ $DOECHO -ge 1 ]; then echo "  ... creating ConfigMap ${f} from ${F}"; fi
+
+    #DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 }' | gsed ':a;N;$!ba;s/\n/ /g')
+    DATA=()
+    while read l; do
+      #echo ":$l"
+      d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
+      if [ "$d" != "" ]; then DATA+=("$d"); fi
+    done <${DEPLOYDIR}/conf/${F}
+
+    kubectl delete configmap ${f} #2> /dev/null
+    kubectl create configmap ${f} "${DATA[@]}"
+    if [ "$?" != "0" ]; then
+      printf "\nERROR: failed creating ConfigMap $f.\n"
+      printf " - check file ${DEPLOYDIR}/conf/${F}\n"
+      exit 1
+    fi
+    kubectl label  configmap ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+  done
+
+  # --------------------------------------------------------------------- 
+  # Deploy the conf secret files
+  FILES=$(cd ${DEPLOYDIR}/conf; ls *.sk8s 2> /dev/null)
+  for F in ${FILES}; do
+    f=${F%.sk8s}
+    if [ $DOECHO -ge 1 ]; then echo "  ... creating Secret ${f} from ${F}"; fi
+    #  DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 , "\\" }')
+    #DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 }' | gsed ':a;N;$!ba;s/\n/ /g')
+    DATA=()
+    while read l; do
+      #echo ":$l"
+      d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
+      if [ "$d" != "" ]; then DATA+=("$d"); fi
+    done <${DEPLOYDIR}/conf/${F}
+    kubectl delete secret ${f} #2> /dev/null
+    kubectl create secret generic ${f} "${DATA[@]}"
+    kubectl label  secret ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+  done
+}
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function doDeployK8s()
+{
+  # --------------------------------------------------------------------- 
+  # Deploy the k8s files
+  if [ $DOECHO -ge 1 ]; then echo "... deploying Kubernetes"; fi
+  if [ $DOECHO -ge 2 ]; then echo "  ... from ${DEPLOYDIR}/k8s"; fi
+
+  if [ "$#" != "0" ]; then
+    K8SFILES=( $* )
+    for f in "${K8SFILES[@]}"; do
+      if [ ! -e ${DEPLOYDIR}/k8s/$f.yaml ]; then
+        printf "ERROR: unknown k8s file '$f.yaml'.\n"
+      else
+        kubectl apply -f ${DEPLOYDIR}/k8s/$f.yaml
+      fi
+    done
+  else
+    kubectl apply -f ${DEPLOYDIR}/k8s
+  fi
+}
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function doCleanUp()
+{
+  # --------------------------------------------------------------------- 
+  # Cleanup
+  if [ ${DORETAIN} == 1 ]; then
+    echo "... skipping cleanup"
+  else
+    rm -Rf ${DEPLOYDIR}
+  fi
+
+}
 
 
 # ---------------------------------------------------------------------
@@ -57,6 +144,8 @@ files : all by default, or type them here and do individual only
 
   --pver|--sver X : sets the Project and Secret version for roll-backs
   -r|--retain : retains the deployment values locally (potential security risk)
+  --dry-run : pull files but don't deploy
+  --conf-only : Only push configuration files (ConfigMaps and Secrets)
   -f : force push
   -h : this help
   -q/-v : quiet/verbose
@@ -64,6 +153,25 @@ files : all by default, or type them here and do individual only
 EOF
 }
 
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+printf "\n"
+figlet wov-deploy
+printf " version: ${WOV_STAGE}_${WOV_CUR_PVER}_${WOV_CUR_SVER}\n"
+
+
+if [ "${WOV_STAGE}" == "prod" ]; then
+  printf "\n\n**** deploying to production *********************************\n\n"
+  printf "   Are you sure? (yes|NO) "
+  read $A
+  if [ "$A" == "yes" ] || [ "$A" == "YES" ]; then
+    printf "  ... ok, continuing.\n"
+  else
+    printf "\n  ... stopping.\n"
+    exit 1
+  fi
+fi
 
 
 # ---------------------------------------------------------------------
@@ -92,6 +200,14 @@ while [[ $1 =~ ^- ]]; do
     WOV_PVER="$1"
     shift
 
+  elif [ "$1" == "--dry-run" ]; then
+    shift
+    DRYRUN=1
+
+  elif [ "$1" == "--conf-only" ]; then
+    shift
+    CONFONLY=1
+
   elif [ "$1" == "--sver" ]; then
     shift
     WOV_SVER="$1"
@@ -117,9 +233,6 @@ if [ "${WOV_CUR_PVER}" != "${WOV_PVER}" ] || [ "${WOV_CUR_SVER}" != "${WOV_SVER}
 fi
 printf "\n"
 
-
-## all args gone by now so not backing up args
-#. wov-push
 
 
 # If deploying the latest PVER, check that all code is pushed to archive
@@ -155,93 +268,14 @@ chmod -R 700 ${DEPLOYDIR}
 aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/conf ${DEPLOYDIR}/conf  --delete
 aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s ${DEPLOYDIR}/k8s  --delete
 
-# --------------------------------------------------------------------- 
-# Add labels
-if [ $DOECHO -ge 1 ]; then echo "  ... labeling namespace"; fi
-R=$(kubectl get namespaces | grep ${WOV_NS})
-if [ "$?" != "0" ]; then
-  printf "\n\nERROR: missing namespace '${WOV_NS}'. Type : 'kubectl create namespace ${WOV_NS}' to create one.\n\n"
-  exit 1
-fi
-kubectl label namespace ${WOV_NS} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
-
-# --------------------------------------------------------------------- 
-# Deploy the conf ConfigMap files
-FILES=$(cd ${DEPLOYDIR}/conf; ls *.ck8s 2> /dev/null)
-for F in ${FILES}; do
-  f=${F%.ck8s}
-  if [ $DOECHO -ge 1 ]; then echo "  ... creating ConfigMap ${f} from ${F}"; fi
-
-  #DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 }' | gsed ':a;N;$!ba;s/\n/ /g')
-  DATA=()
-  while read l; do
-    #echo ":$l"
-    d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
-    if [ "$d" != "" ]; then DATA+=("$d"); fi
-  done <${DEPLOYDIR}/conf/${F}
-
-  kubectl delete configmap ${f} #2> /dev/null
-  kubectl create configmap ${f} "${DATA[@]}"
-  if [ "$?" != "0" ]; then
-    printf "\nERROR: failed creating ConfigMap $f.\n"
-    printf " - check file ${DEPLOYDIR}/conf/${F}\n"
-    exit 1
+if [ "${DRYRUN}" == "0" ]; then 
+  if [ "${CONFONLY}" == "1" ]; then
+    doDeployConf
+  else
+    doAddLabels
+    doDeployConf
+    doDeployK8s "$*"
+    doCleanUp
   fi
-  kubectl label  configmap ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
-done
-
-# --------------------------------------------------------------------- 
-# Deploy the conf secret files
-FILES=$(cd ${DEPLOYDIR}/conf; ls *.sk8s 2> /dev/null)
-for F in ${FILES}; do
-  f=${F%.sk8s}
-  if [ $DOECHO -ge 1 ]; then echo "  ... creating Secret ${f} from ${F}"; fi
-#  DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 , "\\" }')
-  #DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 }' | gsed ':a;N;$!ba;s/\n/ /g')
-  DATA=()
-  while read l; do
-    #echo ":$l"
-    d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
-    if [ "$d" != "" ]; then DATA+=("$d"); fi
-  done <${DEPLOYDIR}/conf/${F}
-  kubectl delete secret ${f} #2> /dev/null
-  kubectl create secret generic ${f} "${DATA[@]}"
-  kubectl label  secret ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
-done
-
-# --------------------------------------------------------------------- 
-# Deploy the k8s files
-if [ $DOECHO -ge 1 ]; then echo "... deploying Kubernetes"; fi
-if [ $DOECHO -ge 2 ]; then echo "  ... from ${DEPLOYDIR}/k8s"; fi
-
-if [ "$#" != "0" ]; then
-  K8SFILES=( $* )
-  for f in "${K8SFILES[@]}"; do
-    if [ ! -e ${DEPLOYDIR}/k8s/$f.yaml ]; then
-      printf "ERROR: unknown k8s file '$f.yaml'.\n"
-    else
-      kubectl apply -f ${DEPLOYDIR}/k8s/$f.yaml
-    fi
-  done
-else
-  kubectl apply -f ${DEPLOYDIR}/k8s
-fi
-
-#kubectl apply -f ${DEPLOYDIR}/k8s
-#FILES=$(cd ${DEPLOYDIR}/k8s; ls *.yaml)
-#for F in ${FILES}; do
-#  f=${F%.yaml}
-#  if [ $DOECHO -ge 1 ]; then echo "  ... apply k8s: ${F}"; fi
-#  kubectl apply -f ${DEPLOYDIR}/k8s/${F}
-#  # kubectl label secret ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
-#done
-
-
-# --------------------------------------------------------------------- 
-# Cleanup
-if [ ${DORETAIN} == 1 ]; then
-  echo "... skipping cleanup"
-else
-  rm -Rf ${DEPLOYDIR}
 fi
 

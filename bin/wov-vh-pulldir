@@ -52,15 +52,19 @@ if [ "$R1" != "0" ]; then exit 1; fi
 
 
 
-#echo "BD:  $BD"
-#echo "RPA: $RPA"
-#echo "LPA: $LPA"
+# echo "BD:  $BD"
+# echo "RPA: $RPA"
+# echo "LPA: $LPA"
 
-# Copy node_modules out of the way
-#kubectl exec --namespace "$NAMESPACE" -it "$PODNAME" -- mv $1/node_modules .node_modules.$$
-echo " mv vh:$RPA/node_modules vh:.node_modules.${BD}"
+# Mv node_modules, .git and wovtools out of the way
+# kubectl exec --namespace "$NAMESPACE" -it "$PODNAME" -- mv $1/node_modules .node_modules.$$
+# echo " mv vh:$RPA/node_modules vh:.node_modules.${BD}"
+echo "  ... skipping pull back of : node_modules"
 R1a=$(kubectl exec -it "$PODNAME" -- mv $RPA/node_modules .node_modules.${BD} && true)
+echo "  ... skipping pull back of : .git"
 R1b=$(kubectl exec -it "$PODNAME" -- mv $RPA/.git .git.${BD} && true)
+echo "  ... skipping pull back of : wovtools"
+R1c=$(kubectl exec -it "$PODNAME" -- mv $RPA/wovtools .wovtools.${BD} && true)
 RR1=$?
 
 # Copy all but node_modules
@@ -68,13 +72,17 @@ echo kubectl cp vh:$RPA $LPA
 kubectl cp vh:$RPA $LPA
 
 # Put it back
-echo " mv vh:.node_modules.${BD} vh:$RPA/node_modules "
+# echo " mv vh:.node_modules.${BD} vh:$RPA/node_modules "
+echo "  ... moving skipped directories back"
 R2a=$(kubectl exec -it "$PODNAME" -- mv .node_modules.${BD} $RPA/node_modules && true)
 R2b=$(kubectl exec -it "$PODNAME" -- mv .git.${BD} $RPA/.git && true)
+R2c=$(kubectl exec -it "$PODNAME" -- mv .wovtools.${BD} $RPA/wovtools && true)
 RR2=$?
 
 cat <<EOF
 
-* Git Status Results *************************************************************
+... pull dir success.
+... running 'git status' *****************************************************************
 EOF
 git status
+echo "... complete *****************************************************************************"
