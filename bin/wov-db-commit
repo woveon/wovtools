@@ -32,7 +32,7 @@ This moves database changes for the current checked in code (pver) into the db r
 
 This does the following:
 1. if all main repo git checked in, continue (this ‘seals the database with the code’).
-2. move deltas into registry
+2. move 'wovtools/db/*.deltas' into registry
 3. update registry entry for this pver
 4. update database pver number 
 
@@ -66,6 +66,7 @@ function doGetDBPVER()
 {
   local retval=1
   local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null |  cut -d'|' -f5)
+#  printf "DB_PVER : $DB_PVER"
   if [ "$?" != "0" ]; then 
     printf "\n\nERROR: failed to find wovtools logs on database server $1.\n\n"; 
     printf "  NOTE: if the datbaseserver is not inited, run:\n"
@@ -457,7 +458,7 @@ elif [ "$DOACTION" == "checksum" ]; then
   # check each db
   retval=0
   for i in "${DATABASES[@]}"; do
-    CHKSUM=$(doHashDBSchema i)
+    CHKSUM=$(doHashDBSchema $i)
     r=${?}
     if [ "$r" != "0" ]; then retval=1; fi
     echo "${CHKSUM} $i"
@@ -467,6 +468,9 @@ elif [ "$DOACTION" == "commit" ]; then
 
   DATABASES=( $(doFindDatabases $*) )
 #  echo "DATABASES: ${DATABASES[@]}"
+#  if [ "${#DATABASES[@]}" == "0" ]; then
+#    echo "no databases found"
+#  fi
 
   doCommit
   retval=$?
