@@ -4,8 +4,7 @@ FOLD=$(tput cols)
 WOV_VERSION=0
 WOV_BASEDIR=$(git rev-parse --show-toplevel)
 export WOV_BASEDIR
-STAGEMOD=
-STAGEMODSPACE=
+SED=`which gsed`
 
 
 # Used to select between vh containers
@@ -25,6 +24,15 @@ elif [ ! -e "${WOV_BASEDIR}/wovtools/config.json" ]; then
   exit 1
 fi
 
+STAGEMOD=
+STAGEMODSPACE=
+if [ "${WOV_stagemod}" != "" ]; then
+  STAGEMODSPACE="-"
+  STAGEMOD="${WOV_stagemod}"
+fi
+
+
+
 # TODO: optimize so that only certain variables are grabbed, as they are asked for
 
 function fDisplayOptions()
@@ -41,7 +49,7 @@ usage: `basename $0` [options]
   -h/--help    : display these options
   -v/--version : version of wovtools
   --vh-label   : vh label in DockerHub repo
-  --mod X      : modifies the stage to use 'conf-X' files
+  --mod X      : modifies the stage to use 'conf-X' files (note: WOV_stagemod is used by default)
   --conf       : load all the configuration as environment variables (one line)
   --exports    : runs all the configuration as environment variables (no output, sourced)
   --envs       : load all the configuration as environment variables (sep lines)
@@ -235,7 +243,7 @@ function fDoCluster()
   fConvertRegionCodeAWS ${WOV_REGION}
   CL_REGION=$cRC
   CL_ZONES="c d"
-  CL_VPC=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${WOV_CLUSTER}-vpc" --query 'Vpcs[0].VpcId' | sed -e 's/^"//' -e 's/"$//')
+  CL_VPC=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${WOV_CLUSTER}-vpc" --query 'Vpcs[0].VpcId' | ${SED} -e 's/^"//' -e 's/"$//')
   export CL_REGION
   export CL_ZONES
   export CL_VPC
@@ -271,7 +279,7 @@ function doLoadExports()
 function doEnv() 
 {
   if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
-    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | sed -e 's/#.*$//' -e '/^$/d'
+    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | ${SED} -e 's/#.*$//' -e '/^\s*$/d'
   else
     echo
     echo "ERROR: no environment file ${1} in cache."
@@ -282,7 +290,7 @@ function doEnv()
 function doExport() 
 {
   if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
-    $(cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | sed -e 's/#.*$//' -e '/^$/d' |sed  's/^/export &/')
+    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | ${SED} -e 's/#.*$//' | ${SED} -e '/^\s*$/d' | ${SED}  's/^/export &/'
   else
     echo
     echo "ERROR: no environment file ${1} in cache."
@@ -293,7 +301,7 @@ function doExport()
 function doQCmd() 
 {
   if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
-    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | sed -e 's/#.*$//' -e '/^$/d' -e 's/^/'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
+    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | ${SED} -e 's/#.*$//' -e '/^\s*$/d' -e 's/^/'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
   else
     echo
     echo "ERROR: no environment file ${1} in cache."
@@ -305,7 +313,7 @@ function doQCmd()
 function doCmd() 
 {
   if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
-    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | sed -e 's/#.*$//' -e '/^$/d' | tr '\n' ' '
+    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | ${SED} -e 's/#.*$//' -e '/^\s*$/d' | tr '\n' ' '
   else
     echo
     echo "ERROR: no environment file ${1} in cache."
@@ -317,7 +325,7 @@ function doCmd()
 function doStringLiteral() 
 {
   if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
-    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | sed -e 's/#.*$//' -e '/^$/d' -e 's/^/\$'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
+    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | ${SED} -e 's/#.*$//' -e '/^$/d' -e 's/^/\$'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
   else
     echo
     echo "ERROR: no environment file ${1} in cache."
