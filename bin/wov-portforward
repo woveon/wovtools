@@ -106,7 +106,7 @@ for s in $*; do
         if [ "$tp" == "mongodb" ]; then
           tp=27017
         fi
-        kubectl port-forward $pod ${tp}:${tp} &
+        kubectl port-forward $pod ${tp}:${tp} > /dev/null &
         PP="$!"
         if [ "$?" == "0" ]; then
           printf "$PP\t$s\t$p\n" >> ${WOV_BASEDIR}/wovtools/cache/.portforwards

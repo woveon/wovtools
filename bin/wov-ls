@@ -42,7 +42,7 @@ function doDisplay()
 
   pad="---------------------------------------------------------------------" 
 
-  DIRS=( "conf" "k8s" "containers" "services" "cmds" "secrets" )
+  DIRS=( "conf" "k8s" "containers" "services" "cmds" "secrets" "db" )
 
   for f in "${DIRS[@]}"; do
     if [ -e ${WOV_BASEDIR}/wovtools/$f ]; then

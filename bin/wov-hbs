@@ -23,20 +23,6 @@ let args = JSON.parse(fs.readFileSync(progargs.secret_file).toString());
 // console.dir(args);
 
 
-/*
-if (args._.length) {
-    try {
-        args = JSON.parse(fs.readFileSync(args._[0]).toString());
-    } catch (e) { }
-}
-else for (var key in args) {
-    try {
-        args[key] = JSON.parse(args[key]);
-    } catch (e) {
-    }
-}
-*/
-
 function readInputStream(s, done) {
     let bufs = [];
     s.on('data', function(d) {bufs.push(d);});

@@ -56,9 +56,14 @@ SECRET_CACHE_DIR=${WOV_BASEDIR}/wovtools/cache/secrets
 SECRETFILE=${SECRET_CACHE_DIR}/current.json
 #LSECRETFILE=${SECRET_CACHE_DIR}/current_local.json
 SECRETFILELAST=${SECRET_CACHE_DIR}/last.json
-STAGEMOD=
 SECRETMODFILE=
 SECRETMODFILELAST=
+
+STAGEMOD=
+if [ "${WOV_stagemod}" != "" ]; then
+  STAGEMOD=${WOV_stagemod}
+fi
+
 
 
 # --------------------------------------------------------------------- 

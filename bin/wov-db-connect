@@ -58,7 +58,11 @@ shift
 
 # load env vars
 #eval $(wov-env --env ${DATABASESERVER}.ck8s --env ${DATABASESERVER}.sk8s )
-eval $(wov-env --conf)
+if [ "${WOV_stagemod}" != "" ]; then
+  eval $(wov-env --mod ${WOV_stagemod} --conf)
+else
+  eval $(wov-env --conf)
+fi
 
 # set to env vars
 DD=WOV_${DATABASESERVER}_type
@@ -124,6 +128,7 @@ while [[ $1 =~ ^- ]]; do
     shift
     DB_OP="command"
     DB_COMMAND="$1"
+#    DB_COMMAND=( $1 )
     shift
 
   elif [ "$1" == "--schema" ]; then
@@ -164,29 +169,43 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 
   if [ "${DB_OP}" == "schema" ]; then
     # Log into pod 'vh', run pg_dump
-    kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s"
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s"
+    else
+      PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
+    fi
 
   elif [ "${DB_OP}" == "command" ]; then
     # Log into pod 'vh', run psql
-    echo "dbcommand : \"${DB_COMMAND}\""
+#    echo "dbcommand  : \"${DB_COMMAND}\""
+#    echo "dbcommand q: \"${DB_COMMAND[@]}\""
 #    VARS=( "PGPASSWORD=${DB_PASSWORD}" "psql" "--tuples-only" "-h" "${DB_HOST}" "-U" "${DB_USERNAME}" "-d" "${DB_DATABASE}" "-c" "${DB_COMMAND}" )
 #    kubectl exec -i vh -- /bin/bash -c "${VARS[@]}"
-    kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c ${DB_COMMAND}"
+#    kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c ${DB_COMMAND}"
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\""
+    else
+      PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\"
+    fi
 
   elif [ "${DB_OP}" == "file" ]; then
     # copy file; exectute it in database, delete file
-    kubectl cp ${DB_FILE} vh:.${DATABASESERVER}.sql.$$
-    kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f .${DATABASESERVER}.sql.$$"
-    kubectl exec -i vh -- /bin/bash -c "rm -f .${DATABASESERVER}.sql.$$"
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl cp ${DB_FILE} vh:.${DATABASESERVER}.sql.$$
+      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f .${DATABASESERVER}.sql.$$"
+      kubectl exec -i vh -- /bin/bash -c "rm -f .${DATABASESERVER}.sql.$$"
+    else
+      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
+    fi
 
   elif [ "${DB_OP}" == "" ]; then
     # Log into pod 'vh', run psql
     doDatabaseConnectMessage
-#    if [ "${DB_HOST}" == "localhost" ]; then
-#      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
-#    else
-    kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}"
-#    fi
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}"
+    else
+      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
+    fi
   fi
 
 elif [ "${DB_TYPE}" == "mongo" ]; then
@@ -204,22 +223,37 @@ db.getCollectionNames().forEach(function(collname) {
   // printSchema(db[collname].findOne()); // NOTE: not calling since if there is no object, then no schema
 })
 EOF)
-    kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
+
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
+    else
+      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
+    fi
+
 
   elif [ "${DB_OP}" == "command" ]; then
-    kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
+    set -x
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
+    else
+      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
+    fi
   elif [ "${DB_OP}" == "file" ]; then
     printf "\nFile: untested\n\n";
-    kubectl cp ${DB_FILE} vh:.${DATABASESERVER}.sql.$$
-    kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} ${DBSERVER}.sql.$$"
-    kubectl exec -i vh -- /bin/bash -c "rm -f .${DATABASESERVER}.sql.$$"
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl cp ${DB_FILE} vh:.${DATABASESERVER}.sql.$$
+      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} ${DBSERVER}.sql.$$"
+      kubectl exec -i vh -- /bin/bash -c "rm -f .${DATABASESERVER}.sql.$$"
+    else
+      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} ${DB_FILE}
+    fi
   elif [ "${DB_OP}" == "" ]; then
     doDatabaseConnectMessage
-#    if [ "${DB_HOST}" == "localhost" ]; then
-#      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}
-#    else
-    kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"
-#    fi
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"
+    else
+      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}
+    fi
   fi
 
 else

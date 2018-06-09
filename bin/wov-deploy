@@ -4,6 +4,10 @@
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
+if [ ! -z ${WOV_stagemod+x} ]; then
+  printf "\nERROR: Can't have WOV_stagemod set when deploying content.\n\n"
+  exit 1
+fi
 deployenvargs=( "$@" )
 set ""
 . wov-env
@@ -272,9 +276,10 @@ if [ "${DRYRUN}" == "0" ]; then
   if [ "${CONFONLY}" == "1" ]; then
     doDeployConf
   else
+    k8ses=( $* )
     doAddLabels
     doDeployConf
-    doDeployK8s "$*"
+    doDeployK8s $k8ses
     doCleanUp
   fi
 fi

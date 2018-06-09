@@ -4,6 +4,10 @@
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
+if [ ! -z ${WOV_stagemod+x} ]; then
+  printf "\nERROR: Can't have WOV_stagemod set when pushing content.\n\n"
+  exit 1
+fi
 pushcontainersargs=( "$@" )
 set ""
 . wov-env
@@ -37,9 +41,12 @@ function fDisplayOptions()
   cat <<EOF | fold -w ${FOLD} -s
 
 
-usage: `basename $0` [options] containers ...
+usage: `basename $0` [options] {containercode ...}
 
 Runs the recipe scripts and if there is a change, build the containers.
+
+ex. `basename $0` -f ggg hhh  
+    -> for project iii,  forces the building of containers iiiggg and iiihhh
 
   --key X : ssh key to add ex. ${HOME}/.ssh/id_rsa
   -h : this help

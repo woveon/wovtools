@@ -3,6 +3,78 @@
 DOECHO=1
 FOLD=140
 
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: . `basename $0` {options} [project]
+
+Changes directory to the *project* directory. These projects are defined in the wovtools file, found in your HOME directory.
+
+NOTE: $HOME/.wovtools is a JSON file with .projects.{}, where each entry in .projects has a '.dir' entry, corresponding to the project directory.
+
+NOTE2: Call with the '.' in front, or set a line in your .bash_profile :
+  function wcd() {
+    . wov-cd $*
+  }
+
+ex. $HOME/.wovtools: { "projects" : { "myproject" : { "dir" : "/path/to/project" } } }
+
+  -q : quiet output
+  -v : verbose output
+  -h/--help : this help
+  -l : list projects
+
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doListProjects()
+{
+  jq -r ".projects" ${HOME}/.wovtools
+}
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  elif [ "$1" == "-l" ]; then
+    shift
+    doListProjects
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+
+
 if [ ! -e ${HOME}/.wovtools ]; then 
   printf "\n\nERROR: no .wovtools file in home directory.\n" 1>&2
 fi
@@ -25,9 +97,11 @@ if [ "$#" == 1 ]; then
         printf "\n\nERROR: no directory '$D$D1'.\n" 1>&2
       else
         cd $GO
-        printf "\n---- project '$P' : $GO\n"
-        sleep .5
-        ls
+        if [ ${DOECHO} -ge 1 ]; then
+          printf "\n---- project '$P' : $GO\n"
+          sleep .5
+          ls
+        fi
       fi
     fi
   fi

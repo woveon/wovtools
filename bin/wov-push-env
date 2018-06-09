@@ -8,6 +8,10 @@ FOLD=80
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
+if [ ! -z ${WOV_stagemod+x} ]; then
+  printf "\nERROR: Can't have WOV_stagemod set when pushing content.\n\n"
+  exit 1
+fi
 pushenvargs=( "$@" )
 set ""
 . wov-env
