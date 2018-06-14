@@ -35,7 +35,11 @@ function fDisplayOptions()
 
 usage: `basename $0` [options] container
 
-Checks if the current container needs to be pushed. This checks, in order:
+Checks if the current container needs to be built and pushed. 
+
+Note: For build, this compares container code in cache vs. last container build (i.e. NOT actual Docker container content). So, 'wov-build-containers -P' to build container but don't push, if you want to rebuild the cache.
+
+This checks, in order:
   * does the container exist
   * is the container pushed to remote?
   * do we have a directory for the contents to build the container
@@ -51,6 +55,7 @@ exit values:
   2 - general error
   3 - no repo errro
   4 - wov-git-check error
+  5 - no build, remote repo push needed
 
 EOF
 }
@@ -101,13 +106,18 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
-# Echoes 1 if found, 0 not found, 2 unknown, 3 if no repo
+# Returns:
+# NEW  OLD
+# 100 - 1 - (success) tagged image found, with match to local sha
+# 101 - 2 - unknown error
+# 102 - 0 - image not found
+# 103 - 3 - repo not found
+# 104 - 4 - tagged image found, sha mismatch
 # NOTE: echo to stderr since return value is stdout
 function fCheckForRemoteImage() 
 {
-  local retval=2
+  local retval=101
   local RR=""
-
 
   if [[ $WOV_ARCHIVEREPOSITORY == *".amazonaws.com" ]]; then
 
@@ -125,31 +135,47 @@ function fCheckForRemoteImage()
         echo "    ... skipping" 1>&2
       fi
 
-      retval=3
+      retval=103
     elif [ "$RR" == "" ]; then
-      retval=0
+      retval=102
     fi
 
 #    echo "RR: ${RR} " 1>&2
 
-    # if no errors, check
-    if [[ $retval -eq 2 ]]; then
+    # if no errors, check tag, then the image sha
+    if [[ $retval -eq 101 ]]; then
       # NOTE: check KSTAGE since GSTAGE is mixed with local
-      R=$(echo "${RR}" | awk '{print $2}' | grep ${WOV_KSTAGE}_${WOV_PVER})
-#      echo "R: ${R} " 1>&2
-      if [ "${R}" != "" ]; then
-        retval=1
+      #R=$(echo "${RR}" | awk '{print $2}' | grep ${WOV_KSTAGE}_${WOV_PVER})
+      R=$(echo "${RR}" | grep ${WOV_KSTAGE}_${WOV_PVER})
+      echo "R: ${R} " 1>&2
+      R_tag=$(echo "${R}" | awk '{print $2}')
+      if [ "${R_tag}" != "" ]; then
+
+        # ex. 686413534598.dkr.ecr.us-east-1.amazonaws.com/api/apidata@sha256:03ed7fb9e67e8ebf2f998a936b7039d8a9d6a931a3af803c0de0bd4f557189bd
+        set -x
+        R_sha=$(echo "${R}" | awk '{print $3}')
+        R_repoDigest="${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER}@${R_sha}"
+        #Local_sha=$(docker inspect ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} | jq -r '.[0].Id')
+        Local_repoDigest=$(docker inspect ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} | jq -r '.[0].RepoDigests[0]')
+          # TODO: what if repo digests has multiple entries? go through each?
+        echo "R ${R_repoDigest}    L ${Local_repoDigest}" 1>&2
+        if [ "${R_repoDigest}" == "${Local_repoDigest}" ]; then
+          # success
+          retval=100
+        else
+          if [ $DOECHO -ge 1 ]; then echo "  ... remote repo out of date" 1>&2; fi
+          retval=104
+        fi
       else
-        retval=0
+        if [ $DOECHO -ge 1 ]; then echo "  ... remote image '${WOV_KSTAGE}_${WOV_PVER}' not found" 1>&2; fi
+        retval=102
       fi
     fi
   else
     printf "\n\nERROR: Unknown provider to check (only AWS known in wov-pushcontainer-check).\n" 1>&2&
     printf "    NOTE: sohuld be an easy fix for regular git!\n\n" 1>&2
-    retval=2
+    retval=101
   fi
-
-  # 
 
 #  echo "TAG ${WOV_KSTAGE}_${WOV_PVER}"
 
@@ -169,6 +195,26 @@ function fGetRepoLabel()
   fi
   echo $retval
 }
+
+
+#function fIsRemoteRepoUpToDate
+#{
+#  # TODO: this sucks.. it makes this call twice
+#  RR=$(ecs-cli images ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} 2>&1 )
+#  R=$(echo "${RR}" | grep ${WOV_KSTAGE}_${WOV_PVER})
+#  R_sha=$(echo "${R}" | awk '{print $3}')
+#  Local_sha=$(docker inspect ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} | jq -r '.[0].Id')
+#  set -x
+#  echo "Rsha ${R_sha}    Lsha ${Local_sha}" 1>&2
+#  if [ "${R_sha}" == "${Local_sha}" ]; then
+#    retval=1
+#  else
+#    echo "remote repo out of date" 1>&2
+#    retval=0
+#  fi
+#  set +x
+#  echo "$retval"
+#}
 
 
 if [ "$#" != "1" ]; then
@@ -200,28 +246,30 @@ elif [ ! -e ${ARCHDIR} ]; then
 
 else 
 
-# Echoes 1 if found, 0 not found, 2 unknown, 3 if no repo
   CH=$(fCheckForRemoteImage)
-#  echo "CheckForRemoteImages: ${CH}"
-#  echo "  - Echoes 1 if found, 0 not found, 2 unknown, 3 if no repo"
+  echo "CheckForRemoteImages: ${CH}"
+  # NEW  OLD
+  # 100 - 1 - (success) tagged image found, with match to local sha
+  # 101 - 2 - unknown error
+  # 102 - 0 - image not found
+  # 103 - 3 - repo not found
+  # 104 - 4 - tagged image found, sha mismatch though
 
-  if [ "${CH}" == "1" ]; then
-    if [ $DOECHO -ge 1 ]; then echo "    ... repo found."; fi
+  if [ "${CH}" == "100" ]; then
+    if [ $DOECHO -ge 1 ]; then echo "    ... repo found, tagged image exists, shas match."; fi
     NEEDSBUILD=0
 
-  elif [ "${CH}" == "3" ]; then
-    if [ $DOECHO -ge 1 ]; then echo "    ... can't connect to repo. Repo not found."; fi
-    NEEDSBUILD=3
-
-  elif [ "${CH}" == "2" ]; then
+  elif [ "${CH}" == "101" ]; then
     if [ $DOECHO -ge 1 ]; then echo "    ... some error or other."; fi
     NEEDSBUILD=2
 
-  elif [ "${CH}" == "1" ]; then
-      if [ $DOECHO -ge 1 ]; then echo "    ... no remote tagged image found."; fi
+  elif [ "${CH}" == "103" ]; then
+    if [ $DOECHO -ge 1 ]; then echo "    ... can't connect to repo. Repo not found."; fi
+    NEEDSBUILD=3
 
-  elif [ "${CH}" == "0" ]; then
-    # image not found for some reason
+  elif [ "${CH}" == "102" ] || [ "${CH}" == "104" ]; then
+    if [ $DOECHO -ge 1 ]; then echo "    ... has to push"; fi
+    # 0 - tagged image not found, 4 - tagged image found, but shas do not match
 
     # ok, so remote repo exists and no error, check for diffs
     # NOTE: excluding node_modules for speed, but hopefully any changes would be 
@@ -229,15 +277,9 @@ else
     if [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' --exclude='node_modules' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then
       if [ $DOECHO -ge 1 ]; then echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"; fi
       NEEDSBUILD=1
-
-    # check remote repo version... since if the git version is diff from that, then need to build!!!
-    elif [ "$(fGetRepoLabel)" != "${WOV_STAGE}_${WOV_PVER}" ]; then
-      if [ $DOECHO -ge 1 ]; then echo "  ... remote repo is behind. Don't need to build, but do need to push..."; fi
-      NEEDSBUILD=4
-
-    # else, no need to build 
     else
-      NEEDSBUILD=0
+      if [ $DOECHO -ge 1 ]; then echo "    ... no reason to build, just push"; fi
+      NEEDSBUILD=5
     fi
   else
     if [ $DOECHO -ge 1 ]; then echo "    ... unknown error: ${CH}."; fi

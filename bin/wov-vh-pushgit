@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+
+
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+wovvhpushgitargs=( "$@" )
+set ""
+. wov-env
+set -- "${wovvhpushgitargs[@]}"
+
+DOECHO=1
+FOLD=140
+CONTINUE=1
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+usage: `basename $0` [options] {additional dirs...}
+
+This script pushes the project's git repo to vh in a safe manner. The additional dirs are other git repos this depends on.
+
+To specify a branch, use ':'. 
+
+The following pushes the current git repo, plugin the master branch of plugin-engine.
+   ex.  `basename $0` ../plugin-engine:master
+     
+
+
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+# Make sure cache dir exists
+if [ ! -e ${WOV_BASEDIR}/wovtools/cache ]; then
+  printf "\nWARNING: no wovtools/cache directory?!? Creating...\n";
+  mkir -p ${WOV_BASEDIR}/wovtools/cache.$$
+  chmod 700 ${WOV_BASEDIR}/wovtools/cache.$$
+  mv ${WOV_BASEDIR}/wovtools/cache.$$ ${WOV_BASEDIR}/wovtools/cache
+fi
+
+# Cycle through directories
+GITDIRS=( "${WOV_BASEDIR}" "${@}" )
+for gd in ${GITDIRS[@]}; do
+
+  # try splitting by ':'
+  parts=( $(echo "${gd}" | tr ':' ' ') )
+  branch="${WOV_STAGE}"
+  if [ "${parts[0]}" != "${gd}" ]; then
+    gd="${parts[0]}"
+    branch="${parts[1]}"
+  fi
+  G="$(basename $gd)"
+  printf "... pushing: '$G': directory: '$gd': branch '${branch}' \n"
+
+  # Check that all project and dependency code checked in
+  wov-git-check ${gd}
+  if [[ $? != 0 ]]; then printf "\nERROR: Git repo ${gd} has uncommitted changes.\n\n" 1>&2; CONTINUE=0; fi
+
+  if [[ $CONTINUE == 1 ]]; then
+    printf "  ...make remote git directory: ${G}\n"
+    kubectl exec -it vh -- mkdir -p ${G}
+    if [[ $? != 0 ]]; then printf "\nERROR: failed making git directory on vh.\n\n" 1>&2 ; CONTINUE=0; fi
+  fi
+
+
+  if [[ $CONTINUE == 1 ]]; then
+    printf "  ...create git archive in cache\n"
+
+    $(cd ${gd} && git archive --format=tar.gz -o ${WOV_BASEDIR}/wovtools/cache/archive.$$.tar.gz ${branch})
+    if [[ $? != 0 ]]; then printf "\nERROR: failed making git archive for '$G'.\n\n" 1>&2 ; CONTINUE=0; fi
+  fi
+
+
+  if [[ $CONTINUE == 1 ]]; then
+    printf "  ...cp archive to vh.\n"
+    kubectl cp ${WOV_BASEDIR}/wovtools/cache/archive.$$.tar.gz vh:${G}/archive.$$.tar.gz
+    if [[ $? != 0 ]]; then printf "\nERROR: failed copying archive to vh.\n\n"  1>&2; CONTINUE=0; fi
+  fi
+
+
+  if [[ $CONTINUE == 1 ]]; then
+    printf "  ...extract $G files in vh.\n"
+    kubectl exec -it vh -- bash -c "cd ${G} ; tar -xzf archive.$$.tar.gz ; rm archive.$$.tar.gz"
+    if [[ $? != 0 ]]; then printf "\nERROR: failed extracting archive in vh.\n\n" 1>&2 ; CONTINUE=0; fi
+  fi
+
+done
+
+if [[ $CONTINUE == 1 ]]; then
+  printf "  ... success\n"
+fi

@@ -35,6 +35,9 @@ RUN apt-get install -y postgresql-client
 # Available for keys to be copied in
 RUN mkdir /root/.ssh
 
+# Settings for postgress
+COPY psqlrc /root/.psqlrc
+
 # Vim - Vundle and Pathogen
 COPY vimrc /root/.vimrc
 RUN git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim

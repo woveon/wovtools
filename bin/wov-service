@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
 
-DOECHO=1
-DOFORCE=0
-DIDRUN=0
-FOLD=100
-CURSERVICE=""
-RETVAL=0
 
 
 # ---------------------------------------------------------------------
@@ -13,10 +7,16 @@ RETVAL=0
 # ---------------------------------------------------------------------
 pushenvargs=( "$@" )
 set ""
-. wov-env
+. wov-env -c
 . wov-ns-check
 set -- "${pushenvargs[@]}"
 
+DOECHO=1
+DOFORCE=0
+DIDRUN=0
+FOLD=$(tput cols)
+CURSERVICE=""
+RETVAL=0
 
 
 

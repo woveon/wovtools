@@ -8,14 +8,17 @@ if [ ! -z ${WOV_stagemod+x} ]; then
   printf "\nERROR: Can't have WOV_stagemod set when pushing content.\n\n"
   exit 1
 fi
+wov-build -e
+
 pushcontainersargs=( "$@" )
 set ""
-. wov-env
+. wov-env -c
 . wov-ns-check
 set -- "${pushcontainersargs[@]}"
 
 DOECHO=1
 DOFORCE=0
+DOPUSH=1
 FOLD=$(tput cols)
 BLOCK=0
 SSHKEY=
@@ -28,7 +31,7 @@ R1=$?
 wov-git-check ${WOV_BASEDIR}/wovtools/secrets
 R2=$?
 if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then 
-  printf "\nERROR: wov-push-containers exiting\n" 1>&2
+  printf "\nERROR: wov-build-containers exiting\n" 1>&2
   exit 1;
 fi
 
@@ -49,6 +52,7 @@ ex. `basename $0` -f ggg hhh
     -> for project iii,  forces the building of containers iiiggg and iiihhh
 
   --key X : ssh key to add ex. ${HOME}/.ssh/id_rsa
+  -p/P : do push, no push
   -h : this help
   -l : list containers
   -f : force build
@@ -77,6 +81,14 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-v" ]; then
     shift
     DOECHO=2
+
+  elif [ "$1" == "-p" ]; then
+    shift
+    DOPUSH=1
+
+  elif [ "$1" == "-P" ]; then
+    shift
+    DOPUSH=0
 
   elif [ "$1" == "--key" ]; then
     shift
@@ -120,7 +132,7 @@ if [ "${BLOCK}" == "0" ]; then
   # Build containers if needed
   for f in ${RECIPES}; do
 
-    if [ $DOECHO -ge 1 ]; then printf "\n%-${FOLD}s\n" "-" | tr ' ' '-' ; echo "... build container ${f}."; fi
+    if [ $DOECHO -ge 1 ]; then printf "\n%-${FOLD}s\n" "-" | tr ' ' '-' ; echo "... build container '${f}'."; fi
 
     SRCDIR=${WOV_BASEDIR}
     DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${f}
@@ -145,32 +157,31 @@ if [ "${BLOCK}" == "0" ]; then
         exit 1
       fi
 
-      # determine if need to build container
-      NEEDSBUILD=0
 
+      NEEDSBUILD=0
       wov-pushcontainer-check ${f}
       NEEDSBUILD=$?
-      #echo "NEEDSBUILD: ${NEEDSBUILD}"
-      # printf "\n\n\n\nNEEDSBUILD: $NEEDSBUILD\n\n\n"
-      #    echo "NEEDSBUILDOUT: $NEEDSBUILDOUT"
-      #    if [ ${NEEDSBUILD} == 1 ] || [ $DOFORCE == 1 ]; then
-      #      echo "    ... forcing container build."
-      #
-      #    elif [ "$(docker images -q ${CONTAINER})" == "" ]; then 
-      #      docker images -q ${CONTAINER}
-      #      echo "    ... no existing container, building"
-      #      NEEDSBUILD=1
-      #
-      #    elif [ ! -e ${ARCHDIR} ]; then 
-      #      echo "    ... no ${ARCHDIR}, building"
-      #      NEEDSBUILD=1; 
-      #
-      #    elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then 
-      #      echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"
-      #      NEEDSBUILD=1; 
-      #    fi
-      #
-      # if [ "${NEEDSBUILD}" ==  "4" ]; then exit  ${NEEDSBUILD}; fi
+        #echo "NEEDSBUILD: ${NEEDSBUILD}"
+        # printf "\n\n\n\nNEEDSBUILD: $NEEDSBUILD\n\n\n"
+        #    echo "NEEDSBUILDOUT: $NEEDSBUILDOUT"
+        #    if [ ${NEEDSBUILD} == 1 ] || [ $DOFORCE == 1 ]; then
+        #      echo "    ... forcing container build."
+        #
+        #    elif [ "$(docker images -q ${CONTAINER})" == "" ]; then 
+        #      docker images -q ${CONTAINER}
+        #      echo "    ... no existing container, building"
+        #      NEEDSBUILD=1
+        #
+        #    elif [ ! -e ${ARCHDIR} ]; then 
+        #      echo "    ... no ${ARCHDIR}, building"
+        #      NEEDSBUILD=1; 
+        #
+        #    elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then 
+        #      echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"
+        #      NEEDSBUILD=1; 
+        #    fi
+        #
+      if [ "${NEEDSBUILD}" ==  "4" ]; then exit  ${NEEDSBUILD}; fi
       if [ "${NEEDSBUILD}" ==  "3" ]; then exit  ${NEEDSBUILD}; fi
       if [ "${NEEDSBUILD}" ==  "2" ]; then exit  ${NEEDSBUILD}; fi
 
@@ -197,52 +208,60 @@ if [ "${BLOCK}" == "0" ]; then
         mkdir -p ${ARCHDIR}
         rsync -ai --delete ${DESTDIR}/ ${ARCHDIR} &> /dev/null
       else
-        echo "    ... skipping container creation"
+        echo "  ... skipping container creation"
       fi
 
 
-      # Tag and Push
-      if [ "${NEEDSBUILD}" == "1" ] || [ "${NEEDSBUILD}" == "4" ] || [ "${DOFORCE}" == "1" ]; then
-        echo "  ... tag repo"
-        docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
+      # Do we push the container?
+      if [ "$DOPUSH" == "0" ]; then
+        printf "  ... skipping container push\n"
+      else
 
-        echo "  ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+        # echo "needsbuild '${NEEDSBUILD}'"
 
-        # If just built, dump log, since it will have to push a lot of data
-#        if [ "${JUSTBUILT}" == "1" ]; then
-          R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty )
-          RR=$?
-#        else
+        # Tag and Push
+        if [ "${NEEDSBUILD}" == "1" ] || [ "${NEEDSBUILD}" == "5" ] || [ "${DOFORCE}" == "1" ]; then
+          echo "  ... tag repo"
+          docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
+
+          echo "  ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+
+          # If just built, dump log, since it will have to push a lot of data
+  #        if [ "${JUSTBUILT}" == "1" ]; then
+            R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty )
+            RR=$?
+  #        else
 #          R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 )
 #          RR=$?
 #        fi
-        # echo "R: ${R} RR=${RR}"
-        if [[ $R == 'name unknown'* ]]; then
-          printf "\n\n  ...${R}.\n"
-          exit 1
-        fi
-        if [[ $R == *'Your Authorization Token has expired.'* ]]; then
-          echo "    ... auto-login to AWS attempt"
-          AWSAUTHCMD=$(aws ecr get-login --no-include-email)
-          eval ${AWSAUTHCMD}
-          if [ "$?" != "0" ]; then
-            echo "      ... FAILED auto-login to AWS attempt"
+          # echo "R: ${R} RR=${RR}"
+          if [[ $R == 'name unknown'* ]]; then
+            printf "\n\n  ...${R}.\n"
             exit 1
-          else
-            echo "      ... SUCCESS auto-login to AWS attempt"
-            echo "    ... re-push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-            R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1  | tee /dev/tty)
+          fi
+          if [[ $R == *'Your Authorization Token has expired.'* ]]; then
+            echo "    ... auto-login to AWS attempt"
+            AWSAUTHCMD=$(aws ecr get-login --no-include-email)
+            eval ${AWSAUTHCMD}
             if [ "$?" != "0" ]; then
-              printf "\n\n  ...still errors: ${R}.\n"
+              echo "      ... FAILED auto-login to AWS attempt"
               exit 1
+            else
+              echo "      ... SUCCESS auto-login to AWS attempt"
+              echo "    ... re-push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+              R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1  | tee /dev/tty)
+              if [ "$?" != "0" ]; then
+                printf "\n\n  ...still errors: ${R}.\n"
+                exit 1
+              fi
             fi
           fi
-        fi
 
-      else
-        echo "    ... skipping build and pushing of container '${CONTAINER}'"
+        else
+          echo "    ... skipping build and pushing of container '${CONTAINER}'"
+        fi
+        echo "  ... done '${CONTAINER}'."
       fi
-      echo "  ... done '${CONTAINER}'."
     fi
 
 

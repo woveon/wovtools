@@ -99,7 +99,7 @@ if [ "$#" == 1 ]; then
         cd $GO
         if [ ${DOECHO} -ge 1 ]; then
           printf "\n---- project '$P' : $GO\n"
-          sleep .5
+          # sleep .5
           ls
         fi
       fi

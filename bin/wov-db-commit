@@ -192,6 +192,7 @@ function doPushCheck()
       printf "\n\nERROR: could not get database version.\n"
       printf "  - is it inited? 'wov-db -D $1 --is-inited'\n"
       printf "  - what version? 'wov-db -D $1 --ver' to get version\n"
+      printf "  - is 'vh' pod up and running?\n"
       retval=2
     elif [ ! -e ${WOV_BASEDIR}/wovtools/db/registry/${1}.json ]; then 
       printf "\nERROR: no registry/${1}.json.\n"; 
@@ -258,9 +259,9 @@ function doPushCheck()
   #      printf "FAILED: if you have deltas in registry, you need to have db schema changes to account.\n"
       fi
     else
-      if [ "${chk_2}" == "T" ] ; then printf "FAILED: you have ${1}.deltas in wovtools/db to commit.\n"; fi
-      if [ "${chk_3}" == "T" ] ; then printf "FAILED: project has changes to check into git.\n"; fi
-      if [ "${chk_5}" == "T" ] ; then printf "FAILED: wovtools/db/registry has changes to check into git.\n"; fi
+      if [ "${chk_2}" == "T" ] ; then printf "BLOCK: you have ${1}.deltas in wovtools/db to commit.\n"; fi
+      if [ "${chk_3}" == "T" ] ; then printf "BLOCK: project has changes to check into git.\n"; fi
+      if [ "${chk_5}" == "T" ] ; then printf "BLOCK: wovtools/db/registry has changes to check into git.\n"; fi
     fi
 
     if [ $DOECHO -ge 1 ]; then
