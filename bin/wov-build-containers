@@ -442,9 +442,7 @@ if [ "${BLOCK}" == "0" ]; then
 
   printf "\nCompleted Building:\n"
   for f in ${RECIPES}; do
-    echo "  ... built: ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINERNAME}"
+    echo "  ... built: ${WOV_PROJECT}/${WOV_PROJECT}${f}"
   done
   printf "    type : 'docker run CONTAINER' to test\n"
 fi
-
-

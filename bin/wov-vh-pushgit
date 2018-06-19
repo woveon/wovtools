@@ -12,6 +12,7 @@ set -- "${wovvhpushgitargs[@]}"
 DOECHO=1
 FOLD=140
 CONTINUE=1
+DOSKIPBASE=0
 
 
 # ---------------------------------------------------------------------
@@ -32,6 +33,7 @@ The following pushes the current git repo, plugin the master branch of plugin-en
 
 
   -h : this help
+  --skip-base : skip the push of the current base git repo, only additional dirs
   -q/-v : quiet/verbose
 
 EOF
@@ -51,6 +53,10 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-v" ]; then
     shift
     DOECHO=2
+
+  elif [ "$1" == "--skip-base" ]; then
+    shift
+    DOSKIPBASE=1
 
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
@@ -74,7 +80,12 @@ if [ ! -e ${WOV_BASEDIR}/wovtools/cache ]; then
 fi
 
 # Cycle through directories
-GITDIRS=( "${WOV_BASEDIR}" "${@}" )
+if [ "${DOSKIPBASE}" == "0" ]; then
+  GITDIRS=( "${WOV_BASEDIR}" "${@}" )
+else
+  printf "  ... skipping base directory, additional dirs only\n"
+  GITDIRS=( "${@}" )
+fi
 for gd in ${GITDIRS[@]}; do
 
   # try splitting by ':'
@@ -85,7 +96,17 @@ for gd in ${GITDIRS[@]}; do
     branch="${parts[1]}"
   fi
   G="$(basename $gd)"
-  printf "... pushing: '$G': directory: '$gd': branch '${branch}' \n"
+  printf "... pushing: '$G' in '$gd': branch '${branch}' \n"
+
+  # Check branch exists
+  cd ${gd} && git rev-parse --verify --quiet ${branch} > /dev/null
+  if [[ $? != 0 ]]; then
+    printf "\nERROR: Missing branch : '${gd}:${branch}'.\n"
+    printf "       Use ':BRANCH' to specify a specifc branch and 'git branch' to show branches in a git repo.\n"
+    printf "       Existing branches in ${gd}:\n"
+    cd ${gd} && git branch
+    exit 1
+  fi
 
   # Check that all project and dependency code checked in
   wov-git-check ${gd}
