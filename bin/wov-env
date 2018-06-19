@@ -31,6 +31,8 @@ if [ "${WOV_stagemod}" != "" ]; then
   STAGEMOD="${WOV_stagemod}"
 fi
 
+WOV_SECRETFILE=${WOV_BASEDIR}/wovtools/cache/secrets/current.json
+export WOV_SECRETFILE
 
 
 # TODO: optimize so that only certain variables are grabbed, as they are asked for
@@ -169,6 +171,7 @@ function fDoEcho()
 {
   echo WOV_VERSION="${WOV_VERSION}"
   echo WOV_BASEDIR="${WOV_BASEDIR}"
+  echo WOV_SECRETFILE="${WOV_SECRETFILE}"
   echo WOV_ARCHIVEREPOSITORY="${WOV_ARCHIVEREPOSITORY}"
   echo WOV_ARCHIVEENV="${WOV_ARCHIVEENV}"
   echo K8S_CONTEXT="$K8S_CONTEXT"

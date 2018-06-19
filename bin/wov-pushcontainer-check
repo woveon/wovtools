@@ -152,7 +152,6 @@ function fCheckForRemoteImage()
       if [ "${R_tag}" != "" ]; then
 
         # ex. 686413534598.dkr.ecr.us-east-1.amazonaws.com/api/apidata@sha256:03ed7fb9e67e8ebf2f998a936b7039d8a9d6a931a3af803c0de0bd4f557189bd
-        set -x
         R_sha=$(echo "${R}" | awk '{print $3}')
         R_repoDigest="${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER}@${R_sha}"
         #Local_sha=$(docker inspect ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} | jq -r '.[0].Id')

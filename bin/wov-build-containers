@@ -62,6 +62,198 @@ EOF
 }
 
 
+# ---------------------------------------------------------------------
+# Put contents together in container directory
+#  NOTE: later will decide if we need to build a container, based upon this
+# ---------------------------------------------------------------------
+function doPackContainer
+{
+  # build the content in wovtools/cache/containers/$f
+  mkdir -p ${DESTDIR}
+  mkdir -p ${DESTDIR}/SECRET/sshkeys
+  chmod -R 700 ${DESTDIR}/SECRET
+  echo "" > ${DESTDIR}/SECRET/ssh-config
+  echo "" > ${DESTDIR}/Dockerfile
+
+  echo "  ... pack container using recipe: '$f'"
+  cd ${WOV_BASEDIR} && SRCDIR=${SRCDIR} DESTDIR=${DESTDIR} CONTAINER=${CONTAINER} ${WOV_BASEDIR}/wovtools/containers/$f
+  if [ "$?" != "0" ]; then
+    printf "\n\nERROR: failed building container.\n\n"
+    exit 1
+  fi
+
+  # put ssh keys and config options 
+#  PRIVATEREPOS=( $(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.privateRepos[]') )
+  PRIVATEREPOS=( $(cat ${WOV_SECRETFILE} |  jq -r '.repositories | to_entries[] | .key') )
+  echo "Adding keys for private repos : ${PRIVATEREPOS[@]}"
+  for repo in "${PRIVATEREPOS[@]}"; do
+    echo "  : repo '${repo}'"
+    # for each item in private repo, append to ssh/config and add its key
+    echo "  ... add in repo key ${repo}, update .ssh/config"
+#    repoUser=$(ssh -G ${repo} | grep "^user " | awk '{print $2}')
+    repoUser=$(cat ${WOV_SECRETFILE} | jq -r '.repositories["'${repo}'"].user')
+    echo "    ... repoUser ${repoUser}"
+    #repoKeyFile=$(ssh -G ${repo} | grep "^identityfile " | awk '{print $2}')
+    repoKeyFile=$(cat ${WOV_SECRETFILE} | jq -r '.repositories["'${repo}'"].privkeyloc')
+    repoKeyFile="${repoKeyFile/#\~/$HOME}"
+      # expand tilde to $HOME
+    echo "    ... repoKeyFile ${repoKeyFile}"
+    cat <<EOF >> ${DESTDIR}/SECRET/ssh-config
+
+Host ${repo}
+  User ${repoUser}
+  IdentityFile /root/.ssh/$(basename ${repoKeyFile})
+EOF
+
+
+    if [ ! -e ${repoKeyFile} ]; then
+      echo "ERROR: unable to find key file '${repoKeyFile}'."
+      exit 1
+    fi
+    cp ${repoKeyFile} ${DESTDIR}/SECRET/sshkeys/.
+
+  done
+
+
+  # --------------------------------------------------------------------- 
+  # start building Dockerfile for the container
+
+  CONTAINERBASE=$(cat ${WOV_SECRETFILE} | jq -r '.'${WOV_PROJECT}${CONTAINERNAME}'.'${WOV_STAGE}'.containerfrom')
+  if [ "${CONTAINERBASE}" == "null" ]; then
+    printf "\nERROR: Docker container for '${repo}' has no known base to build from in secret: '${WOV_PROJECT}${CONTAINERNAME}.${WOV_STAGE}.containerfrom'.\n\n"
+    exit 1
+  fi
+
+  # ... setup
+  if [ $DOECHO -ge 1 ]; then echo "  ... build Dockerfile: ${repo}."; fi
+  cat <<EOF > ${DESTDIR}/Dockerfile
+# ===================================================================== 
+# Build Section
+# ===================================================================== 
+# - This section has secret content in SECRETS dir, that will be deleted
+# - Install build tools and build code, only /usr/src/app will survive
+# ===================================================================== 
+FROM ${CONTAINERBASE} as wovtools
+
+# Use specific keys for private repos
+RUN mkdir -p /root/.ssh
+RUN touch /root/.ssh/known_hosts
+RUN chmod 600 /root/.ssh/known_hosts
+ADD SECRET/ssh-config /root/.ssh/config
+RUN chmod 600 /root/.ssh/config
+
+EOF
+
+  if [ $DOECHO -ge 2 ]; then echo "  ... adding keys"; fi
+  cat <<EOF >> ${DESTDIR}/Dockerfile
+
+# Adding ssh keys
+COPY SECRET/sshkeys/. /root/.ssh/.
+RUN chmod 600 /root/.ssh/*
+EOF
+
+  if [ $DOECHO -ge 2 ]; then echo "  ... add in call to each repo, so it adds to known hosts"; fi
+  for repo in "${PRIVATEREPOS[@]}"; do
+    cat <<EOF >> ${DESTDIR}/Dockerfile
+
+# Adding repos to ssh known_hosts  (||true because returns non-0 on success, so added '-v' for output)
+RUN ssh -o StrictHostKeyChecking=no -vT ${repo} || true
+EOF
+  done
+
+
+  if [ $DOECHO -ge 2 ]; then echo "  ... creating build section"; fi
+  cat <<EOF >> ${DESTDIR}/Dockerfile
+
+# Copy in local content
+WORKDIR /usr/src/app
+COPY . .
+EOF
+
+  # ... add in section to build code from user script /secure/
+  if [ ! -e "${DESTDIR}/SECRET/build.docker" ]; then
+    echo "ERROR: no 'build.docker' file in '${DESTDIR}/SECRET', should be created in wovtools container script."
+    exit 1
+  fi
+  cat <<EOF >> ${DESTDIR}/Dockerfile
+
+# --------------------------------------------------------------------- 
+# Build instructions from recipe
+# --------------------------------------------------------------------- 
+EOF
+  cat ${DESTDIR}/SECRET/build.docker >> ${DESTDIR}/Dockerfile
+  cat <<EOF >> ${DESTDIR}/Dockerfile
+# --------------------------------------------------------------------- 
+EOF
+
+  # ... clean up secure and start insecure
+  cat <<EOF >> ${DESTDIR}/Dockerfile
+
+# Clean up secrets
+RUN rm -Rf /usr/src/app/SECRET
+RUN rm -Rf /root/.ssh
+EOF
+
+  # ... create insecure section to run from (no keys unless you add), /insecure/
+  if [ $DOECHO -ge 2 ]; then echo "  ... creating run section"; fi
+  cat <<EOF >> ${DESTDIR}/Dockerfile
+
+# ===================================================================== 
+# Run Section
+# ===================================================================== 
+# - insecure section to run from (no keys unless you add)
+# - copied from 'run.docker'
+# ===================================================================== 
+FROM ${CONTAINERBASE}
+COPY --from=wovtools /usr/src/app /usr/src/app
+
+EOF
+  if [ ! -e "${DESTDIR}/SECRET/run.docker" ]; then
+    echo "ERROR: no 'run.docker' file in '${DESTDIR}/SECRET', should be created in wovtools container script."
+    exit 1
+  fi
+  cat <<EOF >> ${DESTDIR}/Dockerfile
+
+# --------------------------------------------------------------------- 
+# Run instructions from recipe
+# --------------------------------------------------------------------- 
+EOF
+  cat ${DESTDIR}/SECRET/run.docker >> ${DESTDIR}/Dockerfile
+  cat <<EOF >> ${DESTDIR}/Dockerfile
+# --------------------------------------------------------------------- 
+EOF
+
+}
+
+
+# ---------------------------------------------------------------------
+# Pack all into Docker container and archive last build.
+# ---------------------------------------------------------------------
+function doBuildContainer
+{
+  echo "    ... creating container '${CONTAINER}'"
+#  if [ "${SSHKEY}" != "" ]; then
+#    echo "      ... adding ssh key to build: '${SSHKEY}'"
+#    cp ${SSHKEY} ${DESTDIR}/$(basename ${SSHKEY})
+#    SS="--build-arg SSH_KEY=$(basename ${SSHKEY})"
+#  fi
+
+#  docker build ${SS} -f ${DESTDIR}/Dockerfile -t ${WOV_PROJECT}/${CONTAINER}:latest ${DESTDIR} || exit 1
+  docker build -f ${DESTDIR}/Dockerfile -t ${WOV_PROJECT}/${CONTAINER}:latest ${DESTDIR} || exit 1
+
+#  if [ "${SSHKEY}" != "" ]; then
+#    echo "      ... removing key from dest: '${DESTDIR}/$(basename ${SSHKEY})'"
+#    rm ${DESTDIR}/$(basename ${SSHKEY})
+#  fi
+
+  echo "    ... archiving build of container '${CONTAINER}'"
+  mkdir -p ${ARCHDIR}
+  rsync -ai --delete ${DESTDIR}/ ${ARCHDIR} &> /dev/null
+}
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
 function doList()
 {
   C=$(ls ${WOV_BASEDIR}/wovtools/containers/* 2> /dev/null )
@@ -125,38 +317,34 @@ if [ "${BLOCK}" == "0" ]; then
  
   RECIPES=( "$@" )
   if [ "${#RECIPES[@]}" == "0" ]; then
-    RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && ls * 2> /dev/null)
+    RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
   fi
-  #echo "R: ${RECIPES}"
+  echo "R: ${RECIPES}"
 
   # Build containers if needed
   for f in ${RECIPES}; do
 
     if [ $DOECHO -ge 1 ]; then printf "\n%-${FOLD}s\n" "-" | tr ' ' '-' ; echo "... build container '${f}'."; fi
 
+    CONTAINERNAME=$f
+    CONTAINER=${WOV_PROJECT}${CONTAINERNAME}
     SRCDIR=${WOV_BASEDIR}
-    DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${f}
-    ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${f}
-    CONTAINER=${WOV_PROJECT}${f}
-    #  echo "CONTAINER=${CONTAINER}"
-    #  echo "SRCDIR=${SRCDIR}"
-    #  echo "DESTDIR=${DESTDIR} # more like a 'content' dir as this is all copied in here"
-    #  echo "ARCHDIR=${ARCHDIR} # location of archive of DESTDIR"
+    DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${CONTAINERNAME}
+    ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${CONTAINERNAME}
+    # echo "CONTAINERNAME=${CONTAINERNAME}"
+    # echo "CONTAINER=${CONTAINER}"
+    # echo "SRCDIR=${SRCDIR}"
+    # echo "DESTDIR=${DESTDIR} # more like a 'content' dir as this is all copied in here"
+    # echo "ARCHDIR=${ARCHDIR} # location of archive of DESTDIR"
 
-    # build the content in wovtools/cache/containers/$f
-    mkdir -p ${DESTDIR}
-    echo "  ... recipe $f"
+
 #    echo "    ... DESTDIR=${DESTDIR}"
 #    echo "    ... CONTAINER=${CONTAINER}"
     if [[ ! -x "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
       echo "ERROR: recipe for container ${f} not executable (${WOV_BASEDIR}/wovtools/containers/$f).";
     else
-      cd ${WOV_BASEDIR} && SRCDIR=${SRCDIR} DESTDIR=${DESTDIR} CONTAINER=${CONTAINER} ${WOV_BASEDIR}/wovtools/containers/$f
-      if [ "$?" != "0" ]; then
-        printf "\n\nERROR: failed building container.\n\n"
-        exit 1
-      fi
 
+      doPackContainer ${f}
 
       NEEDSBUILD=0
       wov-pushcontainer-check ${f}
@@ -190,23 +378,8 @@ if [ "${BLOCK}" == "0" ]; then
       if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then
         JUSTBUILT=1
 
-        echo "    ... creating container '${CONTAINER}'"
-        if [ "${SSHKEY}" != "" ]; then
-          echo "      ... adding ssh key to build: '${SSHKEY}'"
-          cp ${SSHKEY} ${DESTDIR}/$(basename ${SSHKEY})
-          SS="--build-arg SSH_KEY=$(basename ${SSHKEY})"
-        fi
+        doBuildContainer ${f}
 
-        docker build ${SS} -f ${DESTDIR}/Dockerfile -t ${WOV_PROJECT}/${CONTAINER}:latest ${DESTDIR} || exit 1
-
-        if [ "${SSHKEY}" != "" ]; then
-          echo "      ... removing key from dest: '${DESTDIR}/$(basename ${SSHKEY})'"
-          rm ${DESTDIR}/$(basename ${SSHKEY})
-        fi
-
-        echo "    ... archiving build of container '${CONTAINER}'"
-        mkdir -p ${ARCHDIR}
-        rsync -ai --delete ${DESTDIR}/ ${ARCHDIR} &> /dev/null
       else
         echo "  ... skipping container creation"
       fi
@@ -266,6 +439,12 @@ if [ "${BLOCK}" == "0" ]; then
 
 
   done
+
+  printf "\nCompleted Building:\n"
+  for f in ${RECIPES}; do
+    echo "  ... built: ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINERNAME}"
+  done
+  printf "    type : 'docker run CONTAINER' to test\n"
 fi
 
 

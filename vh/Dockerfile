@@ -17,7 +17,7 @@ RUN apt-get -y install vim wget curl bash net-tools git iputils-ping dnsutils ma
 RUN curl -sL https://deb.nodesource.com/setup_9.x | bash -
 RUN apt-get install -y nodejs
 ENV NODE_PATH /usr/lib/node_modules
-RUN npm install -g mocha bcryptjs
+RUN npm install -g mocha bcryptjs nodemon
 
 
 # Install Mongo client v3.6

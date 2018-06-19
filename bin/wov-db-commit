@@ -240,7 +240,7 @@ function doPushCheck()
     if [ $DOECHO -ge 2 ]; then
       printf "     1 : ${chk_1} - db schema changes\n"
       printf "     2 : ${chk_2} - delta files exist\n"
-      printf "     3 : ${chk_3} - git repo changes\n"
+      printf "     3 : ${chk_3} - main git repo changes, try: 'git status'\n"
       printf "     4 : ${chk_4} - registry delta changes for pver\n"
       printf "     5 : ${chk_5} - registry git changes\n"
     fi
