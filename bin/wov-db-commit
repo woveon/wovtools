@@ -84,6 +84,7 @@ function doGetDBPVER()
 # --------------------------------------------------------------------- 
 function doGetDBLastLogEntry()
 {
+  set -x
   local retval=1
   local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null)
   if [ "$?" != "0" ]; then 
@@ -94,6 +95,7 @@ function doGetDBLastLogEntry()
     retval=0
     echo ${DB_PVER}
   fi
+  set +x
 
   return $retval
 }
@@ -331,8 +333,14 @@ function doCommitDB()
     printf "\n\n***ERROR: database has no parent.\n"
     retval=2
   fi
-  DB_ENTRY=( $(echo $DB_ENTRY |  sed 's/ | / /g' ) )
-  DB_PVER="${DB_ENTRY[4]}"
+  printf "\nDB_ENTRY '${DB_ENTRY}'\n"
+  OLDIFS=$IFS
+  IFS='|'
+  dbverarray=( $(wov-db -D ${WOVDB_DBNAME} --ver)  )
+  DB_ENTRY=( $(echo "${DB_ENTRY[@]}") )
+  IFS=$OLDIFS
+  printf "\nDB_ENTRY '${DB_ENTRY[@]}'\n"
+  DB_PVER="$( echo -e "${DB_ENTRY[4]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 
   if [ "$retval" == "0" ]; then
 
@@ -376,10 +384,11 @@ EOF
     # append this entry
     jq " .versions.\"${WOV_PVER}\"={ \"checksum\": \"${CHKSUM}\", \"parent\": { \"type\": \"pver\", \"pver\": \"${DB_PVER}\" } }" \
        ${WOV_BASEDIR}/wovtools/db/registry/$1.json > ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/registry/$1.json && rm ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$
-    echo "DBENTRY snapshot : ${DB_ENTRY[6]}" 1>&2
-    if [ "$DB_ENTRY[6]" != "" ]; then
-      echo "DBENTRY append snapshot : ${DB_ENTRY[6]}" 1>&2
-      jq " .versions.\"${WOV_PVER}\".parent.snapshot=\"${DB_ENTRY[6]}\"" \
+    DB_snapshot="$( echo -e "${DB_ENTRY[6]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    echo "DBENTRY snapshot : ${DB_snapshot}" 1>&2
+    if [ "$DB_snapshot" != "" ]; then
+      echo "DBENTRY append snapshot : ${DB_snapshot}" 1>&2
+      jq " .versions.\"${WOV_PVER}\".parent.snapshot=\"${DB_snapshot}\"" \
        ${WOV_BASEDIR}/wovtools/db/registry/$1.json > ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/registry/$1.json && rm ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$
     fi
 

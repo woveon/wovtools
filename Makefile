@@ -6,7 +6,7 @@ BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service wov-ed wov-ls wov-vh wov-pw
 					wov-portforward wov-envg wov-project wov-vh-pushgit
 BINS=wov-env wov-ns-check wov-stage wov-build wov-compile \
 		 wov-pushcode-check wov-pushcontainer-check wov-pushenv-check wov-build-containers wov-push-env wov-push-secrets wov-push \
-		 wov-deploy wov-deploy-info wov-hbs \
+		 wov-deploy wov-deploy-info wov-hbs wov-db-deploy \
 		 $(BINS-UTIL) $(BINS-GLOBAL)
 
 .PHONY: vh

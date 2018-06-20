@@ -319,7 +319,7 @@ if [ "${BLOCK}" == "0" ]; then
   if [ "${#RECIPES[@]}" == "0" ]; then
     RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
   fi
-  echo "R: ${RECIPES}"
+#  echo "R: ${RECIPES}"
 
   # Build containers if needed
   for f in ${RECIPES}; do
