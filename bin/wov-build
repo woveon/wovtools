@@ -192,16 +192,29 @@ EOF
 
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
-function fCleanCache() 
+function fCleanCacheAll() 
 {
   HAS_CLEAN=1
-  BUILDDIRS=( "conf" "k8s" "secret" )
+  _fCleanCache "conf" "k8s" "secret"
+}
+function fCleanK8SConf()
+{
+  _fCleanCache "k8s"
+}
+function fCleanCacheConf()
+{
+  _fCleanCache "conf"
+}
+function _fCleanCache() 
+{
+  BUILDDIRS=( "$*" )
   for f in ${BUILDDIRS[@]}; do
     DEST=${WOV_BASEDIR}/wovtools/cache/$f
-    if [ $DOECHO -ge 1 ]; then echo "  ... clean cache in dir '${DEST}'."; fi
+    if [ $DOECHO -ge 2 ]; then echo "  ... clean cache in dir '${DEST}'."; fi
     rm -fR ${DEST}/* || true
   done
 }
+
 
 
 # --------------------------------------------------------------------- 
@@ -216,12 +229,14 @@ function fBuildEnv()
 
 
   # build conf (and if stagemod, do that as well)
+  fCleanCacheConf
   fBuildEnvDir conf conf ${SECRETFILE}
   if [ "$STAGEMOD" != "" ]; then
     fBuildEnvDir conf conf-${STAGEMOD} ${SECRETMODFILE}
   fi
 
   # build k8s (no stagemod (will I regret this?... dunno))
+  fCleanK8SConf
   fBuildEnvDir k8s k8s ${SECRETFILE}
 
   # mark as done
@@ -321,7 +336,7 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == "--clean" ]; then
     shift
-    fCleanCache
+    _fCleanCacheAll
 
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions

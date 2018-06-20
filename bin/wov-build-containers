@@ -348,8 +348,12 @@ if [ "${BLOCK}" == "0" ]; then
 
 #    echo "    ... DESTDIR=${DESTDIR}"
 #    echo "    ... CONTAINER=${CONTAINER}"
-    if [[ ! -x "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
+    if [[ ! -e "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
+      echo "ERROR: recipe for container ${f} does not exist (${WOV_BASEDIR}/wovtools/containers/$f).";
+      exit 1
+    elif [[ ! -x "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
       echo "ERROR: recipe for container ${f} not executable (${WOV_BASEDIR}/wovtools/containers/$f).";
+      exit 1
     else
 
       doPackContainer ${f}
