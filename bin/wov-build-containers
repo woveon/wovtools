@@ -83,21 +83,24 @@ function doPackContainer
   fi
 
   # put ssh keys and config options 
-#  PRIVATEREPOS=( $(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.privateRepos[]') )
-  PRIVATEREPOS=( $(cat ${WOV_SECRETFILE} |  jq -r '.repositories | to_entries[] | .key') )
-  echo "Adding keys for private repos : ${PRIVATEREPOS[@]}"
+  PRIVATEREPOS=( $(cat ${WOV_SECRETFILE} |  jq -r '.repositories | to_entries[] | .key' 2> /dev/null) )
+  if [ "$?" != "0" ]; then
+    printf "\nERROR: no 'repositories' entry in secrets. If you have no private repos, create a blank entry.\n"
+    exit 1
+  fi
+  echo "  ... adding keys for private repos"
   for repo in "${PRIVATEREPOS[@]}"; do
-    echo "  : repo '${repo}'"
     # for each item in private repo, append to ssh/config and add its key
-    echo "  ... add in repo key ${repo}, update .ssh/config"
+    # echo "  ... add in repo key ${repo}, update .ssh/config"
 #    repoUser=$(ssh -G ${repo} | grep "^user " | awk '{print $2}')
     repoUser=$(cat ${WOV_SECRETFILE} | jq -r '.repositories["'${repo}'"].user')
-    echo "    ... repoUser ${repoUser}"
+    #echo "    ... repoUser ${repoUser}"
     #repoKeyFile=$(ssh -G ${repo} | grep "^identityfile " | awk '{print $2}')
     repoKeyFile=$(cat ${WOV_SECRETFILE} | jq -r '.repositories["'${repo}'"].privkeyloc')
     repoKeyFile="${repoKeyFile/#\~/$HOME}"
       # expand tilde to $HOME
-    echo "    ... repoKeyFile ${repoKeyFile}"
+    #echo "    ... repoKeyFile ${repoKeyFile}"
+    echo "    ... repo: '${repo}'  user: '${repoUser}'  keyfile: '${repoKeyFile}'"
     cat <<EOF >> ${DESTDIR}/SECRET/ssh-config
 
 Host ${repo}
@@ -121,11 +124,15 @@ EOF
   CONTAINERBASE=$(cat ${WOV_SECRETFILE} | jq -r '.'${WOV_PROJECT}${CONTAINERNAME}'.'${WOV_STAGE}'.containerfrom')
   if [ "${CONTAINERBASE}" == "null" ]; then
     printf "\nERROR: Docker container for '${repo}' has no known base to build from in secret: '${WOV_PROJECT}${CONTAINERNAME}.${WOV_STAGE}.containerfrom'.\n\n"
+    printf "   Check: \n"
+    printf "     - secrets are rebuilt (wov-build -e)\n"
+    printf "     - secrets contain entry for '${WOV_PROJECT}${CONTAINERNAME}.${WOV_STAGE}.containerfrom'. ('wov-ed -c secrets/current.json')\n"
+    printf "     - secret file containing that entry is included in this stage (see wovtools/confing.json secrets.${WOV_STAGE})\n\n"
     exit 1
   fi
 
   # ... setup
-  if [ $DOECHO -ge 1 ]; then echo "  ... build Dockerfile: ${repo}."; fi
+  if [ $DOECHO -ge 1 ]; then echo "  ... building container Dockerfile"; fi
   cat <<EOF > ${DESTDIR}/Dockerfile
 # ===================================================================== 
 # Build Section
@@ -206,6 +213,7 @@ EOF
 # ===================================================================== 
 FROM ${CONTAINERBASE}
 COPY --from=wovtools /usr/src/app /usr/src/app
+WORKDIR /usr/src/app
 
 EOF
   if [ ! -e "${DESTDIR}/SECRET/run.docker" ]; then
@@ -231,7 +239,7 @@ EOF
 # ---------------------------------------------------------------------
 function doBuildContainer
 {
-  echo "    ... creating container '${CONTAINER}'"
+  echo "  ... creating container '${CONTAINER}'"
 #  if [ "${SSHKEY}" != "" ]; then
 #    echo "      ... adding ssh key to build: '${SSHKEY}'"
 #    cp ${SSHKEY} ${DESTDIR}/$(basename ${SSHKEY})
@@ -347,7 +355,8 @@ if [ "${BLOCK}" == "0" ]; then
       doPackContainer ${f}
 
       NEEDSBUILD=0
-      wov-pushcontainer-check ${f}
+      #echo "  ... check push container status"
+      wov-pushcontainer-check -q ${f}
       NEEDSBUILD=$?
         #echo "NEEDSBUILD: ${NEEDSBUILD}"
         # printf "\n\n\n\nNEEDSBUILD: $NEEDSBUILD\n\n\n"
@@ -381,7 +390,7 @@ if [ "${BLOCK}" == "0" ]; then
         doBuildContainer ${f}
 
       else
-        echo "  ... skipping container creation"
+        echo "  ... container build not needed"
       fi
 
 
@@ -431,7 +440,7 @@ if [ "${BLOCK}" == "0" ]; then
           fi
 
         else
-          echo "    ... skipping build and pushing of container '${CONTAINER}'"
+          echo "  ... container push not needed"
         fi
         echo "  ... done '${CONTAINER}'."
       fi
@@ -444,5 +453,6 @@ if [ "${BLOCK}" == "0" ]; then
   for f in ${RECIPES}; do
     echo "  ... built: ${WOV_PROJECT}/${WOV_PROJECT}${f}"
   done
-  printf "    type : 'docker run CONTAINER' to test\n"
+  printf "    run locally: 'docker run CONTAINER'\n"
+  printf "     open shell: 'docker run --rm -it CONTAINER bash'\n"
 fi

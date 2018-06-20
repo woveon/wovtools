@@ -147,7 +147,7 @@ function fCheckForRemoteImage()
       # NOTE: check KSTAGE since GSTAGE is mixed with local
       #R=$(echo "${RR}" | awk '{print $2}' | grep ${WOV_KSTAGE}_${WOV_PVER})
       R=$(echo "${RR}" | grep ${WOV_KSTAGE}_${WOV_PVER})
-      echo "R: ${R} " 1>&2
+      # echo "R: ${R} " 1>&2
       R_tag=$(echo "${R}" | awk '{print $2}')
       if [ "${R_tag}" != "" ]; then
 
@@ -157,7 +157,7 @@ function fCheckForRemoteImage()
         #Local_sha=$(docker inspect ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} | jq -r '.[0].Id')
         Local_repoDigest=$(docker inspect ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} | jq -r '.[0].RepoDigests[0]')
           # TODO: what if repo digests has multiple entries? go through each?
-        echo "R ${R_repoDigest}    L ${Local_repoDigest}" 1>&2
+        #echo "R ${R_repoDigest}    L ${Local_repoDigest}" 1>&2
         if [ "${R_repoDigest}" == "${Local_repoDigest}" ]; then
           # success
           retval=100
@@ -246,7 +246,7 @@ elif [ ! -e ${ARCHDIR} ]; then
 else 
 
   CH=$(fCheckForRemoteImage)
-  echo "CheckForRemoteImages: ${CH}"
+  # echo "CheckForRemoteImages: ${CH}"
   # NEW  OLD
   # 100 - 1 - (success) tagged image found, with match to local sha
   # 101 - 2 - unknown error
@@ -267,14 +267,14 @@ else
     NEEDSBUILD=3
 
   elif [ "${CH}" == "102" ] || [ "${CH}" == "104" ]; then
-    if [ $DOECHO -ge 1 ]; then echo "    ... has to push"; fi
+    if [ $DOECHO -ge 2 ]; then echo "    ... has to push"; fi
     # 0 - tagged image not found, 4 - tagged image found, but shas do not match
 
     # ok, so remote repo exists and no error, check for diffs
     # NOTE: excluding node_modules for speed, but hopefully any changes would be 
     #       reflected in the package files
     if [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' --exclude='node_modules' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then
-      if [ $DOECHO -ge 1 ]; then echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"; fi
+      if [ $DOECHO -ge 1 ]; then echo "    ... code diffs, needs to build and push"; fi
       NEEDSBUILD=1
     else
       if [ $DOECHO -ge 1 ]; then echo "    ... no reason to build, just push"; fi

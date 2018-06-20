@@ -769,7 +769,7 @@ while [[ $1 =~ ^- ]]; do
     shift
     R1=$(resName DB ${WOVDB_DBNAME})
     RR1=$?
-    echo "R: ${R1}"
+    # echo "R: ${R1}"
     if [ "$RR1" != "0" ]; then printf "ERROR: can not find database '${WOVDB_DBNAME}'.\n"; exit 1; fi
     doWaitDBServer ${R1}
     # TODO : unnecessry shift?
