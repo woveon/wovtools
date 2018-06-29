@@ -78,11 +78,11 @@ for p in $*; do
 
   while [ "$stat" != "Running" ]; do
     if [ "$first" == "1" ]; then
-      echo "    ... waiting at least ${WAITFIRST}s for vh to come online"
+      echo "    ... waiting at least ${WAITFIRST}s for ${podname} to come online"
       sleep ${WAITFIRST}
       first=0
     else
-      echo "    ... waiting ${WAITTIME}s more for vh to come online"
+      echo "    ... waiting ${WAITTIME}s more for ${podname} to come online"
       sleep ${WAITTIME}
     fi
     stat=`kubectl describe $NAMESPACE pods $podname | grep "^Status" | awk '{print $2}'`
