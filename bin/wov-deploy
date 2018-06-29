@@ -168,7 +168,7 @@ printf " version: ${WOV_STAGE}_${WOV_CUR_PVER}_${WOV_CUR_SVER}\n"
 if [ "${WOV_STAGE}" == "prod" ]; then
   printf "\n\n**** deploying to production *********************************\n\n"
   printf "   Are you sure? (yes|NO) "
-  read $A
+  read A
   if [ "$A" == "yes" ] || [ "$A" == "YES" ]; then
     printf "  ... ok, continuing.\n"
   else
@@ -199,11 +199,6 @@ while [[ $1 =~ ^- ]]; do
     shift
     DORETAIN=1
 
-  elif [ "$1" == "--pver" ]; then
-    shift
-    WOV_PVER="$1"
-    shift
-
   elif [ "$1" == "--dry-run" ]; then
     shift
     DRYRUN=1
@@ -211,6 +206,11 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--conf-only" ]; then
     shift
     CONFONLY=1
+
+  elif [ "$1" == "--pver" ]; then
+    shift
+    WOV_PVER="$1"
+    shift
 
   elif [ "$1" == "--sver" ]; then
     shift
@@ -233,10 +233,11 @@ done
 
 # Little more feedback
 if [ "${WOV_CUR_PVER}" != "${WOV_PVER}" ] || [ "${WOV_CUR_SVER}" != "${WOV_SVER}" ]; then
-  printf " deploying version: ${WOV_STAGE}_${WOV_CUR_PVER}_${WOV_CUR_SVER}\n"
+  printf " deploying version: ${WOV_STAGE}_${WOV_PVER}_${WOV_SVER}\n"
 fi
 printf "\n"
 
+printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
 
 
 # If deploying the latest PVER, check that all code is pushed to archive
@@ -247,17 +248,22 @@ if [ "${WOV_CUR_PVER}" == "${WOV_PVER}" ]; then
   R2=$?
   if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
 fi
+printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
 
 # If deploying the latest SVER, check that all env is pushed to archive
 if [ "${WOV_CUR_SVER}" == "${WOV_SVER}" ]; then
-  deployenvargs=( "$@" )
-  set ""
-  . wov-push-env -q
-  set -- "${deployenvargs[@]}"
+#  deployenvargs=( "$@" )
+#  set ""
+#  . wov-push-env -q
+#  set -- "${deployenvargs[@]}"
+  wov-push-env -q
 fi
+
+printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
 
 ARCHBASE=${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}
 
+printf "  ... ARCHBASE : ${ARCHBASE}"
 
 # --------------------------------------------------------------------- 
 # Make directory to put files
@@ -267,10 +273,14 @@ mkdir -p ${DEPLOYDIR}/k8s
 chmod -R 700 ${DEPLOYDIR}
 
 
+printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
+
 # --------------------------------------------------------------------- 
 # Pull env files
 aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/conf ${DEPLOYDIR}/conf  --delete
 aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s ${DEPLOYDIR}/k8s  --delete
+
+printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
 
 if [ "${DRYRUN}" == "0" ]; then 
   if [ "${CONFONLY}" == "1" ]; then
