@@ -15,6 +15,7 @@ set -- "${pushenvargs[@]}"
 DOECHO=1
 FOLD=$(tput cols)
 DATABASESERVER=
+#NAMESPACE="${WOV_NS}"
 
 
 # ---------------------------------------------------------------------
@@ -107,6 +108,11 @@ while [[ $1 =~ ^- ]]; do
     shift
     read DB_PASSWORD
     shift
+
+#  elif [ "$1" == "-n" ] || [ "$1" == "--namespace" ]; then
+#    shift
+#    NAMESPACE="${1}"
+#    shift
 
   elif [ "$1" == "-U" ]; then
     shift
@@ -201,6 +207,7 @@ if [ "${DB_TYPE}" == "postgres" ]; then
   elif [ "${DB_OP}" == "" ]; then
     # Log into pod 'vh', run psql
     doDatabaseConnectMessage
+    if [ $DOECHO -ge 2 ]; then echo "... connect with 'PGPASSWORD=... psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}'"; fi
     if [ "${DB_HOST}" != "localhost" ]; then
       kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}"
     else
@@ -250,7 +257,8 @@ EOF)
   elif [ "${DB_OP}" == "" ]; then
     doDatabaseConnectMessage
     if [ "${DB_HOST}" != "localhost" ]; then
-      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"
+set -x
+      kubectl exec  -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"
     else
       mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}
     fi
