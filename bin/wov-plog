@@ -76,6 +76,9 @@ echo ""
 echo "- Pod Events: ${POD} ---------------------------------------------------"
 kubectl describe pod --namespace "$NAMESPACE" "$POD"
 
+echo "- Wait for Pod ---------------------------------------------------------"
+wov-pwait "$POD"
+
 echo ""
 echo "- Pod Log: ${POD} ---------------------------------------------------"
 x=1
