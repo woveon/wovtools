@@ -51,6 +51,18 @@ Runs the recipe scripts and if there is a change, build the containers.
 ex. `basename $0` -f ggg hhh  
     -> for project iii,  forces the building of containers iiiggg and iiihhh
 
+
+
+The recipes for containers should:
+
+1) copy code from ${SRCDIR} to the ${DESTDIR} directory
+  - where SRCDIR is the root of your git and DESTDIR is the root of the container to be built (i.e. wovtools/cache/containers/CONTAINER).
+
+2) create a sub-recipes to insert into the Dockerfile. There are BUILD and RUN stages, where BUILD contains ssh keys to access private repos. RUN tells the container how to run.
+  - ${DESTDIR}/SECRET/prebuild.docker - called before all files copied into container (do npm installs here)
+  - ${DESTDIR}/SECRET/build.docker - all code is in the container
+  - ${DESTDIR}/SECRET/run.docker - instructions on how to run container
+
   --key X : ssh key to add ex. ${HOME}/.ssh/id_rsa
   -p/P : do push, no push
   -h : this help
@@ -167,6 +179,28 @@ EOF
 RUN ssh -o StrictHostKeyChecking=no -vT ${repo} || true
 EOF
   done
+
+
+  # Prebuild, if exists
+  # ... add in section to build code from user script /secure/
+  if [ -e "${DESTDIR}/SECRET/prebuild.docker" ]; then
+    if [ $DOECHO -ge 2 ]; then echo "  ... creating prebuild section"; fi
+    cat <<EOF >> ${DESTDIR}/Dockerfile
+# Copy in content necessary for prebuild
+WORKDIR /usr/src/app
+EOF
+    cat <<EOF >> ${DESTDIR}/Dockerfile
+
+# --------------------------------------------------------------------- 
+# Prebuild instructions from recipe
+# --------------------------------------------------------------------- 
+EOF
+  cat ${DESTDIR}/SECRET/prebuild.docker >> ${DESTDIR}/Dockerfile
+  cat <<EOF >> ${DESTDIR}/Dockerfile
+# --------------------------------------------------------------------- 
+EOF
+  fi
+
 
 
   if [ $DOECHO -ge 2 ]; then echo "  ... creating build section"; fi
