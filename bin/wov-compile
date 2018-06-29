@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 
-compileargs=( "$@" )
-set ""
-. wov-env
-set -- "${compileargs[@]}"
+#echo "wov-compile start" 1>&2
+#node -e 'console.log("1 : ", Date.now())' 1>&2
+#node -e 'console.log("1 : ", Date.now())' 1>&2
+
+#compileargs=( "$@" )
+#set ""
+#. wov-env
+#set -- "${compileargs[@]}"
+WOV_BASEDIR=$(git rev-parse --show-toplevel)
+  # --- by directly calling git for WOV_BASEDIR, this saves a LOT of time
+#node -e 'console.log("2 : ", Date.now())' 1>&2
 
 
 SED=sed
@@ -54,6 +61,7 @@ showverbose()
 }
 
 
+#node -e 'console.log("3 : ", Date.now())' 1>&2
 # Manage all arguments starting with '-'
 # NOTE: currently, these are overwritten by file extension... bummer... need to swap order
 while [[ $1 =~ ^- ]]; do
@@ -84,6 +92,7 @@ while [[ $1 =~ ^- ]]; do
   fi
 done
 
+#node -e 'console.log("4 : ", Date.now())' 1>&2
 
 # Handle non switch arguments
 #echo "SDF $#"
@@ -98,11 +107,14 @@ then
   exit 1
 fi
 
+#node -e 'console.log("5 : ", Date.now())' 1>&2
+
 SCF=$1
 TEMPLATEFILE=$2
 TMPFILE=${WOV_BASEDIR}/wovtools/cache/.$(basename ${TEMPLATEFILE}).$$
 
 
+#node -e 'console.log("6 : ", Date.now())' 1>&2
 
 # --------------------------------------------------------------------- 
 # Handle files by suffix type ex. app.ini.hhandlebars, use 'ini'
@@ -138,6 +150,7 @@ case $TEMPLATEFILE_REALSUFFIX in
 esac
     
 
+#node -e 'console.log("7 : ", Date.now())' 1>&2
 
 [ "$VERBOSE" == "1" ] && showverbose
 
@@ -148,6 +161,7 @@ $CMTCHR  WARNING: AUTOMATICALLY GENERATED CONFIG FILE\n\
 $CMTCHR    If you edit this, it will be overwritten. Edit the Template file.\n\
 $CMTCHR ---------------------------------------------------------------------\n$CMT_POST\n"
 
+#node -e 'console.log("8 : ", Date.now())' 1>&2
 
 rm -Rf $TMPFILE
 touch $TMPFILE
@@ -162,7 +176,13 @@ SEDCMD=''$WARNINGLINE"i$WARNING"
 ##echo "ECHO: handlebars $SCF  < $TMPFILE  | $SED \"$SEDCMD\""
 #wov-hbs $SCF  < $TMPFILE  | $SED "$SEDCMD"
 
+#node -e 'console.log("9 : ", Date.now())' 1>&2
 # 1st and 2nd passes at once
+#echo "time wov-hbs" 1>&2
 wov-hbs -sf $SCF  < $TEMPLATEFILE  | $SED "$SEDCMD"
+#echo "/time wov-hbs" 1>&2
 
 rm $TMPFILE
+
+#echo "wov-compile end" 1>&2
+#node -e 'console.log("10: ", Date.now())' 1>&2
