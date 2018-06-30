@@ -25,6 +25,7 @@ NOTE2: Call with the '.' in front, or set a line in your .bash_profile :
 ex. $HOME/.wovtools: { "projects" : { "myproject" : { "dir" : "/path/to/project" } } }
 
   -q : quiet output
+  -e : echo directory 
   -v : verbose output
   -h/--help : this help
   -l : list projects
@@ -41,6 +42,13 @@ function doListProjects()
 }
 
 
+function doGetDir()
+{
+  P=$(echo $1 | cut -d'/' -f1)
+  D=$(jq -r ".projects.$P.dir" ${HOME}/.wovtools 2> /dev/null)
+  echo "$D"
+}
+
 # ---------------------------------------------------------------------
 # Handle Params
 # ---------------------------------------------------------------------
@@ -53,6 +61,12 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-v" ]; then
     shift
     DOECHO=2
+
+  elif [ "$1" == "-e" ]; then
+    shift
+    A=$(doGetDir $1)
+    echo $A
+    exit 0
 
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
