@@ -18,6 +18,7 @@ RUN curl -sL https://deb.nodesource.com/setup_9.x | bash -
 RUN apt-get install -y nodejs
 ENV NODE_PATH /usr/lib/node_modules
 RUN npm install -g mocha bcryptjs nodemon
+RUN npm install -g npm
 
 
 # Install Mongo client v3.6

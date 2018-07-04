@@ -1,1 +1,3 @@
 alias ngrep="grep --exclude-dir node_modules --exclude-dir '_old*' --exclude-dir '.*' *"
+
+export WOV_LOGGER_ASPECTS='listener listener.incoming listener.route listener.result'

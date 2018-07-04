@@ -37,7 +37,7 @@ NOTE: i really need a better name for vh... thinking 'virtual development, but t
   -S/--stop  : stop the virtual host
 
   --config : mount all secrets and configmaps to the vh
-  --route-service [service] - patches the service to point to vh
+  --route-service [service{:TARGETPORT}] - patches the service to point to vh
   --unroute-service [service] - puts service back to deplpoyment
   -l : login (alias for wov-pshell vh)
   -n|--namespace
@@ -90,6 +90,9 @@ spec:
     # for now, but need to upate for wovtools2
     #image: woveon/container_msdev:1
     image: index.docker.io/wovtools/vh:$(wov-env --vh-label)
+    resources:
+      limits:
+        cpu: ".5"
     imagePullPolicy: Always
     volumeMounts:
     - mountPath: /usr/src/app
@@ -183,15 +186,31 @@ function doConfig()
 # ---------------------------------------------------------------------
 function doRouteService()
 {
+  local srv=( $(echo "${1}" | tr ':' ' ') )
   local RETVAL=1
+  printf "srv ${srv[*]} \n"
   local patch="{ \"spec\" : { \"selector\" : { \"app\" : \"$2\" }}}"
-  # echo "PATCH: $patch"
+  echo "PATCH: $patch"
 
-  printf "... route service '$1' to '$2'.\n"
-  kubectl -n ${NAMESPACE} patch service $1 -p "$patch"
-  if [[ $? != 0 ]]; then
+  printf "... route service '${srv[0]}' to '$2'.\n"
+  kubectl -n ${NAMESPACE} patch service ${srv[0]} -p "$patch"
+  if [[ $? == 0 ]]; then
     printf "  ... success\n"
     RETVAL=0
+  fi
+
+  if [ "${#srv[*]}" == "2" ]; then
+    local patchport="{ \"spec\" : { \"ports\" : [{ \"targetPort\" : ${srv[1]}, \"port\" : 80, \"protocol\": \"TCP\" }]}}"
+    printf "  ... apply port patch\n"
+    printf "    ${patchport}\n"
+    kubectl -n ${NAMESPACE} patch service ${srv[0]} -p "$patchport"
+    if [[ $? == 0 ]]; then
+      printf "  ... success\n"
+      RETVAL=0
+    else
+      printf "  ... failed or no change to targetPort\n"
+      RETVAL=1
+    fi
   fi
 
 #  printf "...deleting deployment '$1'.\n"
