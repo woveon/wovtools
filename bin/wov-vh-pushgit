@@ -126,7 +126,6 @@ for gd in ${GITDIRS[@]}; do
     if [[ $? != 0 ]]; then printf "\nERROR: failed making git directory on vh.\n\n" 1>&2 ; CONTINUE=0; fi
   fi
 
-
   if [[ $CONTINUE == 1 ]]; then
     printf "  ...create git archive in cache\n"
 
@@ -145,6 +144,14 @@ for gd in ${GITDIRS[@]}; do
     kubectl exec -it vh -- bash -c "cd ${G} ; tar -xzf archive.$$.tar.gz ; rm archive.$$.tar.gz"
     if [[ $? != 0 ]]; then printf "\nERROR: failed extracting archive in vh.\n\n" 1>&2 ; CONTINUE=0; fi
   fi
+
+  if [[ $CONTINUE == 1 ]]; then
+    printf "  ... tag archive with git revision number : `git rev-parse HEAD` "
+    git rev-parse HEAD > .gitrev.$$
+    kubectl cp .gitrev.$$ vh:${G}/gitrev
+    rm .gitrev.$$
+  fi
+
 
 done
 
