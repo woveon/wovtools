@@ -38,7 +38,7 @@ do
 done
 
 PODSTEM=$1
-PODNAME=`kubectl --no-headers=true ${NAMESPACE} get pods | \grep "^${PODSTEM}" | sed -n "${ITH}p" | awk '{print $1}'`
+PODNAME=`kubectl --no-headers=true ${NAMESPACE} get pods --field-selector=status.phase==Running | \grep "^${PODSTEM}" | sed -n "${ITH}p" | awk '{print $1}'`
 
 
 if [ "${PODNAME}" == "" ]; then
