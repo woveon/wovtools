@@ -2,11 +2,12 @@
 
 BINS-GLOBAL=wovg-dir
 BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service wov-ed wov-ls wov-vh wov-pwait \
-	        wov-pshell wov-cmd wov-kui wov-git-check wov-vh-pulldir wov-db wov-db-commit wov-db-connect wov-cd \
-					wov-portforward wov-envg wov-project wov-vh-pushgit
+	        wov-pshell wov-cmd wov-kui wov-git-check wov-vh-pulldir wov-db wov-db-commit wov-db-connect wov-db-connect2 wov-cd \
+					wov-portforward wov-envg wov-project wov-vh-pushgit wov-bastion
 BINS=wov-env wov-ns-check wov-stage wov-build wov-compile \
 		 wov-pushcode-check wov-pushcontainer-check wov-pushenv-check wov-build-containers wov-push-env wov-push-secrets wov-push \
 		 wov-deploy wov-deploy-info wov-hbs wov-db-deploy \
+		 wov-users \
 		 $(BINS-UTIL) $(BINS-GLOBAL)
 
 .PHONY: vh
@@ -32,7 +33,7 @@ install : preinstall /usr/local/etc/bash_completion.d/wovtools
 		ln -f -s $(CURDIR)/bin/$$b $(HOME)/Library/Scripts/Applications/Terminal/$$b; \
 	done
 	@echo "  ... install node modules."
-	@npm install -g argparse handlebars 
+	@npm install -g argparse handlebars ssh-config dotenv minimist
 	@echo
 	@echo "NOTE!!!"
 	@echo "... for wcd to work, add this to your .bash_profile"

@@ -39,6 +39,10 @@ databaseserver - the name of a database server in the project. assumes conf/[dat
   -h : this help
   -q/-v : quiet/verbose
 
+About commands... you have to be careful about quotes as both bash and psql are very particular. Here, use single quotes so '*' is not expanded, and quote the single quote so mydatabase is interpret properly by postgres.
+
+ex. -c 'SELECT * FROM logs WHERE database=\'mydatabase\' ORDER BY id DESC LIMIT 1'
+
 EOF
 }
 
@@ -76,15 +80,21 @@ DD=WOV_${DATABASESERVER}_password
 DB_PASSWORD=${!DD}
 DD=WOV_${DATABASESERVER}_host
 DB_HOST=${!DD}
+DD=WOV_${DATABASESERVER}_port_ext
+DB_PORT=${!DD}
 DB_COMMAND=
 DB_OP=
 DB_FILE=
 
+# NOTE: using bastion so this overrides cluster settings
+DB_PORT=$(wov-bastion --bhost ${WOV_CLUSTER}-bastion --ldp ${DATABASESERVER})
+DB_HOST=localhost   # bastion
+
 function doDatabaseConnectMessage()
 {
   printf "\n\n"
-  figlet "${DATABASESERVER}"
-  printf "  Namespace: ${WOV_NS}\n"
+  figlet "${WOV_NS}"
+  printf "  DBServer : ${DATABASESERVER}\n"
   printf "  Type     : ${DB_TYPE}\n"
   printf "  User     : ${DB_USERNAME}\n"
   printf "  Host     : ${DB_HOST}\n"
@@ -133,8 +143,10 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-c" ]; then
     shift
     DB_OP="command"
-    DB_COMMAND="$1"
-#    DB_COMMAND=( $1 )
+    DB_COMMAND="$1" # ( $1 )
+    #DB_COMMAND2=( $1 )
+    #echo "DB_COMMAND1 : '${DB_COMMAND}'"
+    #echo "DB_COMMAND2 : '${DB_COMMAND2[*]}'"
     shift
 
   elif [ "$1" == "--schema" ]; then
@@ -175,10 +187,15 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 
   if [ "${DB_OP}" == "schema" ]; then
     # Log into pod 'vh', run pg_dump
-    if [ "${DB_HOST}" != "localhost" ]; then
-      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s"
-    else
-      PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
+#    if [ "${DB_HOST}" != "localhost" ]; then
+#      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s"
+#    else
+#      PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
+#    fi
+
+    PGPASSWORD=${DB_PASSWORD} pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
+    if [ "$?" != "0" ]; then
+      printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
     fi
 
   elif [ "${DB_OP}" == "command" ]; then
@@ -188,30 +205,44 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #    VARS=( "PGPASSWORD=${DB_PASSWORD}" "psql" "--tuples-only" "-h" "${DB_HOST}" "-U" "${DB_USERNAME}" "-d" "${DB_DATABASE}" "-c" "${DB_COMMAND}" )
 #    kubectl exec -i vh -- /bin/bash -c "${VARS[@]}"
 #    kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c ${DB_COMMAND}"
-    if [ "${DB_HOST}" != "localhost" ]; then
-      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\""
-    else
-      PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\"
+#    if [ "${DB_HOST}" != "localhost" ]; then
+#      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\""
+#    else
+#      PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\"
+#    fi
+
+    PGPASSWORD=${DB_PASSWORD} psql --tuples-only -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"
+    if [ "$?" != "0" ]; then
+      printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
     fi
+
 
   elif [ "${DB_OP}" == "file" ]; then
     # copy file; exectute it in database, delete file
-    if [ "${DB_HOST}" != "localhost" ]; then
-      kubectl cp ${DB_FILE} vh:.${DATABASESERVER}.sql.$$
-      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f .${DATABASESERVER}.sql.$$"
-      kubectl exec -i vh -- /bin/bash -c "rm -f .${DATABASESERVER}.sql.$$"
-    else
-      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
+#    if [ "${DB_HOST}" != "localhost" ]; then
+#      kubectl cp ${DB_FILE} vh:.${DATABASESERVER}.sql.$$
+#      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f .${DATABASESERVER}.sql.$$"
+#      kubectl exec -i vh -- /bin/bash -c "rm -f .${DATABASESERVER}.sql.$$"
+#    else
+#      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
+#    fi
+    PGPASSWORD=${DB_PASSWORD} psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
+    if [ "$?" != "0" ]; then
+      printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
     fi
 
   elif [ "${DB_OP}" == "" ]; then
     # Log into pod 'vh', run psql
     doDatabaseConnectMessage
     if [ $DOECHO -ge 2 ]; then echo "... connect with 'PGPASSWORD=... psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}'"; fi
-    if [ "${DB_HOST}" != "localhost" ]; then
-      kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}"
-    else
-      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
+#    if [ "${DB_HOST}" != "localhost" ]; then
+#      kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}"
+#    else
+#      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
+#    fi
+    PGPASSWORD=${DB_PASSWORD} psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
+    if [ "$?" != "0" ]; then
+      printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
     fi
   fi
 
