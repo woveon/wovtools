@@ -37,6 +37,20 @@ fi
 
 
 
+# If NodeJS project...
+if [ -e "${WOV_BASEDIR}/node_modules" ]; then
+  echo "  ... check for npm 'linked' packages"
+  R3=$(find ${WOV_BASEDIR}/node_modules/* -type l -maxdepth 1)
+  if [ "${R3}" != "" ]; then
+    printf "\nLinked Node Modules:\n"
+    printf "  : ${R3}\n"
+    printf "\nERROR: You have linked node modules. Type 'npm install'.\n\n"
+    exit 1
+  fi
+fi
+
+
+
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
 function fDisplayOptions()
