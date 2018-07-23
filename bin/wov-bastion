@@ -1,0 +1,117 @@
+#!/usr/bin/env node
+
+// ex. wov-bastion wov-aws-va-live-bastion --lh [port]
+//        - "lookup host by port" - for wov-aws-va-live-bastion host, return hostname of [port]
+// ex. wov-bastion wov-aws-va-live-bastion --ldp [database]
+//        - "lookup database port in current context"
+//
+const SSHConfig = require('ssh-config');
+const fs        = require('fs');
+//const myArgs    = require('minimist');
+const dotenv    = require('dotenv');
+
+const {promisify} = require('util');
+const exec = promisify(require('child_process').exec);
+
+myArgs = process.argv;
+myArgs.shift();
+myArgs.shift();
+
+function doDisplayHelp() {
+  console.log('\n\n\n');
+  console.log(' wov-bastion {args}');
+  console.log('');
+  console.log('Lookup information about the bastion host.');
+  console.log('');
+  console.log('  -h/--help        : show help');
+  console.log('  --bhost [host]   : sets the host entry to use in .ssh/config [default "${WOV_CLUSTER}-bastion".');
+  console.log('  --ldp [database] : lookup database\'s port in current context');
+  console.log('    ex. wov-bastion --bhost wov-aws-va-live-bastion --ldp [database]');
+  console.log('\n');
+}
+
+let readFile = function(_fn) {
+  return new Promise( (res, rej) => {
+    fs.readFile(_fn, 'utf8', function(err, buffer) {
+      try {if (err) rej(err); else {res(buffer);}} catch (e) {rej(e);}
+    });
+  });
+};
+
+
+/**
+ * Look for the entry in _sshdata, return the port.
+ * @param {string} _bhost - bastion host name
+ * @param {object} _config - env vars
+ * @param {object} _sshdata - parsed sshconfig file
+ * @param {string} _db - name of the database ex. apidb.
+ *                      - used in naming the database service ex. 'db-{cluster}-{namespace}-{_db}
+ * @return {integer} - local port that tunnels to the services behind bastion
+ */
+function doLookupDatabasePort(_bhost, _config, _sshdata, _db) {
+  let cl = _config.WOV_CLUSTER;
+  let ns = _config.WOV_NS;
+  let retval = null;
+
+  for (let i=0; i<_sshdata.length && retval ==null; i++) {
+    let hostentry = _sshdata[i];
+
+    // console.log(`doLookupDatabasePort ${i} : ${hostentry.value}`);
+    if ( hostentry.param == 'Host' && hostentry.value == _bhost ) {
+      for (let j=0; j<hostentry.config.length && retval ==null; j++) {
+        let hece = hostentry.config[j];
+
+        // console.log('hece: ', hece.value, ` : db-${cl}-${ns}-${_db}`);
+        if ( hece.param == 'LocalForward' && (hece.value.match(`db-${cl}-${ns}-${_db}`) != null)  ) {
+          let port = hece.value.split(' ')[0];
+          // console.log(`port '${port}'`);
+          retval = port;
+        }
+      }
+    }
+
+  }
+
+  return retval;
+};
+
+
+(async function() {
+  let e = await exec('wov-env -e');
+  // console.log(e.stdout);
+  const buf = Buffer.from(e.stdout);
+  const config = dotenv.parse(buf);
+  // console.log(config);
+
+  // get data
+  let data = await readFile(require('os').homedir()+'/.ssh/config');
+  if ( data instanceof Error ) {throw data;}
+  // console.log('data :', data);
+  let sshdata = SSHConfig.parse(data);
+  // console.log(JSON.stringify(sshdata, null, '  '));
+
+  let bhost= config.WOV_CLUSTER+'-bastion';
+
+  // console.log('args: ', myArgs);
+  for (let i=0; i<myArgs.length; i++) {
+    switch (myArgs[i]) {
+      case '-h':
+      case '--help':
+        doDisplayHelp();
+        process.exit(0);
+        break;
+      case '--bhost':
+        i++;
+        bhost= myArgs[i];
+        break;
+      case '--ldp':
+        i++;
+        let p = doLookupDatabasePort(bhost, config, sshdata, myArgs[i]);
+        console.log(p); // echo to output
+        break;
+      default:
+        throw new Error('Unknown option ', myArgs[i], '.');
+    }
+  }
+
+})();

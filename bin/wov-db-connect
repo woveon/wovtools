@@ -262,20 +262,24 @@ db.getCollectionNames().forEach(function(collname) {
 })
 EOF)
 
-    if [ "${DB_HOST}" != "localhost" ]; then
-      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
-    else
-      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
-    fi
+set -x
+    kubectl exec -it $(wov-p ${DATABASESERVER}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE} --eval \"${DB_COMMAND}\""
+#    if [ "${DB_HOST}" != "localhost" ]; then
+#      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
+#    else
+#      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
+#    fi
+set +x
 
 
   elif [ "${DB_OP}" == "command" ]; then
     set -x
-    if [ "${DB_HOST}" != "localhost" ]; then
-      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
-    else
-      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
-    fi
+    kubectl exec -it $(wov-p ${DATABASESERVER}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE} --eval \"${DB_COMMAND}\""
+#    if [ "${DB_HOST}" != "localhost" ]; then
+#      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
+#    else
+#      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
+#    fi
   elif [ "${DB_OP}" == "file" ]; then
     printf "\nFile: untested\n\n";
     if [ "${DB_HOST}" != "localhost" ]; then
@@ -287,12 +291,16 @@ EOF)
     fi
   elif [ "${DB_OP}" == "" ]; then
     doDatabaseConnectMessage
-    if [ "${DB_HOST}" != "localhost" ]; then
 set -x
-      kubectl exec  -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"
-    else
-      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}
-    fi
+    
+    kubectl exec -it $(wov-p ${DATABASESERVER}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE}"
+#    if [ "${DB_HOST}" != "localhost" ]; then
+#      kubectl exec  -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"
+#    else
+#      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}
+#    fi
+set +x
+
   fi
 
 else
