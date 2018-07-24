@@ -11,6 +11,7 @@ Takes a stem and returns the name of the matching pod in a namespace (--ith n, t
 
    -h|--help : this output
    -n|--namespace X : get in the namespace of X
+   -r|running : Look only at Running phase
    -i|--ith X : select the ith pod if multiple
         NOTE: (1 is 1st, 2 is 2nd, etc) (i.e. counting numbers)
 
@@ -20,6 +21,7 @@ EOF
 
 NAMESPACE=
 ITH=1
+PHASE=
 
 while [[ $1 =~ ^- ]]
 do
@@ -31,21 +33,23 @@ do
         shift
         ITH=$1
         shift
+    elif [ $1 == '-r' -o $1 == '--running' ]; then
+        shift
+        PHASE="--field-selector=status.phase==Running"
     elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
         DisplayOptions
         exit 0
     fi
 done
 
-PODSTEM=$1
-PODNAME=`kubectl --no-headers=true ${NAMESPACE} get pods --field-selector=status.phase==Running | \grep "^${PODSTEM}" | sed -n "${ITH}p" | awk '{print $1}'`
-
+PODSTEM="$1"
+PODNAME=`kubectl --no-headers=true ${NAMESPACE} get pods ${PHASE} | \grep "^${PODSTEM}-" | sed -n "${ITH}p" | awk '{print $1}'`
 
 if [ "${PODNAME}" == "" ]; then
   if [ "${ITH}" != "1" ]; then
     (>&2 echo "ERROR: Either no pod of that name, or none at the position '${ITH}'.")
   else
-    (>&2 echo "ERROR: No pod of that name: $1.")
+    (>&2 echo "ERROR: No pod of that name: ${PODSTEM}.")
   fi
   exit 1
 else
