@@ -2,8 +2,9 @@
 
 DOECHO=1
 DOFORCE=0
-FOLD=80
+FOLD=$(tput cols)
 BLOCK=0
+SKIPDBCHECKS=0
 
 # ---------------------------------------------------------------------
 # Build right before to update any files
@@ -47,10 +48,7 @@ if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then
   printf "\nERROR: wov-push exiting\n" 1>&2
   exit 1
 fi
-echo "  ... check for database changes that could block the push"
-wov-db-commit --any-push-blockage
-R3=$?
-if [ "$R3" != 0 ]; then exit 1; fi
+
 
 
 # ---------------------------------------------------------------------
@@ -65,6 +63,8 @@ usage: `basename $0` [options]
 Macro command that pushes containers, then env. It uses:
    wov-build-containers
    wov-push-env
+
+  --skip-db-checks : skip the checks for database inconsistencies
 
   -h : this help
   -q/-v : quiet/verbose
@@ -89,6 +89,9 @@ while [[ $1 =~ ^- ]]; do
     DOECHO=2
     METAARGS="${METAARGS} -v "
 
+  elif [ "$1" == "--skip-db-checks" ]; then
+    shift
+    SKIPDBCHECKS=1
 
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
@@ -102,6 +105,15 @@ while [[ $1 =~ ^- ]]; do
     exit 1
   fi
 done
+
+if [ "$SKIPDBCHECKS" != "1" ]; then
+  echo "  ... check for database changes that could block the push"
+  wov-db-commit --any-push-blockage
+  R3=$?
+  if [ "$R3" != 0 ]; then exit 1; fi
+else
+  echo "  ... WARNING: skipping check for database changes that could block the push"
+fi
 
 
 echo "  ... wov-build-containers ${METAARGS}"
@@ -120,3 +132,5 @@ wov-db-commit ${METAARGS}
 if [ "$?" != "0" ]; then
   exit 1
 fi
+
+echo "   ... done"

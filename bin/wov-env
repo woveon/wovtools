@@ -61,6 +61,7 @@ usage: `basename $0` [options]
   --qcmd X     :   ", quoted
   --sl X       :   ", string literal output
   --rcAWS      : convert a region code to an AWS code (ex. va-> us-east-1)
+  -c           : run cluster config as well
 
 Example Usage:
   `basename $0`    : sets all environment variables
@@ -110,6 +111,15 @@ export WOV_USEREMAIL
 #A=( `jq -r ". | ( .rootdir, .srcdir, .secretsdir, .compileddir, .containerdir, .registry, .wovtools )" ${dir_wovtools_rc}/.wovtools.json` )
 #echo "A:${A[*]}:A"
 #dir_root="${A[0]}"
+
+
+WOV_ME=$(cat ${HOME}/.wovtools | jq -r '.me')
+if [ "${WOV_ME}" == "null" ] ; then
+  printf "\n\nERROR: You need to set 'me' in the wovtools/config.json file.\n"
+  printf "  - This is a unique code in this project, to represent yourself. Try using your initials (assuming they are unique to your team).\n\n"
+  exit 1
+
+fi
 
 WOV_PVERSION=$(cat ${WOV_BASEDIR}/wovtools/config.json | jq -r '.ver')
 if [ "${WOV_PVERSION}" != "${WOV_VERSION}" ] && [ "${WOV_PVERSION}" != "initing" ] ; then
@@ -170,6 +180,7 @@ export WOV_KSTAGE
 function fDoEcho() 
 {
   echo WOV_VERSION="${WOV_VERSION}"
+  echo WOV_ME="${WOV_ME}"
   echo WOV_BASEDIR="${WOV_BASEDIR}"
   echo WOV_SECRETFILE="${WOV_SECRETFILE}"
   echo WOV_ARCHIVEREPOSITORY="${WOV_ARCHIVEREPOSITORY}"
@@ -208,6 +219,7 @@ function fDoEcho()
 function fDoBashEcho() 
 {
   printf "WOV_VERSION=\"${WOV_VERSION}\" "
+  printf "WOV_ME=\"${WOV_ME}\" "
   printf "WOV_BASEDIR=\"${WOV_BASEDIR}\" "
   printf "WOV_ARCHIVEREPOSITORY=\"${WOV_ARCHIVEREPOSITORY}\" "
   printf "WOV_ARCHIVEENV=\"${WOV_ARCHIVEENV}\" "
@@ -342,6 +354,7 @@ function fConvertRegionCodeAWS()
 {
   case $1 in
     va) cRC='us-east-1' ;;
+    iad) cRC='us-east-1' ;;
     *)
       echo
       echo "***ERROR: unknown AWS region code of '$1'."

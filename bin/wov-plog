@@ -15,6 +15,7 @@ usage : `basename $0` [-f|--follow] [-n|--namespace] podstem
 Connects to a running pod (via podstem) and logs its data, with a -f to follow it.
 
   -f      - follows the output and does not close
+  -r      - only running pods
   -n|--namespace - select namespace to look in
   podstem - this finds the pod with just the stem
             ex. apirest is stem, apirest-asdldj3j is full name
@@ -27,6 +28,7 @@ EOF
 NAMESPACE=${WOV_NS}
 F=
 TAIL=
+PHASE=
 
 while [[ $1 =~ ^- ]]
 do
@@ -37,6 +39,9 @@ do
     shift
   elif [ "$1" == '-f' ] || [ "$1" == '--follow' ]; then
     F=-f
+    shift
+  elif [ "$1" == '-r' ]; then
+    PHASE='-r'
     shift
   elif [ "$1" == '--tail' ]; then
     shift
@@ -58,13 +63,13 @@ STEM=$1
 # remove any other commands
 shift
 
-echo "TAIL ${TAIL}"
+#echo "TAIL ${TAIL}"
 
 
 #kubectl get pods -n "$NAMESPACE" --no-headers --show-all=true
 #POD=`kubectl get pods --namespace "$NAMESPACE" --no-headers --show-all=true | grep ${STEM} | awk '{print $1}'`
-POD=`wov-p -r -n "$NAMESPACE" "${STEM}"`
-echo "POD: ${POD}"
+POD=`wov-p ${PHASE} -n "$NAMESPACE" "${STEM}"`
+#echo "POD: ${POD}"
 if [[ "$?" != "0" ]] || [[ "$POD" == "" ]] ; then 
   echo ""
   echo "ERROR: Failed to find pod '${STEM}' to log."

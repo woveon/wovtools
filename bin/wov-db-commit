@@ -48,6 +48,14 @@ EOF
 }
 
 # --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+#function doGetDBSchema()
+#{
+#  local SCHEMA=$(wov-db-connect $1 --schema 2> /dev/null)
+#  if [ "$?" != "0" ]; then printf "\n\nERROR: failed to connect to database server $i.\n"; exit 1; fi
+#  echo ${SCHEMA}
+#}
+# --------------------------------------------------------------------- 
 # NOTE: just hashes return, fail messages included!
 # $1 = database name
 # --------------------------------------------------------------------- 
@@ -66,6 +74,7 @@ function doGetDBPVER()
 {
   local retval=1
   local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null |  cut -d'|' -f5)
+#  local DB_PVER=$(wov-db-connect $i -q -d wovtools -c 'SELECT * FROM logs WHERE database=\''"$1"'\' ORDER BY id DESC LIMIT 1;' 2> /dev/null |  cut -d'|' -f5)
 #  printf "DB_PVER : $DB_PVER"
   if [ "$?" != "0" ]; then 
     printf "\n\nERROR: failed to find wovtools logs on database server $1.\n\n"; 
@@ -84,7 +93,6 @@ function doGetDBPVER()
 # --------------------------------------------------------------------- 
 function doGetDBLastLogEntry()
 {
-  set -x
   local retval=1
   local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null)
   if [ "$?" != "0" ]; then 
@@ -95,7 +103,6 @@ function doGetDBLastLogEntry()
     retval=0
     echo ${DB_PVER}
   fi
-  set +x
 
   return $retval
 }
@@ -189,6 +196,7 @@ function doPushCheck()
   #     or if nothing checked in yet, then db's pver is parent pver, so hash that
   if [ "$retval" == "0" ]; then
     DB_HASH=$(doHashDBSchema $1)
+    echo "db hash: ${DB_HASH}"
     DB_PVER=$(doGetDBPVER $1)
     if [ "$?" != "0" ] || [ "$DB_PVER" == "" ]; then
       printf "\n\nERROR: could not get database version.\n"
@@ -333,19 +341,20 @@ function doCommitDB()
     printf "\n\n***ERROR: database has no parent.\n"
     retval=2
   fi
-  printf "\nDB_ENTRY '${DB_ENTRY}'\n"
+#  printf "\nDB_ENTRY '${DB_ENTRY}'\n"
   OLDIFS=$IFS
   IFS='|'
-  dbverarray=( $(wov-db -D ${WOVDB_DBNAME} --ver)  )
+  # CAW - just commented out dbverarray=( $(wov-db -D ${WOVDB_DBNAME} --ver)  )
   DB_ENTRY=( $(echo "${DB_ENTRY[@]}") )
   IFS=$OLDIFS
-  printf "\nDB_ENTRY '${DB_ENTRY[@]}'\n"
+#  printf "\nDB_ENTRY '${DB_ENTRY[*]}'\n"
   DB_PVER="$( echo -e "${DB_ENTRY[4]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 
   if [ "$retval" == "0" ]; then
 
     # get current db checksum
     CHKSUM=$(doHashDBSchema $1)
+    DB_PVER=$(doGetDBPVER $1)
 
     echo "Chksum : ${CHKSUM}  DBPVER: ${DB_PVER}  PVER: ${WOV_PVER}"
 
@@ -367,6 +376,16 @@ EOF
 
     echo "  ... cache deltas locally (in case of screw up)"
     mv ${deltafile} ${WOV_BASEDIR}/wovtools/cache/db/$1.${WOV_PVER}.$(date +%s).deltas
+
+
+    # - 2.1 save schema ---------------------------------------------------
+    # --------------------------------------------------------------------- 
+    mkdir -p ${WOV_BASEDIR}/wovtools/db/registry/$1/schemas
+    wov-db-connect ${1} --schema > ${WOV_BASEDIR}/wovtools/db/registry/$1/schemas/${WOV_PVER}.schema
+    if [ "$?" != "0" ]; then
+      printf "\n\nERROR: failed to write schemas to regsitry.\n\n"
+      exit 1
+    fi
 
 
     # - 3. update db registry entry for this pver -------------------------
@@ -422,6 +441,10 @@ while [[ $1 =~ ^- ]]; do
     shift
     DOECHO=2
 
+  elif [ "$1" == "--log" ]; then
+    DOACTION="log"
+    shift
+
   elif [ "$1" == "--checksum" ]; then
     shift
     DOACTION="checksum"
@@ -460,10 +483,28 @@ if [ "$DOACTION" == "check" ]; then
   done
   # printf "\nAny blockage to pushing?:$R1\n\n"
 
+elif [ "$DOACTION" == "log" ]; then
+  DATABASES=( $(doFindDatabases $*) )
+
+  # check each db
+  retval=0
+  for i in "${DATABASES[@]}"; do
+    r=${?}
+    if [ "$r" != "0" ]; then retval=1; fi
+    LLE=$(doGetDBLastLogEntry $i)
+    r=${?}
+    if [ "$r" != "0" ]; then retval=1; fi
+    DBVER=$(doGetDBPVER $i)
+    r=${?}
+    if [ "$r" != "0" ]; then retval=1; fi
+    set +x
+    echo "$i : ${DBVER} : ${CHKSUM} : ${LLE}"
+  done
+
 elif [ "$DOACTION" == "checksum" ]; then
 
   DATABASES=( $(doFindDatabases $*) )
-  #echo "DATABASES: ${DATABASES[@]}"
+  echo "DATABASES: ${DATABASES[@]}"
 
   # check each db
   retval=0

@@ -25,15 +25,17 @@ SSHKEY=
 RECIPES=( )
 
 
-# Check local code is checked in and pushed
-wov-git-check ${WOV_BASEDIR}
-R1=$?
-wov-git-check ${WOV_BASEDIR}/wovtools/secrets
-R2=$?
-if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then 
-  printf "\nERROR: wov-build-containers exiting\n" 1>&2
-  exit 1;
-fi
+echo "NOTE[$0]: Skipping git checks.... will do on wov-push."
+
+## Check local code is checked in and pushed
+#wov-git-check ${WOV_BASEDIR}
+#R1=$?
+#wov-git-check ${WOV_BASEDIR}/wovtools/secrets
+#R2=$?
+#if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then 
+#  printf "\nERROR: wov-build-containers exiting\n" 1>&2
+#  exit 1;
+#fi
 
 
 

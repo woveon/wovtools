@@ -177,11 +177,12 @@ done
 
 
 # Check vh pod exists
-wov-p vh >/dev/null
-if [ "$?" == "1" ]; then
-  printf "\n\nERROR: 'vh' has not been created. Run 'wov-vh -s'.\n\n"
-  exit 1
-fi
+# wov-p vh >/dev/null
+#kubectl get pods vh > /dev/null
+#if [ "$?" == "1" ]; then
+#  printf "\n\nERROR: 'vh' has not been created. Run 'wov-vh -s'.\n\n"
+#  exit 1
+#fi
 
 if [ "${DB_TYPE}" == "postgres" ]; then
 

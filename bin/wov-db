@@ -418,7 +418,7 @@ export PGPASSWORD=${WOV_apidb_password}
 psql -U ${WOV_apidb_username} -h ${HOSTADDR} -U ${WOV_apidb_username} -tc "SELECT 1 FROM pg_database WHERE datname = 'wovtools'" | grep -q 1 || psql -U ${WOV_apidb_username} -h ${WOV_apidb_host} -c "CREATE DATABASE wovtools"
 
 # Use database, and create the logs table, and insert a row
-psql -U ${WOV_apidb_username} -h ${HOSTADDR} -U ${WOV_apidb_username} -d wovtools -tc "CREATE TABLE IF NOT EXISTS logs (id SERIAL NOT NULL PRIMARY KEY, database varchar, wovtoolsver varchar, label varchar, pver integer, sver integer, snapshot varchar, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() );"
+psql -U ${WOV_apidb_username} -h ${HOSTADDR} -U ${WOV_apidb_username} -d wovtools -tc "CREATE TABLE IF NOT EXISTS logs (id SERIAL NOT NULL PRIMARY KEY, database varchar, wovtoolsver varchar, label varchar, pver integer, sver integer, snapshot varchar, schema varchar DEFAULT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() );"
 #psql -U ${WOV_apidb_username} -h ${HOSTADDR} -U ${WOV_apidb_username} -d wovtools -tc "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( databaseHere, ${WOV_VERSION}, '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER}, '' );"
 EOF
 
@@ -659,7 +659,7 @@ fi
         - type: ${THISCMD} -D ${WOVDB_DBNAME} -I
 
  6) set logs as being a snapshot
-    - 'wov-db-connect ${WOVDB_DBNAME} -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( '${WOVDB_DBNAME}', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER}, '${SNAPSHOT}' );'
+    - 'wov-db-connect ${WOVDB_DBNAME} -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot, schema ) VALUES ( '${WOVDB_DBNAME}', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER}, '${SNAPSHOT}', '...SCHEMA...' );'
 
 ---------------------------------------------------------------------
 EOF

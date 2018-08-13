@@ -4,6 +4,8 @@ JUSTCHECK=0
 WAITTIME=3
 WAITFIRST=0
 NAMESPACE=
+PODSTEM=0
+  # 1 if this looks by stem, 
 
 
 function fDoDisplay()
@@ -12,16 +14,17 @@ function fDoDisplay()
 
 usage: `basename $0` [options] ([podname] ...)
 
-Waits for a pod to enter the running state, by continuous polling. 
+Waits for a pod (full name) to enter the running state, by continuous polling. 
 
   -h|--help : Display this help.
   -f|--first : initial time to wait before polling, otherwise standard
   -w|--wait  : wait time in seconds between polling (default=3)
+  --stem    : look up the pod names by their stem
   -n|--namespace : search for pod in namespace
   -j|--just-check : check if pod is ready
   -c : NOT IMPLEMENTED - wait for cluster to come online
 
-Pod names are matched to the stem, so the full name is not necessary. 
+Pod names are matched to the stem if --stem is used, so the full name is not necessary. 
    ex. 'plfb-mongodb-384393937-hdfk' is matched by 'plfb-mongodb'
 
 EOF
@@ -45,6 +48,10 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == '-c' ] || [ "$1" == '--cluster' ]; then
     fDoCluster
     shift
+  elif [ "$1" == '--stem' ]; then
+    PODSTEM=1
+    shift
+
   elif [ "$1" == '-n' ] || [ "$1" == '--namespace' ]; then
     shift
     NAMESPACE=" -n $1 "
@@ -65,7 +72,16 @@ done
 first=1
 for p in $*; do
 
-  podname=`wov-p $NAMESPACE $p`
+  if [ "$PODSTEM" == "1" ]; then
+    podname=`wov-p $NAMESPACE $p`
+    if [ "$?" != "0" ]; then
+      printf "\n\nERROR: unable to find pod with that stem '${p}'.\n"
+      exit 1
+    fi
+
+  else
+    podname=$p
+  fi
   stat=`kubectl describe $NAMESPACE pods $podname | grep "^Status" | awk '{print $2}'`
 
   if [ "$JUSTCHECK" == "1" ]; then
