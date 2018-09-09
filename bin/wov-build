@@ -11,7 +11,7 @@ set -- "${buildargs[@]}"
 
 
 DOECHO=1
-FOLD=80
+FOLD=$(tput cols)
 HAS_SECRET=0
 HAS_BUILDENV=0
 HAS_CLEAN=0
@@ -100,6 +100,7 @@ function fBuildSecret()
   "NS"       : "${WOV_NS}",
   "PROJECT"  : "${WOV_PROJECT}",
   "STAGE"    : "${WOV_STAGE}",
+  "ME"       : "${WOV_ME}",
 
   "PROJECT"            : "${WOV_PROJECT}",
   "PROJECTTYPE"        : "${WOV_PROJECTTYPE}",
@@ -139,21 +140,48 @@ EOF
     mv ${SECRETFILE}.1 ${SECRETFILE}
   done
 
+  # apply stagemods to SECRETFILE
+  # - get mods that are 'on'
+  SMODS=$(jq -r '.stagemods[] | select(.status == "on") | .["name"]' ${WOV_BASEDIR}/wovtools/config.json)
+  #echo "SMODS: ${SMODS}"
+  # for each mod
+  for m in ${SMODS[*]}; do
+    #echo "m: $m"
+    # get routes
+    rts=( $(jq -r '.stagemods[] | select(.name == "'"${m}"'") | .routes[] | "\(.[0]) \(.[1])"' wovtools/config.json) )
+    # echo "rts: ${#rts[@]} ${rts[@]}"
+    while [[ "${#rts[@]}" != "0" ]]; do
+      rtfrom=${rts[0]}
+      rtto=${rts[1]}
+      rts=( "${rts[@]:2}" ) # shift twice
+      #echo "rt: ${rtfrom} -> ${rtto}"
+      # rewrite any ME->STAGE in route
+      rtto=$(echo $rtto | sed "s/ME/${WOV_STAGE}/")
+      #echo "rt: ${rtfrom} -> ${rtto}"
+      # rewrite routes in SECRETFILE (then move back to SECREFILE for next mod)
+      # jq '.apirest["cw"] += .apirest["local"] | del(.apirest["local"]) ' current.json 
+      # jq '.'"${rtto}"' += .'"${rtfrom}"' | del(.'"${rtfrom}"') ' ${SECRETFILE}
+      jq '.'"${rtto}"' += .'"${rtfrom}"'' ${SECRETFILE} >> ${SECRETFILE}.1
+      # mv file
+      mv ${SECRETFILE}.1 ${SECRETFILE}
+    done
+  done
 
-#  echo "stagemod ${STAGEMOD}"
-  if [ "${STAGEMOD}" != "" ]; then
-    SECRETMODFILE=${SECRET_CACHE_DIR}/current-${STAGEMOD}.json
-    SECRETMODFILELAST=${SECRET_CACHE_DIR}/last-${STAGEMOD}.json
-    touch ${SECRETMODFILE}
-    chmod 600 ${SECRETMODFILE}
-    touch ${SECRETMODFILE}.1
-    chmod 600 ${SECRETMODFILE}.1
-    # build local secret
-    # walk the keys below - then remove -local on keys, then merge... so in my build script, I merge this output with the original so that this output appends and overwrites
-    cat ${SECRETFILE} | jq 'walk(if type=="object" then with_entries( if .key|=match("[\\w]*-'${STAGEMOD}']") then .key=(.key|sub("(?<a>[\\w]*)-'${STAGEMOD}'"; .a )) else . end) else . end)' > ${SECRETMODFILE}
-    jq -s ".[0] * .[1]" ${SECRETFILE} ${SECRETMODFILE} > ${SECRETMODFILE}.1
-    mv ${SECRETMODFILE}.1 ${SECRETMODFILE}
-  fi
+
+##  echo "stagemod ${STAGEMOD}"
+#  if [ "${STAGEMOD}" != "" ]; then
+#    SECRETMODFILE=${SECRET_CACHE_DIR}/current-${STAGEMOD}.json
+#    SECRETMODFILELAST=${SECRET_CACHE_DIR}/last-${STAGEMOD}.json
+#    touch ${SECRETMODFILE}
+#    chmod 600 ${SECRETMODFILE}
+#    touch ${SECRETMODFILE}.1
+#    chmod 600 ${SECRETMODFILE}.1
+#    # build local secret
+#    # walk the keys below - then remove -local on keys, then merge... so in my build script, I merge this output with the original so that this output appends and overwrites
+#    cat ${SECRETFILE} | jq 'walk(if type=="object" then with_entries( if .key|=match("[\\w]*-'${STAGEMOD}']") then .key=(.key|sub("(?<a>[\\w]*)-'${STAGEMOD}'"; .a )) else . end) else . end)' > ${SECRETMODFILE}
+#    jq -s ".[0] * .[1]" ${SECRETFILE} ${SECRETMODFILE} > ${SECRETMODFILE}.1
+#    mv ${SECRETMODFILE}.1 ${SECRETMODFILE}
+#  fi
 
 #  if [ "${WOV_DEVMODE}" == "local" ]; then
 #    touch ${LSECRETFILE}

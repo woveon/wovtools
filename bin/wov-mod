@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+
+
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+args_wov_mod=( "$@" )
+set ""
+. wov-env
+set -- "${args_wov_mod[@]}"
+
+DOECHO=1
+FOLD=$(tput cols)
+
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+usage: `basename $0` [options]
+
+This modifies the stage's configuration for case-specific purpose. Because WovTools is designed to produce K8s configuration, this is problematic for local development. By adding additional configuration information to your secrets, you can toggle on and off development in a cluster, in a pod in a cluster and on your localhost, among other cases.
+
+ex. for plugin development, use a testserver.
+ex. for microservice development, use a locally running version of apirest
+
+  -h/--help    : this help output
+  -q/-v        : quiet/verbose output
+  --on/--off X : turns an existing modroute on or off
+  -l [X]       : list all or a specific route X
+
+TODO:
+  -c route from to : create a route, mapping from, to to
+
+
+## Notes:
+
+- Stores settings statefully in wovtools/config.json:stagemods.
+
+- Used in wov-build's creation of the config, so any changes require a rebuild. But, since wov-build -s just builds a secret and then checks to last build, it does not really impact current operation.
+
+- Make sure when pushing, that all the stagemods are turned off.
+
+- It uses named routes that can be turned on and off as needed.
+
+## How it works:
+  - build secret
+  - find all paths in wovtools/config.json:stagemods into file A
+  - find all those paths and map them to new paths in a file B
+  - merge new file B into A, overwriting
+
+  - ex. 
+   File A: 
+   - plem.cw.db_url = plemdb-cw-mongodb
+   - plem.local.db_url = localhost
+
+   wovtools/config.json:
+   - stagemods = [ [ "plem.cw", "plem.local" ] ]
+
+   File B:
+   - plem.cw.db_url = localhost
+
+   trim plem.local
+
+
+## Data Format in wovtools/config.json
+
+  "stagemods" : {
+    "testserver" : {
+      "status" : "on",
+      "routes" : [
+        [ "apirest.local", "apirest.ME"],       // applies to local
+        [ "apirest.testserver", "apirest.ME"]   // then applies testserver
+      ]
+    },
+    "localplem" : {
+      "status" : "on",
+      "routes" : [
+        [ "plem.local", "plem.ME" ]
+      ]
+    }
+  }
+
+## List
+ - ex from above with command : wov-mod -l
+testserver on ["apirest.local", "apirest.ME"] 
+testserver on ["apirest.testserver", "apirest.ME"] 
+localplem  on ["plem.local", "plem.ME"]
+
+  
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# Show all the modroutes
+# ---------------------------------------------------------------------
+function doListAll() 
+{
+  echo 'list all'
+  jq -r '.stagemods[] | "\(.name) \(.status) \(.routes[])" ' ${WOV_BASEDIR}/wovtools/config.json
+}
+function doList() 
+{
+  jq -r '.stagemods[] | select(.name=="'"$1"'") | "\(.name) \(.status) \(.routes[])" ' ${WOV_BASEDIR}/wovtools/config.json
+}
+
+
+
+# ---------------------------------------------------------------------
+# Turns on a modroute
+# ---------------------------------------------------------------------
+function doOn()
+{
+  if [ ${DOECHO} -ge 1 ]; then printf "turning on $1\n"; fi
+  R=$(jq -r '.stagemods[] | select(.name == "'"$1"'")' ${WOV_BASEDIR}/wovtools/config.json)
+  if [ "$R" != "" ]; then
+    jq '(.stagemods[] | select(.name == "'"$1"'") | .status ) |= "on"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json
+    if [ $? -eq 0 ]; then
+      mv ${WOV_BASEDIR}/wovtools/.config.json ${WOV_BASEDIR}/wovtools/config.json 
+    fi
+  else 
+    printf "\nERROR: could not find '$1'.\n\n" 1>&2
+  fi
+}
+function doOff()
+{
+  if [ ${DOECHO} -ge 1 ]; then printf "turning off $1\n"; fi
+  R=$(jq -r '.stagemods[] | select(.name == "'"$1"'")' ${WOV_BASEDIR}/wovtools/config.json)
+  if [ "$R" != "" ]; then
+    jq '(.stagemods[] | select(.name == "'"$1"'") | .status ) |= "off"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json
+    if [ $? -eq 0 ]; then
+      mv ${WOV_BASEDIR}/wovtools/.config.json ${WOV_BASEDIR}/wovtools/config.json 
+    fi
+  else 
+    printf "\nERROR: could not find '$1'.\n\n" 1>&2
+  fi
+}
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+#  echo "param '$1'"
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "--on" ]; then
+    shift
+    doOn $1
+    shift
+
+  elif [ "$1" == "--off" ]; then
+    shift
+    doOff $1
+    shift
+
+  elif [ "$1" == "-l" ]; then
+    shift
+    if [ $# -eq 0 ] || [[ $1 =~ ^- ]]; then
+      doListAll
+    else
+      doList $1
+      shift
+    fi
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+
+done

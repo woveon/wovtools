@@ -19,6 +19,18 @@ set ""
 set -- "${pushenvargs[@]}"
 
 
+# Check all stagemods are off
+ONSTAGEMODS=( $(jq -r '.stagemods[] | select(.status == "on") | .["name"]' wovtools/config.json ) )
+if [[ "$ONSTAGEMODS" != "" ]]; then
+  printf "\nERROR: turn off stagemods when pushing content.\n"
+  printf "  active stagemods: ${ONSTAGEMODS[*]}\n\n"
+  for sm in ${ONSTAGEMODS[@]}; do
+    printf "  ex. wov-mod --off ${sm}\n"
+  done
+  printf "\n"
+  exit 1
+fi
+
 # Check local code is checked in and pushed
 wov-git-check ${WOV_BASEDIR}
 R1=$?

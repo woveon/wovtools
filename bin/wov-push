@@ -39,6 +39,19 @@ figlet wov-push
 printf " version: ${WOV_STAGE}_${WOV_PVER}_${WOV_SVER}\n\n"
 
 
+# Check all stagemods are off
+ONSTAGEMODS=( $(jq -r '.stagemods[] | select(.status == "on") | .["name"]' wovtools/config.json ) )
+if [[ "$ONSTAGEMODS" != "" ]]; then
+  printf "\nERROR: turn off stagemods when pushing content.\n"
+  printf "  active stagemods: ${ONSTAGEMODS[*]}\n\n"
+  for sm in ${ONSTAGEMODS[@]}; do
+    printf "  ex. wov-mod --off ${sm}\n"
+  done
+  printf "\n"
+  exit 1
+fi
+
+
 # Check local code is checked in and pushed
 wov-git-check ${WOV_BASEDIR}
 R1=$?
@@ -48,6 +61,7 @@ if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then
   printf "\nERROR: wov-push exiting\n" 1>&2
   exit 1
 fi
+
 
 
 
@@ -108,7 +122,7 @@ done
 
 if [ "$SKIPDBCHECKS" != "1" ]; then
   echo "  ... check for database changes that could block the push"
-  wov-db-commit --any-push-blockage
+  wov-db-commit -v --any-push-blockage
   R3=$?
   if [ "$R3" != 0 ]; then exit 1; fi
 else
