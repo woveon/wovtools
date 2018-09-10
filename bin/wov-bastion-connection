@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+
+# Import Env
+# ---------------------------------------------------------------------
+argsbastcon=( "$@" )
+set ""
+. wov-env
+set -- "${argsbastcon[@]}"
+
+DOECHO=1
+FOLD=$(tput cols)
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Manages an ssh connection to a bastion host for the Kubernetes cluster. When an ssh connection is open, it allows the ssh tunnel to internal AWS resources and the K8s cluster. Make sure the .ssh/config env is set. See wov-bastion command.
+
+  -q/--quiet      : quiet
+  -v/--verbose    : verbose
+  -h/--help       : this help
+  -c/--connect    : connect (has to remain open)
+  -d/--disconnect : disconnect
+
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doDisconnect()
+{
+  CL=$(wov-env --var WOV_CLUSTER)
+  PP=$(ps | \grep "[s]sh ${CL}-bastion" | awk '{print $1}')
+  if [[ "$PP" == "" ]]; then
+    printf "\nERROR: no known connection.\n\n"
+  else
+    kill $PP
+    if [[ "$?" == "0" ]]; then echo "  ... success"; fi
+  fi
+
+}
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doConnect()
+{
+  CL=$(wov-env --var WOV_CLUSTER)
+  ssh "${CL}-bastion"
+}
+
+
+# ---------------------------------------------------------------------
+# Command line processing
+while [[ $1 =~ ^- ]]; do
+  if [ "$1" == '-q' ] || [ "$1" == '--quiet' ]; then
+    DOECHO=0
+    shift
+
+  elif [ "$1" == '-v' ] || [ "$1" == '--verbose' ]; then
+    DOECHO=2
+    shift
+
+  elif [ "$1" == '-c' ] || [ "$1" == '--connect' ]; then
+    shift
+    doConnect
+
+  elif [ "$1" == '-d' ] || [ "$1" == '--disconnect' ]; then
+    shift
+    doDisconnect
+
+  elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    exit 1
+  fi
+done
+

@@ -61,7 +61,7 @@ function doLookupDatabasePort(_bhost, _config, _sshdata, _db) {
       for (let j=0; j<hostentry.config.length && retval ==null; j++) {
         let hece = hostentry.config[j];
 
-        // console.log('hece: ', hece.value, ` : db-${cl}-${ns}-${_db}`);
+        // console.log('hece: ', hece.param, ': ', hece.value, ` : try to match 'db-${cl}-${ns}-${_db}'`);
         if ( hece.param == 'LocalForward' && (hece.value.match(`db-${cl}-${ns}-${_db}`) != null)  ) {
           let port = hece.value.split(' ')[0];
           // console.log(`port '${port}'`);
