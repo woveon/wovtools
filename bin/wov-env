@@ -47,14 +47,15 @@ usage: `basename $0` [options]
   Export the context as variables for scripts or export specific variables.
 
   -e           : echo the output
-  --var X      : only operate on this variable X
+  --var X      : only operate on this variable X.. only for loaded env vars (not env files)
   -h/--help    : display these options
   -v/--version : version of wovtools
   --vh-label   : vh label in DockerHub repo
   --mod X      : modifies the stage to use 'conf-X' files (note: WOV_stagemod is used by default)
-  --conf       : load all the configuration as environment variables (one line)
+  --conf       : print all the configuration as environment variables (one line)
   --exports    : runs all the configuration as environment variables (no output, sourced)
-  --envs       : load all the configuration as environment variables (sep lines)
+  --envs       : print all the configuration as environment variables (sep lines)
+  --env-var X  : print one variable of the environment variables
   --env X      : echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
   --export X   : export the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
   --cmd X      : for commands on one line, echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
@@ -415,6 +416,12 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == "--envs" ]; then
     doLoadEnv
+
+
+    # print one var
+  elif [ "$1" == "--env-var" ]; then
+    shift
+    command grep -h ${1} ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/*k8s | ${SED} -e 's/^.*[=]//' -e 's/^"//' -e 's/"$//'
 
   elif [ "$1" == "--exports" ]; then
     doLoadExports

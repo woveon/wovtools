@@ -1,0 +1,309 @@
+#!/usr/bin/env bash
+
+
+
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+wov-build -i -e
+pushenvargs=( "$@" )
+set ""
+. wov-env
+#. wov-ns-check
+set -- "${pushenvargs[@]}"
+
+DOECHO=1
+FOLD=$(tput cols)
+DATABASESERVER=
+# NAMESPACE="${WOV_NS}"
+STAGE="${WOV_STAGE}"
+
+
+echo ""
+echo ""
+echo ""
+echo "Since each database holds data in different hierarchies, then have to use the conf, but these are built per stage, so kinda a bummer."
+echo ""
+echo ""
+echo ""
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [databaseserver] {options}
+
+Connect to a database via vh (virtual host) pod in Kubernetes. Takes information from Woveon environment variables. If no commands are given (-c), then opens a shell.
+
+databaseserver - the name of a database server in the project. assumes conf/[database].[cs]k8s files.
+
+  -d [database] : sets the database inside the server
+  -U [user]     : login user
+  -f [file]     : load file
+  -c [command]  : run command
+  -p            : ask for password
+  -s/--stage X  : select a non-default stage
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+# Set the default commands
+if [ "$#" == "0" ]; then
+  printf "\n\nERROR: need to provide the name of the database server.\n"
+  sleep .8
+  fDisplayOptions
+  exit 1
+fi
+if [ "$1" == "-h" ]; then
+  fDisplayOptions
+  exit 0
+fi
+DATABASESERVER=$1
+shift
+
+
+function doConfigDatabase()
+{
+  echo "Here, load from secrets file"
+
+
+#  echo "DATABASESERVER: '$DATABASESERVER'"
+  VALS=( $(cat ${WOV_SECRETFILE} | jq -r ".$DATABASESERVER"' | .type +" "+ .'"${STAGE}"'.database +" "+ .'"${STAGE}"'.username +" "+ .'"${STAGE}"'.password +" "+ .'"${STAGE}"'.host') )
+  if [ "$V" == "" ]; then
+    printf "\n\nERROR: unknown database '${DATABASESERVER}' of stage '${STAGE}'.\n\n"
+    exit 1
+  fi
+
+  OK=1
+  echo " ${#VALS[@]} : '${VALS[@]}'"
+  for V in "${VALS[@]}"; do
+    echo "'$V'"
+    if [ "$V" == "" ]; then 
+      OK=0; 
+      printf "\n\nERROR: unknown database entry for '${DATABASESERVER}' of stage '${STAGE}'.\n\n"
+    fi
+  done
+  if [ "$OK" == "0" ]; then
+    exit 1
+  fi
+
+  # set to env vars
+  DB_TYPE=${VALS[0]}
+  DB_DATABASE=${VALS[1]}
+  DB_USERNAME=${VALS[2]}
+  DB_PASSWORD=${VALS[3]}
+  DB_HOST=${VALS[4]}
+  DB_COMMAND=
+  DB_OP=
+  DB_FILE=
+  doDatabaseConnectMessage
+
+}
+
+function doDatabaseConnectMessage()
+{
+  printf "\n\n"
+  SSS=''
+  if [ "${STAGE}" != "${WOV_STAGE}" ]; then SSS=" : $STAGE"; fi
+  figlet "${DATABASESERVER}${SSS}"
+  printf " Cur.Namespace: ${WOV_NS}\n"
+  printf "     Tar.Stage: ${STAGE}\n"
+  printf "     DB Server: ${DATABASESERVER}\n"
+  printf "     Type     : ${DB_TYPE}\n"
+  printf "     User     : ${DB_USERNAME}\n"
+  printf "     Host     : ${DB_HOST}\n"
+  printf "     Database : ${DB_DATABASE}\n\n"
+}
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-p" ]; then
+    shift
+    read DB_PASSWORD
+    shift
+
+#  elif [ "$1" == "-n" ] || [ "$1" == "--namespace" ]; then
+#    shift
+#    NAMESPACE="${1}"
+#    shift
+
+  elif [ "$1" == "-s" ] || [ "$1" == "--stage" ]; then
+    shift
+    STAGE="${1}"
+    shift
+
+  elif [ "$1" == "-U" ]; then
+    shift
+    DB_USERNAME="$1"
+    shift
+
+  elif [ "$1" == "-d" ]; then
+    shift
+    DB_DATABASE="$1"
+    shift
+
+  elif [ "$1" == "-f" ]; then
+    shift
+    DB_OP="file"
+    DB_FILE="$1"
+    shift
+
+  elif [ "$1" == "-c" ]; then
+    shift
+    DB_OP="command"
+    DB_COMMAND="$1"
+#    DB_COMMAND=( $1 )
+    shift
+
+  elif [ "$1" == "--schema" ]; then
+    shift
+    DB_OP="schema"
+
+  elif [ "$1" == "-H" ]; then
+    shift
+    DB_HOST="$1"
+    shift
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+
+#if [ $DOECHO -ge 1 ]; then echo "... connecting to ${DATABASESERVER} (${DB_HOST}) via vh (user ${DB_USERNAME} on ${DB_DATABASE})"; fi
+
+doConfigDatabase
+
+# Check vh pod exists
+wov-p vh >/dev/null
+if [ "$?" == "1" ]; then
+  printf "\n\nERROR: 'vh' has not been created. Run 'wov-vh -s'.\n\n"
+  exit 1
+fi
+
+if [ "${DB_TYPE}" == "postgres" ]; then
+
+  if [ "${DB_OP}" == "schema" ]; then
+    # Log into pod 'vh', run pg_dump
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s"
+    else
+      PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
+    fi
+
+  elif [ "${DB_OP}" == "command" ]; then
+    # Log into pod 'vh', run psql
+#    echo "dbcommand  : \"${DB_COMMAND}\""
+#    echo "dbcommand q: \"${DB_COMMAND[@]}\""
+#    VARS=( "PGPASSWORD=${DB_PASSWORD}" "psql" "--tuples-only" "-h" "${DB_HOST}" "-U" "${DB_USERNAME}" "-d" "${DB_DATABASE}" "-c" "${DB_COMMAND}" )
+#    kubectl exec -i vh -- /bin/bash -c "${VARS[@]}"
+#    kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c ${DB_COMMAND}"
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\""
+    else
+      PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\"
+    fi
+
+  elif [ "${DB_OP}" == "file" ]; then
+    # copy file; exectute it in database, delete file
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl cp ${DB_FILE} vh:.${DATABASESERVER}.sql.$$
+      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f .${DATABASESERVER}.sql.$$"
+      kubectl exec -i vh -- /bin/bash -c "rm -f .${DATABASESERVER}.sql.$$"
+    else
+      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
+    fi
+
+  elif [ "${DB_OP}" == "" ]; then
+    # Log into pod 'vh', run psql
+    doDatabaseConnectMessage
+    if [ $DOECHO -ge 2 ]; then echo "... connect with 'PGPASSWORD=... psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}'"; fi
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}"
+    else
+      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
+    fi
+  fi
+
+elif [ "${DB_TYPE}" == "mongo" ]; then
+
+  if [ "${DB_OP}" == "schema" ]; then
+    # NOTE: mongo has no schema, so taking from first returned object
+    DB_COMMAND=$(cat <<EOF
+function printSchema(obj) {
+  for (var key in obj) {
+    print(' ', key, typeof obj[key]) ;
+  }
+};
+db.getCollectionNames().forEach(function(collname) {
+  print('COLLECTION:', collname);
+  // printSchema(db[collname].findOne()); // NOTE: not calling since if there is no object, then no schema
+})
+EOF)
+
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
+    else
+      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
+    fi
+
+
+  elif [ "${DB_OP}" == "command" ]; then
+    set -x
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
+    else
+      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
+    fi
+  elif [ "${DB_OP}" == "file" ]; then
+    printf "\nFile: untested\n\n";
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl cp ${DB_FILE} vh:.${DATABASESERVER}.sql.$$
+      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} ${DBSERVER}.sql.$$"
+      kubectl exec -i vh -- /bin/bash -c "rm -f .${DATABASESERVER}.sql.$$"
+    else
+      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} ${DB_FILE}
+    fi
+  elif [ "${DB_OP}" == "" ]; then
+    doDatabaseConnectMessage
+    if [ "${DB_HOST}" != "localhost" ]; then
+set -x
+      kubectl exec  -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"
+    else
+      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}
+    fi
+  fi
+
+else
+  printf "\n\nERROR: Unknown database type of '${DB_TYPE}'. Probably need to implement it in wov-db-connect, and ensure it is supported in vh container.\n"
+  exit 1
+fi
+
+

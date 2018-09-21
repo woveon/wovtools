@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+echo "do not use"
+exit
+
+CLUSTER=
+USER=
+ORG=
+DAYS=1000
+CLUSTER_DIR=
+
+echo "Generating a Kubernetes User: HACK SCRIPT!!!"
+printf "  Cluster name: "
+read CLUSTER
+printf "     User name: "
+read USER
+printf "  Organization: "
+read ORG
+
+
+
+CLUSTER_DIR=$(wov-cd -e secrets)/secrets_clusters/$CLUSTER
+
+
+if [ ! -f "${CLUSTER_DIR}/ca.pem" ]; then
+  printf "\n\n\n\nERROR: no ca.pem in ${CLUSTER_DIR}\n"
+  printf "Create this file by looking at AWS EKS for your cluster\n"
+  printf "  : https://console.aws.amazon.com/eks\n"
+  printf "\n\n\n"
+fi
+
+
+echo "... generate a user key"
+openssl genrsa -out ${CLUSTER_DIR}/${USER}.key 2048
+
+echo "... create a certificate sign request"
+openssl req -new -key ${CLUSTER_DIR}/${USER}.key -out ${CLUSTER_DIR}/${USER}.csr -subj "/CN=${USER}/O=${ORG}"
+
+echo "... sign the certificate"
+openssl x509 -req -in ${CLUSTER_DIR}/${USER}.csr -CA ${CLUSTER_DIR}/ca.pem -CAcreateserial -out ${CLUSTER_DIR}/${USER}.crt -days ${DAYS}
+
+echo "... create user credentials for Kubernetes"
+kubectl config set-credentials ${USER} --client-certificate=${CLUSTER_DIR}/${USER}.crt  --client-key=${CLUSTER_DIR}/${USER}.key
+
+
+

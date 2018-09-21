@@ -39,6 +39,7 @@ TODO:
 ## Notes:
 
 - Stores settings statefully in wovtools/config.json:stagemods.
+  - only works on branches, not leafs
 
 - Used in wov-build's creation of the config, so any changes require a rebuild. But, since wov-build -s just builds a secret and then checks to last build, it does not really impact current operation.
 

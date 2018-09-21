@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+
+
+# Import Env
+# ---------------------------------------------------------------------
+buildcl=( "$@" )
+set ""
+. wov-env -c
+set -- "${buildcl[@]}"
+
+# Globasl
+# --------------------------------------------------------------------- 
+DOECHO=1
+DOTEST=0
+FOLD=$(tput cols)
+FLAVOR=
+
+# Create new settings
+# --------------------------------------------------------------------- 
+NWOV_CLTYPE=${WOV_CLTYPE}
+NWOV_PROVIDER=${WOV_PROVIDER}
+NWOV_REGION=${WOV_REGION}
+NWOV_FLAVOR=
+NCL_HOSTEDZONE=
+
+# Dirs 
+# --------------------------------------------------------------------- 
+SECRETS_DIR=$(jq -r ".dirs.secrets" ${HOME}/.wovtools 2> /dev/null)
+CLUSTERS_DIR=$(jq -r ".dirs.clusters" ${HOME}/.wovtools 2> /dev/null)
+if [ "$SECRETS_DIR" == "" ]; then 
+  printf "\n\nERROR: SECRETS_DIR not set as .dirs.secrets not in ~/.wovtools file.\n\n"
+  exit 1;
+fi
+if [ "$CLUSTERS_DIR" == "" ]; then 
+  printf "\n\nERROR: CLUSTERS_DIR not set as .dirs.clusters not in ~/.wovtools file.\n\n"
+  exit 1;
+fi
+
+# Help info
+# --------------------------------------------------------------------- 
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Builds a cluster for a project.
+
+  -q : quiet
+  -v : verbose
+  -h|--help : prints this help
+  -f|--flavor : sets the cluster flavor (used in naming)
+  -t|--test   : don't create cluster, but do all steps leading up to it and print command to build it
+
+EOF
+}
+
+
+# --------------------------------------------------------------------- 
+# Handle Params
+# --------------------------------------------------------------------- 
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-t" ] || [ "$1" == "--test" ]; then
+    shift
+    DOTEST=1
+    if [ $DOECHO -ge 1 ]; then echo "...test mode"; fi
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  elif [ "$1" == "-f" ] || [ "$1" == "--flavor" ]; then
+    shift
+    NWOV_FLAVOR="$1"
+    shift
+
+  elif [ "$1" == "-r" ] || [ "$1" == "--region" ]; then
+    shift
+    NWOV_REGION="$1"
+    shift
+
+  elif [ "$1" == "-hz" ] || [ "$1" == "--hosted-zone" ]; then
+    shift
+    NCL_HOSTEDZONE="$1"
+    shift
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+# Check command line
+# --------------------------------------------------------------------- 
+if [ "$NWOV_FLAVOR" == "" ]; then
+  printf "\nERROR: You need to specify a new 'flavor' name of this cluster.\n\n"
+  exit 1
+fi
+if [ "$NCL_HOSTEDZONE" == "" ]; then
+  printf "\nERROR: You need to specify a 'hosted-zone' to place this cluster in.\n\n"
+  exit 1
+fi
+
+# Define new variables based on CLI options
+# --------------------------------------------------------------------- 
+NWOV_CLUSTER="${NWOV_CLTYPE}-${NWOV_PROVIDER}-${NWOV_REGION}-${NWOV_FLAVOR}"
+CLUSTERDIR="${CLUSTERS_DIR}/${NWOV_CLUSTER}"
+NCL_KUBEAWSKEY="${CLUSTERS_DIR}/${NWOV_CLUSTER}/credentials/awskms.key"
+NCL_AWSREGION=$(wov-env --rcAWS ${NWOV_REGION})
+NCL_S3BUCKET="s3://${NWOV_CLUSTER}.woveon.com"
+NCL_HOSTEDZONEID=`aws route53 list-hosted-zones --output text  | \grep "${NCL_HOSTEDZONE}" | awk '{print $3}' | cut  -c13-`
+
+# Check new variables
+# --------------------------------------------------------------------- 
+if [ "${NCL_HOSTEDZONEID}" == "" ]; then
+  printf "\nERROR: Could not find a HostedZoneId to match to zone '${NCL_HOSTEDZONE}'. Check AWS Route 53.\n\n"
+  exit 1
+fi
+
+# Output
+# --------------------------------------------------------------------- 
+printf "\n"
+printf "Cluster      : ${NWOV_CLUSTER}\n"
+printf "Cluster Dir  : ${CLUSTERDIR}\n"
+printf "Hosted Zone  : ${NCL_HOSTEDZONE}\n"
+printf "HostedZoneID : ${NCL_HOSTEDZONEID}\n"
+printf "KubeAWSKey F : ${NCL_KUBEAWSKEY}\n"
+printf "AWS Region   : ${NCL_AWSREGION}\n"
+
+
+
+
+
+# Make directories
+# --------------------------------------------------------------------- 
+if [ ! -e "${CLUSTERDIR}" ]; then
+  echo "  ... making cluster dir : ${CLUSTERDIR}"
+  mkdir -p ${CLUSTERDIR}
+fi
+
+if [ ! -e "${CLUSTERDIR}/credentials" ]; then
+  echo "  ... making cluster dir : ${CLUSTERDIR}/credentials"
+  mkdir -p ${CLUSTERDIR}/credentials
+  chmod 700 ${CLUSTERDIR}/credentials
+fi
+
+
+# Create AWS KMS key - if does not exist
+# --------------------------------------------------------------------- 
+if [ ! -e "${NCL_KUBEAWSKEY}" ]; then \
+  echo "  ... creating AWS KMS key in : '${NCL_KUBEAWSKEY}'"
+  aws kms --region=${NCL_AWSREGION} create-key --description="kube-aws assets" > ${NCL_KUBEAWSKEY}.tmp
+  if [ "$?" != "0" ]; then 
+    rm ${NCL_KUBEAWSKEY}.tmp
+    printf "\nERROR: exiting.\n"
+    exit 1
+  fi
+  mv ${NCL_KUBEAWSKEY}.tmp ${NCL_KUBEAWSKEY}
+  echo "  ... ok"
+fi
+echo "  ... Kube AWS key @: '${NCL_KUBEAWSKEY}'."
+
+
+# Create AWS Bucket if does not exist"
+# --------------------------------------------------------------------- 
+aws s3 ls ${NCL_S3BUCKET} 2>&1 > /dev/null # 2>&1 | grep -q 'NoSuchBucket'
+if [ "$?" != "0" ]; then
+  echo "  ... no AWS S3 Bucket for cluster. Creating..."
+  aws s3api --region=${NCL_AWSREGION} create-bucket --bucket "${NWOV_CLUSTER}.woveon.com"
+  if [ "$?" != "0" ]; then 
+    printf "\n\nERROR: failed creating bucket."
+    exit 1
+  fi
+fi
+echo "  ... AWS S3 Bucket exists"
+
+
+# Get the key arn
+# --------------------------------------------------------------------- 
+NCL_KUBEAWSKEYARN=$(jq -r ".KeyMetadata.Arn" ${NCL_KUBEAWSKEY})
+if [ "${NCL_KUBEAWSKEYARN}" == "" ]; then
+  printf "\n\nERROR: could not find AWS Key Arn in: ${NCL_KUBEAWSKEY}."
+  exit 1
+fi
+printf "KubeAWSKeyArn: ${NCL_KUBEAWSKEYARN}\n"
+
+
+# Ensure a key/pair exists in 
+# --------------------------------------------------------------------- 
+  # check directory exists
+if [ ! -e "${HOME}/.ssh/aws" ]; then
+  echo "  ... making ssh key dir: ${HOME}/.ssh/aws"
+  mkdir -p "${HOME}/.ssh/aws"
+  if [ "$?" != "0" ]; then
+    printf "\n\nERROR: could not create ~/.ssh/aws directory.\n"
+    exit 1
+  fi
+  chmod 600 "${HOME}/.ssh/aws"
+  if [ "$?" != "0" ]; then
+    printf "\n\nERROR: could not set ~/.ssh/aws mode to 600.\n"
+    exit 1
+  fi
+fi
+  # check for key
+if [ ! -e "${HOME}/.ssh/wov/${NWOV_CLUSTER}.pem" ]; then
+  aws ec2 describe-key-pairs --key-names "${NWOV_CLUSTER}" 2>&1 > /dev/null
+  if [ "$?" != "0" ]; then
+    printf "\n\nERROR: Need to create an AWS keypair for the cluster and save to your ssh dir.\n\n"
+    printf "Generate key: 'aws ec2 create-key-pair  --key-name ${NWOV_CLUSTER} > ~/.ssh/wov/${NWOV_CLUSTER}.pem'.\n\n"
+    exit 1
+  else
+    printf "\n\nERROR: Existing AWS keypair, but not in ~/.ssh/wov directory as ${NWOV_CLUSTER}.pem file.\n"
+    printf "  - Either move that key to ~/.ssh/wov/${NWOV_CLUSTER}.pem if you have it, or\n"
+    printf "  - go to AWS, delete it and recreate it: https://console.aws.amazon.com/ec2/v2/home?KeyPairs:sort=keyName"
+    exit 1
+  fi
+fi
+  # ensure key has correct permissions
+chmod 600 ${HOME}/.ssh/wov/${NWOV_CLUSTER}.pem
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+echo "  ... initialize the directory with cluster.yaml"
+if [ "${DOTEST}" == "1" ]; then
+  echo "cd ${CLUSTERDIR} && \
+    kube-aws init \
+    --cluster-name=\"${NWOV_CLUSTER}\" \
+    --external-dns-name=\"${NWOV_CLUSTER}.${NCL_HOSTEDZONE}\" \
+    --hosted-zone-id=\"${NCL_HOSTEDZONEID}\" \
+    --region=\"${NCL_AWSREGION}\" \
+    --availability-zone=\"${NCL_AWSREGION}a\" \
+    --key-name=\"${NWOV_CLUSTER}\" \
+    --kms-key-arn=\"${NCL_KUBEAWSKEYARN}\" \
+    --s3-uri=\"${NCL_S3BUCKET}\" "
+else
+  echo "  ... creating cluster: ${NWOV_CLUSTER}"
+  cd ${CLUSTERDIR} && \
+    kube-aws init \
+    --cluster-name="${NWOV_CLUSTER}" \
+    --external-dns-name="${NWOV_CLUSTER}.${NCL_HOSTEDZONE}" \
+    --hosted-zone-id="${NCL_HOSTEDZONEID}" \
+    --region="${NCL_AWSREGION}" \
+    --availability-zone="${NCL_AWSREGION}a" \
+    --key-name="${NWOV_CLUSTER}" \
+    --kms-key-arn="${NCL_KUBEAWSKEYARN}" \
+    --s3-uri="${NCL_S3BUCKET}"
+  if [ "$?" != "0" ]; then
+    printf "\n\nERROR: Failed to create cluster.\n\n"
+  fi
+fi
+
+
+echo "... end"
+
+

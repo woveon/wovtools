@@ -112,10 +112,22 @@ for gd in ${GITDIRS[@]}; do
   wov-git-check ${gd}
   if [[ $? != 0 ]]; then printf "\nERROR: Git repo ${gd} has uncommitted changes.\n\n" 1>&2; CONTINUE=0; fi
 
+  if [[ $CONTINUE == 1 ]]; then
+    printf "  ...ensure '_old' directory exists"
+    RR=$(kubectl exec -it vh -- bash -c "mkdir _old")
+    if [[ $? != 0 ]]; then 
+      if [[ $RR == "mkdir: "*"File exists"* ]]; then
+        printf " ...exists\n"  
+      else
+        printf "\nERROR: failed creating '_old' directory.\n\n" 1>&2 ; CONTINUE=0; 
+      fi
+    fi
+
+  fi
 
   if [[ $CONTINUE == 1 ]]; then
     printf "  ...if existing directory, rename to avoid overwriting\n"
-    kubectl exec -it vh -- bash -c "if [ -e ${G} ]; then mv ${G} ${G}.`date -u +"%Y-%m-%dT%H:%M:%SZ"`; fi"
+    kubectl exec -it vh -- bash -c "if [ -e ${G} ]; then mv ${G} _old/${G}.`date -u +"%Y-%m-%dT%H:%M:%SZ"`; fi"
     if [[ $? != 0 ]]; then printf "\nERROR: failed moving existing directory.\n\n" 1>&2 ; CONTINUE=0; fi
   fi
 
@@ -152,9 +164,13 @@ for gd in ${GITDIRS[@]}; do
     rm .gitrev.$$
   fi
 
+  if [[ $CONTINUE != 1 ]]; then break; fi
 
 done
 
 if [[ $CONTINUE == 1 ]]; then
   printf "  ... success\n"
+else 
+  printf "  ... failure\n"
+  exit 1
 fi

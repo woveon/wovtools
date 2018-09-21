@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+
+
+# --------------------------------------------------------------------- 
+# This runs when user is not in a WovTools project directory.
+# NOTE: The intent of this script is to eventually place it into wov-env.
+# --------------------------------------------------------------------- 
+
+FOLD=$(tput cols)
+WOV_VERSION=0
+DOECHO=1
+
+# ---------------------------------------------------------------------
+function fConvertRegionCodeAWS()
+{
+  case $1 in
+    va) cRC='us-east-1' ;;
+    *)
+      echo
+      echo "***ERROR: unknown AWS region code of '$1'."
+      exit 1
+  esac
+}
+
+
+# --------------------------------------------------------------------- 
+function doEcho() {
+  printf "K8S_CONTEXT=${K8S_CONTEXT}\n"
+  printf "WOV_KSTAGE=${WOV_KSTAGE}\n"
+  printf "WOV_KPROJECT=${WOV_KPROJECT}\n"
+  printf "WOV_NS=${WOV_NS}\n"
+  printf "WOV_FLAVOR=${WOV_FLAVOR}\n"
+  printf "WOV_REGION=${WOV_REGION}\n"
+  printf "WOV_PROVIDER=${WOV_PROVIDER}\n"
+  printf "WOV_CLTYPE=${WOV_CLTYPE}\n"
+  printf "WOV_CLUSTER=${WOV_CLUSTER}\n"
+  printf "CL_REGION=${CL_REGION}\n"
+  printf "CL_ZONES=${CL_ZONES}\n"
+  printf "CL_VPC=${CL_VPC}\n"
+
+}
+
+# K8S
+export K8S_CONTEXT=$(kubectl config current-context)
+OLDIFS=$IFS
+IFS='-'
+array=( $K8S_CONTEXT )
+IFS=$OLDIFS
+export WOV_KSTAGE=${array[5]}
+export WOV_KPROJECT=${array[4]}
+export WOV_NS=${WOV_KPROJECT}-${WOV_KSTAGE}
+export WOV_FLAVOR=${array[3]}
+export WOV_REGION=${array[2]}
+export WOV_PROVIDER=${array[1]}
+export WOV_CLTYPE=${array[0]}
+export WOV_CLUSTER=${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}
+
+
+# Cluster
+fConvertRegionCodeAWS ${WOV_REGION}
+export CL_REGION=$cRC
+export CL_ZONES="c d"
+export CL_VPC=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${WOV_CLUSTER}-vpc" --query 'Vpcs[0].VpcId' | sed -e 's/^"//' -e 's/"$//')
+
+
+
+
+doEcho

@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+
+FOLD=$(tput cols)
+DOECHO=1
+
+
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+  Project-level commands.
+
+  --env X      : loads the environment for project X
+  -h/--help    : display these options
+  -v/--version : version of wovtools
+
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# Runs the 
+function doLoadEnv() 
+{
+  . wov-cd $1 > /dev/null && wov-env --conf -E
+}
+
+
+# ---------------------------------------------------------------------
+# Command line processing
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
+    shift
+    fDisplayOptions
+    exit 0
+
+  elif [ "$1" == '--env' ] || [ "$1" == '-e' ]; then
+    shift
+    doLoadEnv $1
+    shift
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    exit 1
+  fi
+done
+

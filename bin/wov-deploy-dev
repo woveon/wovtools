@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 
-
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
@@ -10,10 +9,16 @@ if [ ! -z ${WOV_stagemod+x} ]; then
   exit 1
 fi
 deployenvargs=( "$@" )
+wov-build -e
 set ""
 . wov-env
 . wov-ns-check
 set -- "${deployenvargs[@]}"
+
+if [ ${WOV_STAGE} == 'prod' ]; then
+  printf "\n\n\nERROR: deploying straight into production is not allowed. Do a wov-push and then a wov-deploy.\n\n"
+  exit  1
+fi
 
 DOECHO=1
 DOFORCE=0
@@ -23,26 +28,8 @@ DRYRUN=0
 CONFONLY=0
 
 K8SFILES=
+DEPLOYDIR=
 
-# Cache the current values
-WOV_CUR_PVER=${WOV_PVER}
-WOV_CUR_SVER=${WOV_SVER}
-
-
-# --------------------------------------------------------------------- 
-# test if string in array : 1 is yes, 0 is no
-#  ex. 
-# arr=( "A" "B" "a" "b" )
-# containsElement "a" "${arr[@]}"  # $? is 1
-# containsElement "c" "${arr[@]}"  # $? is 0
-# --------------------------------------------------------------------- 
-function containsElement () 
-{
-  local e match="$1"
-  shift
-  for e; do [[ "$e" == "$match" ]] && return 1; done
-  return 0
-}
 
 
 # --------------------------------------------------------------------- 
@@ -108,6 +95,8 @@ function doDeployConf()
     kubectl create secret generic ${f} "${DATA[@]}"
     kubectl label  secret ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
   done
+
+
 }
 
 
@@ -120,41 +109,72 @@ function doDeployK8s()
   if [ $DOECHO -ge 1 ]; then echo "... deploying Kubernetes"; fi
   if [ $DOECHO -ge 2 ]; then echo "  ... from ${DEPLOYDIR}/k8s"; fi
 
+  DEPLOYMENTS=
   if [ "$#" != "0" ]; then
     K8SFILES=( $* )
+    for f in "${K8SFILES[@]}"; do
+      if [ ! -e ${DEPLOYDIR}/k8s/$f.yaml ]; then
+        printf "ERROR: unknown k8s file '$f.yaml'.\n"
+      else
+        kubectl apply -f ${DEPLOYDIR}/k8s/$f.yaml
+      fi
+    done
+    DEPLOYMENTS=$K8SFILES
   else
-    K8SFILES=( $(cd ${DEPLOYDIR}/k8s/ && ls * | sed -e 's/\(.*\)\..*/\1/') )
+    kubectl apply -f ${DEPLOYDIR}/k8s
+    DEPLOYMENTS=( $(cd ${DEPLOYDIR}/k8s && grep -wil *.yaml -e 'kind: Deployment') )
   fi
 
-  # printf "K8S FILES: ${K8SFILES[*]}"
-
-  for f in "${K8SFILES[@]}"; do
-    if [ ! -e ${DEPLOYDIR}/k8s/$f.yaml ]; then
-      printf "ERROR: unknown k8s file '$f.yaml'.\n"
-
-    # NOTE: using ^ and $ for exact match of string
-    elif [ "$(jq '.nodeploy[] | test("'"^${f}$"'")' ${WOV_BASEDIR}/wovtools/config.json)" == "true" ]; then
-      printf "...skipping '$f': as it is on the nodeploy list in wovtools/config.json\n"
-    else
-      kubectl apply -f ${DEPLOYDIR}/k8s/$f.yaml
-    fi
+  # --------------------------------------------------------------------- 
+  # Now, kill the pods, so the deployments roll out more
+  printf "found deployments ${DEPLOYMENTS[*]}\n"
+  for f in "${DEPLOYMENTS[@]}"; do
+    # trim file extension
+    dep=${f%.*} 
+    pods=( $(kubectl get pods --no-headers | \grep "^${dep}-" | awk '{print $1}') )
+    # printf "  ... deployment: ${dep}, delete pods : ${pods}\n"
+    for p in "${pods}"; do
+    printf "    ... delete pod : ${p}\n"
+    kubectl delete pod $p
+    done
   done
 }
 
 
-# --------------------------------------------------------------------- 
-# --------------------------------------------------------------------- 
-function doCleanUp()
-{
-  # --------------------------------------------------------------------- 
-  # Cleanup
-  if [ ${DORETAIN} == 1 ]; then
-    echo "... skipping cleanup"
-  else
-    rm -Rf ${DEPLOYDIR}
-  fi
+#function test()
+#{
+#
+#  # --------------------------------------------------------------------- 
+#  # Now, kill the pods
+#  DEPLOYMENTS=( $(cd ${DEPLOYDIR}/k8s && grep -wil *.yaml -e 'kind: Deployment') )
+#  printf "found deployments ${DEPLOYMENTS[*]}\n"
+#  for f in "${DEPLOYMENTS[@]}"; do
+#    # trim file extension
+#    dep=${f%.*} 
+#    pods=( $(kubectl get pods --no-headers | \grep "^${dep}-" | awk '{print $1}') )
+#    # printf "  ... deployment: ${dep}, delete pods : ${pods}\n"
+#    for p in "${pods}"; do
+#    printf "    ... delete pod : ${p}\n"
+#    kubectl delete pod $p
+#    done
+#  done
+#
+#}
 
-}
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+#function doCleanUp()
+#{
+#  # --------------------------------------------------------------------- 
+#  # Cleanup
+#  if [ ${DORETAIN} == 1 ]; then
+#    echo "... skipping cleanup"
+#  else
+#    rm -Rf ${DEPLOYDIR}
+#  fi
+#
+#}
 
 
 # ---------------------------------------------------------------------
@@ -166,7 +186,10 @@ function fDisplayOptions()
 
 usage: `basename $0` [options] {files ...}
 
-Deploys a running kubernetes project from an archive.
+#Deploys a running kubernetes project from an archive.
+Deploys the current environment, skipping a pushed deployment. 
+
+NOTE: Can not deploy to production this way.
 
 files : all by default, or type them here and do individual only
 
@@ -185,8 +208,8 @@ EOF
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 printf "\n"
-figlet wov-deploy
-printf " version: ${WOV_STAGE}_${WOV_CUR_PVER}_${WOV_CUR_SVER}\n"
+figlet wov-deploy-dev
+printf " version: ${WOV_STAGE}_${WOV_PVER}_${WOV_SVER}\n"
 
 
 if [ "${WOV_STAGE}" == "prod" ]; then
@@ -231,16 +254,6 @@ while [[ $1 =~ ^- ]]; do
     shift
     CONFONLY=1
 
-  elif [ "$1" == "--pver" ]; then
-    shift
-    WOV_PVER="$1"
-    shift
-
-  elif [ "$1" == "--sver" ]; then
-    shift
-    WOV_SVER="$1"
-    shift
-
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
     exit 0
@@ -254,59 +267,14 @@ while [[ $1 =~ ^- ]]; do
   fi
 done
 
+function doDevDeploy
+{
+  printf " pver : ${WOV_PVER}   sver: ${WOV_SVER}: DEV DEPLOY\n"
 
-# Little more feedback
-if [ "${WOV_CUR_PVER}" != "${WOV_PVER}" ] || [ "${WOV_CUR_SVER}" != "${WOV_SVER}" ]; then
-  printf " deploying version: ${WOV_STAGE}_${WOV_PVER}_${WOV_SVER}\n"
-fi
-printf "\n"
+  # --------------------------------------------------------------------- 
+  # Set directory to put files
+#  DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache/.deployments/${WOV_PVER}_${WOV_STAGE}_${WOV_SVER}.$$
 
-# printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
-
-
-# If deploying the latest PVER, check that all code is pushed to archive
-if [ "${WOV_CUR_PVER}" == "${WOV_PVER}" ]; then
-  wov-git-check ${WOV_BASEDIR}
-  R1=$?
-  wov-git-check ${WOV_BASEDIR}/wovtools/secrets
-  R2=$?
-  if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
-fi
-#printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
-
-# If deploying the latest SVER, check that all env is pushed to archive
-if [ "${WOV_CUR_SVER}" == "${WOV_SVER}" ]; then
-#  deployenvargs=( "$@" )
-#  set ""
-#  . wov-push-env -q
-#  set -- "${deployenvargs[@]}"
-  wov-push-env -q
-fi
-
-# printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
-
-ARCHBASE=${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}
-
-printf "  ... ARCHBASE : ${ARCHBASE}"
-
-# --------------------------------------------------------------------- 
-# Make directory to put files
-DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache/.deployments/${WOV_PVER}_${WOV_STAGE}_${WOV_SVER}.$$
-mkdir -p ${DEPLOYDIR}/conf
-mkdir -p ${DEPLOYDIR}/k8s
-chmod -R 700 ${DEPLOYDIR}
-
-
-# printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
-
-# --------------------------------------------------------------------- 
-# Pull env files
-aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/conf ${DEPLOYDIR}/conf  --delete
-aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s ${DEPLOYDIR}/k8s  --delete
-
-# printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
-
-if [ "${DRYRUN}" == "0" ]; then 
   if [ "${CONFONLY}" == "1" ]; then
     doDeployConf
   else
@@ -314,7 +282,10 @@ if [ "${DRYRUN}" == "0" ]; then
     doAddLabels
     doDeployConf
     doDeployK8s $k8ses
-    doCleanUp
+    # doCleanUp // no cleanup in devdeploy
   fi
-fi
 
+}
+
+DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache/
+doDevDeploy $*

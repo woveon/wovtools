@@ -69,6 +69,9 @@ function doHashDBSchema()
 
 # --------------------------------------------------------------------- 
 # returns 1 on error
+#  - This returns the value in the database, which is when this 
+#    database was updated. If you want all the entries, see the 
+#    registry file.
 # --------------------------------------------------------------------- 
 function doGetDBPVER()
 {
@@ -255,6 +258,7 @@ function doPushCheck()
       printf "     5 : ${chk_5} - registry git changes\n"
     fi
 
+
     if [ "${chk_2}" == "F" ] &&  [ "${chk_3}" == "F" ] && [ "${chk_5}" == "F" ]; then
       if [ "${chk_1}" == "T" ] && [ "${chk_4}" == "T" ]; then
         retval=0
@@ -265,6 +269,7 @@ function doPushCheck()
       elif [ "${chk_1}" == "T" ]; then # 4 is false then
         printf "FAILED: if you have db schema changes, you need to have deltas in registry to account.\n"
         printf "\n  run: 'wov-db-commit -v --any-push-blockage' for more info.\n"
+        printf "\nTo get current schema of database X: 'wov-db -D X --schema'\n"
   #    elif [ "${chk_4}" == "T" ]; then # 1 is false then
   #      printf "FAILED: if you have deltas in registry, you need to have db schema changes to account.\n"
       fi
