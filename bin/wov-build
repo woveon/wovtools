@@ -1,24 +1,12 @@
 #!/usr/bin/env bash
 
-# --------------------------------------------------------------------- 
-# Import Env 
-# --------------------------------------------------------------------- 
-buildargs=( "$@" )
-set ""
-. wov-env
-#. wov-ns-check
-set -- "${buildargs[@]}"
-
-
-DOECHO=1
 FOLD=$(tput cols)
+DOECHO=1
 HAS_SECRET=0
 HAS_BUILDENV=0
 HAS_CLEAN=0
 SECRETDIFF=1
 DONSIGNORE=0
-
-
 
 
 # --------------------------------------------------------------------- 
@@ -34,19 +22,28 @@ Builds the environment information of a WovTools distribution. Specifically, the
 
   -q : quiet
   -v : verbose
-  --mod X : stage modifier X used to build this (and export location). ex. '--mod local'
   -l : use local variables in build
   -s : build the secret file
   -e : build the environment files (-s assumed)
-  -g : build an environment grouping file 
   --clean : cleans the cache
 
 Stage Modifiers:
-Developing locally requires port forwarding to the cluster, but also changes to configuration so that your code connects to local ports an hosts, as opposed to what it would try in the cluster. The '--mod X' switch incorporates the {{STAGE-X}} items in the secrets, and produces configuration files for conf-X.
+Developing locally requires port forwarding to the cluster, but also changes to configuration so that your code connects to local ports an hosts, as opposed to what it would try in the cluster. 
 
 EOF
 }
+if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fDisplayOptions; exit 0; fi
 
+
+
+# --------------------------------------------------------------------- 
+# Import Env 
+# --------------------------------------------------------------------- 
+buildargs=( "$@" )
+set ""
+. wov-env
+#. wov-ns-check
+set -- "${buildargs[@]}"
 
 
 # --------------------------------------------------------------------- 
@@ -54,15 +51,9 @@ EOF
 # --------------------------------------------------------------------- 
 SECRET_CACHE_DIR=${WOV_BASEDIR}/wovtools/cache/secrets
 SECRETFILE=${SECRET_CACHE_DIR}/current.json
-#LSECRETFILE=${SECRET_CACHE_DIR}/current_local.json
 SECRETFILELAST=${SECRET_CACHE_DIR}/last.json
 SECRETMODFILE=
 SECRETMODFILELAST=
-
-STAGEMOD=
-if [ "${WOV_stagemod}" != "" ]; then
-  STAGEMOD=${WOV_stagemod}
-fi
 
 
 
@@ -72,10 +63,10 @@ fi
 function fBuildSecret()
 {
 
-  # --------------------------------------------------------------------- 
-  # Read config
-  # --------------------------------------------------------------------- 
-  SECRETFILES=( $(jq -r ".secrets.${WOV_STAGE}[] " ${WOV_BASEDIR}/wovtools/config.json 2> /dev/null) )
+  # ---------------------------------------------------------------------
+  # Read config for SECRETFILES
+  # ---------------------------------------------------------------------
+  local SECRETFILES=( $(jq -r ".secrets.${WOV_STAGE}[] " ${WOV_BASEDIR}/wovtools/config.json 2> /dev/null) )
   if [ "$?" != "0" ]; then
     printf "\n\nERROR: no entry for stage '${WOV_STAGE}' in config.json file '.secrets'.\n"
     printf "  - You probably just need to create an entry, similar to the other stages.\n\n"
@@ -84,11 +75,15 @@ function fBuildSecret()
   # echo "SECRETFILES=${SECRETFILES[*]}"
 
 
-  # --------------------------------------------------------------------- 
   # Build secret file
-  # --------------------------------------------------------------------- 
-  mkdir -p ${SECRET_CACHE_DIR}
+  # ---------------------------------------------------------------------
   if [ "$DOECHO" == "2" ]; then echo "SECRETFILE=${SECRETFILE}"; fi
+
+  # create dir, file, and remove prying eyes...
+  mkdir -p ${SECRET_CACHE_DIR}
+  chmod 600 ${SECRETFILE}
+
+  # start with abbreviated versions of "basic config"
   cat > ${SECRETFILE} <<EOF
 {
   "CONTEXT"  : "${K8S_CONTEXT}",
@@ -122,10 +117,7 @@ function fBuildSecret()
 }
 EOF
 
-  # remove prying eyes...
-  chmod 600 ${SECRETFILE}
-
-  # Check for file existence
+  # Check for source file existence
   for sf in ${SECRETFILES[*]}; do
     if [ ! -e ${WOV_BASEDIR}/wovtools/secrets/$sf ]; then
       printf "\n\nERROR: file for secret build does not exist: 'wovtools/secrets/$sf'.\n"
@@ -133,14 +125,16 @@ EOF
     fi
   done
 
-  # merge files in order
+
+  # STEP 0: merge files in order
   for sf in ${SECRETFILES[*]}; do
     if [ "$DOECHO" == "2" ]; then echo "  ... adding secret file $sf"; fi
     jq -s ".[0] * .[1]" ${SECRETFILE} ${WOV_BASEDIR}/wovtools/secrets/$sf >> ${SECRETFILE}.1
     mv ${SECRETFILE}.1 ${SECRETFILE}
   done
 
-  # apply stagemods to SECRETFILE
+
+  # STEP 1: Grafting
   # - get mods that are 'on'
   SMODS=$(jq -r '.stagemods[] | select(.status == "on") | .["name"]' ${WOV_BASEDIR}/wovtools/config.json)
   #echo "SMODS: ${SMODS}"
@@ -148,7 +142,7 @@ EOF
   for m in ${SMODS[*]}; do
     #echo "m: $m"
     # get routes
-    rts=( $(jq -r '.stagemods[] | select(.name == "'"${m}"'") | .routes[] | "\(.[0]) \(.[1])"' wovtools/config.json) )
+    rts=( $(jq -r '.stagemods[] | select(.name == "'"${m}"'") | .routes[] | "\(.[0]) \(.[1])"' ${WOV_BASEDIR}/wovtools/config.json) )
     # echo "rts: ${#rts[@]} ${rts[@]}"
     while [[ "${#rts[@]}" != "0" ]]; do
       rtfrom=${rts[0]}
@@ -158,51 +152,27 @@ EOF
       # rewrite any ME->STAGE in route
       rtto=$(echo $rtto | sed "s/ME/${WOV_STAGE}/")
       #echo "rt: ${rtfrom} -> ${rtto}"
-      # rewrite routes in SECRETFILE (then move back to SECREFILE for next mod)
-      # jq '.apirest["cw"] += .apirest["local"] | del(.apirest["local"]) ' current.json 
-      # jq '.'"${rtto}"' += .'"${rtfrom}"' | del(.'"${rtfrom}"') ' ${SECRETFILE}
+
+      # rewrite routes in SECRETFILE, remove original graft, then move back to SECREFILE for next mod
       jq '.'"${rtto}"' += .'"${rtfrom}"'' ${SECRETFILE} >> ${SECRETFILE}.1
+      # TODO: remove original graft
+
       # mv file
       mv ${SECRETFILE}.1 ${SECRETFILE}
     done
   done
 
-
-##  echo "stagemod ${STAGEMOD}"
-#  if [ "${STAGEMOD}" != "" ]; then
-#    SECRETMODFILE=${SECRET_CACHE_DIR}/current-${STAGEMOD}.json
-#    SECRETMODFILELAST=${SECRET_CACHE_DIR}/last-${STAGEMOD}.json
-#    touch ${SECRETMODFILE}
-#    chmod 600 ${SECRETMODFILE}
-#    touch ${SECRETMODFILE}.1
-#    chmod 600 ${SECRETMODFILE}.1
-#    # build local secret
-#    # walk the keys below - then remove -local on keys, then merge... so in my build script, I merge this output with the original so that this output appends and overwrites
-#    cat ${SECRETFILE} | jq 'walk(if type=="object" then with_entries( if .key|=match("[\\w]*-'${STAGEMOD}']") then .key=(.key|sub("(?<a>[\\w]*)-'${STAGEMOD}'"; .a )) else . end) else . end)' > ${SECRETMODFILE}
-#    jq -s ".[0] * .[1]" ${SECRETFILE} ${SECRETMODFILE} > ${SECRETMODFILE}.1
-#    mv ${SECRETMODFILE}.1 ${SECRETMODFILE}
-#  fi
-
-#  if [ "${WOV_DEVMODE}" == "local" ]; then
-#    touch ${LSECRETFILE}
-#    chmod 600 ${LSECRETFILE}
-#    touch ${LSECRETFILE}.1
-#    chmod 600 ${LSECRETFILE}.1
-#    # build local secret
-#    # walk the keys below - then remove -local on keys, then merge... so in my build script, I merge this output with the original so that this output appends and overwrites
-#    cat ${SECRETFILE} | jq 'walk(if type=="object" then with_entries( if .key|=match("[\\w]*-local]") then .key=(.key|sub("(?<a>[\\w]*)-local"; .a )) else . end) else . end)' > ${LSECRETFILE}
-#    jq -s ".[0] * .[1]" ${SECRETFILE} ${LSECRETFILE} > ${LSECRETFILE}.1
-#    mv ${LSECRETFILE}.1 ${SECRETFILE}
-#    rm ${LSECRETFILE}
-#  fi
-
+  # STEP 2: STAGE Select
+  # - concat child attributes into parent that are prefixed by STAGEx, where x is your stage
+  jq '. * walk( if type == "object" and has("STAGE'"${WOV_STAGE}"'") then .|=.STAGE'"${WOV_STAGE}"' else . end) ' ${SECRETFILE} >> ${SECRETFILE}.1
+  mv ${SECRETFILE}.1  ${SECRETFILE}
 
   # Is secret different from last run?
   # By default, is 1
   if [ -e "${SECRETFILELAST}" ]; then
     if [ "`diff ${SECRETFILE} ${SECRETFILELAST} && echo $?`" == "0" ]; then
       SECRETDIFF=0
-        # --- no diff
+        # --- no diff so turn this off
     fi
   fi
 
@@ -210,12 +180,14 @@ EOF
   # mark as secret being updated
   HAS_SECRET=1
 
-  if [ "$DOECHO" == "2" ]; then 
-    echo "... SECRETDIFF=${SECRETDIFF}"; 
-  elif [ "$DOECHO" == "1" ] && [ "$SECRETDIFF" == "1" ]; then 
+  if [ "$DOECHO" == "2" ]; then
+    echo "... SECRETDIFF=${SECRETDIFF}";
+  elif [ "$DOECHO" == "1" ] && [ "$SECRETDIFF" == "1" ]; then
     echo "... secret needs to be (re)built."
   fi
+
 }
+
 
 
 # --------------------------------------------------------------------- 
@@ -259,9 +231,6 @@ function fBuildEnv()
   # build conf (and if stagemod, do that as well)
   fCleanCacheConf
   fBuildEnvDir conf conf ${SECRETFILE}
-  if [ "$STAGEMOD" != "" ]; then
-    fBuildEnvDir conf conf-${STAGEMOD} ${SECRETMODFILE}
-  fi
 
   # build k8s (no stagemod (will I regret this?... dunno))
   fCleanK8SConf
@@ -272,9 +241,6 @@ function fBuildEnv()
 
   # Update secret since it was used
   cp ${SECRETFILE} ${SECRETFILELAST}
-  if [ "${STAGEMOD}" != "" ]; then
-    cp ${SECRETMODFILE} ${SECRETMODFILELAST}
-  fi
 }
 
 
@@ -329,14 +295,6 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-i" ]; then
     shift
     DONSIGNORE=1
-
-  elif [ "$1" == "--mod" ]; then
-    shift
-    # sets the modifier and resets secrets and buildenv settings
-    STAGEMOD=$1
-    HAS_SECRET=0
-    HAS_BUILDENV=0
-    shift
 
   elif [ "$1" == "-v" ]; then
     shift

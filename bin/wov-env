@@ -1,17 +1,71 @@
 #!/usr/bin/env bash
-
 FOLD=$(tput cols)
+
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Export the context as variables for scripts or export specific variables. 
+
+This pulls config data from:
+ - Wovtools project config (./wovtools/config.json)
+ - Wovtools global config ($HOME/.wovtools)
+ - K8s config
+ - git
+
+And secrets/config:
+ - Wovtools project compiled secrets (./wovtools/cache/secrets/current.json)
+
+
+Command Options:
+
+  -h/--help    : display these options
+  -v/--version : version of wovtools
+  --rcAWS      : convert a region code to an AWS code (ex. va-> us-east-1)
+  --vh-label   : vh label in DockerHub repo
+ 
+  Basic Configuration:
+  -e           : echo the output
+  -c           : run cluster config as well
+
+  Secrets/Config:
+  --envs       : print all the configuration as environment variables (sep lines)
+  --conf       : print all the configuration as environment variables (one line)
+  --exports    : runs all the configuration as environment variables (no output, sourced)
+  --var X      : only operate on this variable X.. only for loaded env vars (not env files)
+
+XXX deprecated
+  --export X   : export the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
+  --env-var X  : print one variable of the environment variables (--var does all)
+  --cmd X      : for commands on one line, echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
+  --env X      : echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
+  --qcmd X     :   ", quoted
+  --sl X       :   ", string literal output
+
+Example Usage:
+  `basename $0`    : sets all environment variables
+  `basename $0` -e : set and echo all environment variables
+  `basename $0` --var X : set the env variable
+  `basename $0` -e --var X : set and echo the env variable
+
+EOF
+}
+if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fDisplayOptions; exit 0; fi
+
+# Used to select between vh containers
+# --------------------------------------------------------------------- 
+if [ "$1" == "--vh-label" ]; then echo "0.1"; exit 0; fi
+
+
+# --------------------------------------------------------------------- 
 WOV_VERSION=0
 WOV_BASEDIR=$(git rev-parse --show-toplevel)
 export WOV_BASEDIR
 SED=`which gsed`
 
-
-# Used to select between vh containers
-if [ "$1" == "--vh-label" ]; then
-  echo "0.1"
-  exit 0
-fi
 
 if [ "$WOV_BASEDIR" == "" ]; then
   echo "ERROR: not in wovtools project (no git)."
@@ -24,54 +78,12 @@ elif [ ! -e "${WOV_BASEDIR}/wovtools/config.json" ]; then
   exit 1
 fi
 
-STAGEMOD=
-STAGEMODSPACE=
-if [ "${WOV_stagemod}" != "" ]; then
-  STAGEMODSPACE="-"
-  STAGEMOD="${WOV_stagemod}"
-fi
+
 
 WOV_SECRETFILE=${WOV_BASEDIR}/wovtools/cache/secrets/current.json
 export WOV_SECRETFILE
 
 
-# TODO: optimize so that only certain variables are grabbed, as they are asked for
-
-function fDisplayOptions()
-{
-  cat <<EOF | fold -w ${FOLD} -s
-
-
-usage: `basename $0` [options]
-
-  Export the context as variables for scripts or export specific variables.
-
-  -e           : echo the output
-  --var X      : only operate on this variable X.. only for loaded env vars (not env files)
-  -h/--help    : display these options
-  -v/--version : version of wovtools
-  --vh-label   : vh label in DockerHub repo
-  --mod X      : modifies the stage to use 'conf-X' files (note: WOV_stagemod is used by default)
-  --conf       : print all the configuration as environment variables (one line)
-  --exports    : runs all the configuration as environment variables (no output, sourced)
-  --envs       : print all the configuration as environment variables (sep lines)
-  --env-var X  : print one variable of the environment variables
-  --env X      : echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
-  --export X   : export the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
-  --cmd X      : for commands on one line, echo the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
-  --qcmd X     :   ", quoted
-  --sl X       :   ", string literal output
-  --rcAWS      : convert a region code to an AWS code (ex. va-> us-east-1)
-  -c           : run cluster config as well
-
-Example Usage:
-  `basename $0`    : sets all environment variables
-  `basename $0` -e : set and echo all environment variables
-  `basename $0` --var X : set the env variable
-  `basename $0` -e --var X : set and echo the env variable
-
-EOF
-}
 
 
 
@@ -266,25 +278,59 @@ function fDoCluster()
 }
 
 
-function doLoadConf()
+function doPrintVarX()
 {
-  CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/ && ls *.ck8s *.sk8s 2> /dev/null) )
-
-  for c in "${CONFS[@]}"; do
-    doCmd $c
-  done
+  if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
+  echo `doPrintVarsENVS | grep $1 | cut -f2 -d"="`
 }
-function doLoadEnv()
+
+function doPrintVarsENVS()
 {
-  CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/ && ls *.ck8s *.sk8s 2> /dev/null) )
+  if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
 
-  for c in "${CONFS[@]}"; do
-    doEnv $c
-  done
+  cat ${WOV_SECRETFILE} |
+    jq  -r 'walk( if type == "object" then with_entries(select( .key | test("STAGE*") or test("//*") | not)) else . end) | [leaf_paths as $path | {"key": $path | join("_"), "value": getpath($path)}] | from_entries | keys[] as $k | "WOV_\($k)=" + @sh "\(.[$k])" '
+
+  HAS_BUILDENV=1
 }
+
+function doPrintVarsCONF()
+{
+  doPrintVarsENVS | tr '\n' ' '
+  HAS_BUILDENV=1
+}
+
+function doPrintVarsEXPORTS()
+{
+  if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
+
+  cat ${WOV_SECRETFILE} |
+    jq  -r 'walk( if type == "object" then with_entries(select( .key | test("STAGE*") or test("//*") | not)) else . end) | [leaf_paths as $path | {"key": $path | join("_"), "value": getpath($path)}] | from_entries | keys[] as $k | "export WOV_\($k)=" + @sh "\(.[$k])" '
+
+  HAS_BUILDENV=1
+}
+
+
+
+#function doLoadConf()
+#{
+#  CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf/ && ls *.ck8s *.sk8s 2> /dev/null) )
+#
+#  for c in "${CONFS[@]}"; do
+#    doCmd $c
+#  done
+#}
+#function doLoadEnv()
+#{
+#  CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf/ && ls *.ck8s *.sk8s 2> /dev/null) )
+#
+#  for c in "${CONFS[@]}"; do
+#    doEnv $c
+#  done
+#}
 function doLoadExports()
 {
-  CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/ && ls *.ck8s *.sk8s 2> /dev/null) )
+  CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf/ && ls *.ck8s *.sk8s 2> /dev/null) )
 
   for c in "${CONFS[@]}"; do
     doExport $c
@@ -292,63 +338,63 @@ function doLoadExports()
 }
 
 
-function doEnv() 
-{
-  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
-    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | ${SED} -e 's/#.*$//' -e '/^\s*$/d'
-  else
-    echo
-    echo "ERROR: no environment file ${1} in cache."
-    echo
-    exit 1
-  fi
-}
-function doExport() 
-{
-  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
-    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | ${SED} -e 's/#.*$//' | ${SED} -e '/^\s*$/d' | ${SED}  's/^/export &/'
-  else
-    echo
-    echo "ERROR: no environment file ${1} in cache."
-    echo
-    exit 1
-  fi
-}
-function doQCmd() 
-{
-  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
-    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | ${SED} -e 's/#.*$//' -e '/^\s*$/d' -e 's/^/'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
-  else
-    echo
-    echo "ERROR: no environment file ${1} in cache."
-    echo
-    exit 1
-  fi
-}
-
-function doCmd() 
-{
-  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
-    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | ${SED} -e 's/#.*$//' -e '/^\s*$/d' | tr '\n' ' '
-  else
-    echo
-    echo "ERROR: no environment file ${1} in cache."
-    echo
-    exit 1
-  fi
-}
-
-function doStringLiteral() 
-{
-  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} ]; then
-    cat ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/${1} | ${SED} -e 's/#.*$//' -e '/^$/d' -e 's/^/\$'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
-  else
-    echo
-    echo "ERROR: no environment file ${1} in cache."
-    echo
-    exit 1
-  fi
-}
+#function doEnv() 
+#{
+#  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf/${1} ]; then
+#    cat ${WOV_BASEDIR}/wovtools/cache/conf/${1} | ${SED} -e 's/#.*$//' -e '/^\s*$/d'
+#  else
+#    echo
+#    echo "ERROR: no environment file ${1} in cache."
+#    echo
+#    exit 1
+#  fi
+#}
+#function doExport() 
+#{
+#  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf/${1} ]; then
+#    cat ${WOV_BASEDIR}/wovtools/cache/conf/${1} | ${SED} -e 's/#.*$//' | ${SED} -e '/^\s*$/d' | ${SED}  's/^/export &/'
+#  else
+#    echo
+#    echo "ERROR: no environment file ${1} in cache."
+#    echo
+#    exit 1
+#  fi
+#}
+#function doQCmd() 
+#{
+#  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf/${1} ]; then
+#    cat ${WOV_BASEDIR}/wovtools/cache/conf/${1} | ${SED} -e 's/#.*$//' -e '/^\s*$/d' -e 's/^/'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
+#  else
+#    echo
+#    echo "ERROR: no environment file ${1} in cache."
+#    echo
+#    exit 1
+#  fi
+#}
+#
+#function doCmd() 
+#{
+#  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf/${1} ]; then
+#    cat ${WOV_BASEDIR}/wovtools/cache/conf/${1} | ${SED} -e 's/#.*$//' -e '/^\s*$/d' | tr '\n' ' '
+#  else
+#    echo
+#    echo "ERROR: no environment file ${1} in cache."
+#    echo
+#    exit 1
+#  fi
+#}
+#
+#function doStringLiteral() 
+#{
+#  if [ -e ${WOV_BASEDIR}/wovtools/cache/conf/${1} ]; then
+#    cat ${WOV_BASEDIR}/wovtools/cache/conf/${1} | ${SED} -e 's/#.*$//' -e '/^$/d' -e 's/^/\$'"'"'/g' -e 's/$/'"'"'/g' | tr '\n' ' '
+#  else
+#    echo
+#    echo "ERROR: no environment file ${1} in cache."
+#    echo
+#    exit 1
+#  fi
+#}
 
 # ---------------------------------------------------------------------
 function fConvertRegionCodeAWS()
@@ -412,35 +458,40 @@ while [[ $1 =~ ^- ]]; do
     fDoCluster
 
   elif [ "$1" == "--conf" ]; then
-    doLoadConf
+#    doLoadConf
+    doPrintVarsCONF
 
   elif [ "$1" == "--envs" ]; then
-    doLoadEnv
+#    doLoadEnv
+    doPrintVarsENVS
 
 
     # print one var
   elif [ "$1" == "--env-var" ]; then
     shift
-    command grep -h ${1} ${WOV_BASEDIR}/wovtools/cache/conf${STAGEMODSPACE}${STAGEMOD}/*k8s | ${SED} -e 's/^.*[=]//' -e 's/^"//' -e 's/"$//'
+    command grep -h ${1} ${WOV_BASEDIR}/wovtools/cache/conf/*k8s | ${SED} -e 's/^.*[=]//' -e 's/^"//' -e 's/"$//'
 
   elif [ "$1" == "--exports" ]; then
-    doLoadExports
+#    doLoadExports
+    doPrintVarsEXPORTS
 
-  elif [ "$1" == "--env" ]; then
-    shift
-    doEnv $1
 
-  elif [ "$1" == "--cmd" ]; then
-    shift
-    doCmd $1
 
-  elif [ "$1" == "--qcmd" ]; then
-    shift
-    doQCmd $1
+#  elif [ "$1" == "--env" ]; then
+#    shift
+#    doEnv $1
 
-  elif [ "$1" == "--sl" ]; then
-    shift
-    doStringLiteral $1
+#  elif [ "$1" == "--cmd" ]; then
+#    shift
+#    doCmd $1
+
+#  elif [ "$1" == "--qcmd" ]; then
+#    shift
+#    doQCmd $1
+
+#  elif [ "$1" == "--sl" ]; then
+#    shift
+#    doStringLiteral $1
 
 #  elif [ "$1" == "--devmode" ]; then
 #    shift
@@ -460,18 +511,13 @@ while [[ $1 =~ ^- ]]; do
     echo "$cRC"
     shift
 
-  elif [ "$1" == "--mod" ]; then
-    shift
-    # sets the modifier and resets secrets and buildenv settings
-    STAGEMODSPACE="-"
-    STAGEMOD="$1"
-
   elif [ "$1" == '--var' ]; then
     shift 
+    V=$(doPrintVarX $1)
     if [ "$ECHOMODE" == "1" ]; then
-      echo "$1=${!1}"
+      echo "$1=${V}"
     else
-      echo ${!1}
+      echo ${V}
     fi
     DOALL=0
   elif [ "$1" == '-v' ] || [ "$1" == '--version' ]; then
