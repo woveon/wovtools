@@ -1,0 +1,36 @@
+#!/usr/bin/env node
+
+// This file performs stage-select for the wov-env command. jq was unable to do the correct 'walk' function, so I wrote this.
+
+let doStageSelect = (needle, haystack, found = []) => {
+
+  //iterate through each property key in the object
+  Object.keys(haystack).forEach((key) => {
+    // console.log('check key: ', key);
+    // dump items in child, here
+    if(key.startsWith(needle)){
+      // console.log('  match key: ', key);
+      Object.assign(haystack, haystack[key]);
+      found.push(haystack[key]);
+    }
+  });
+
+  // second pass, go into objects, including just added (but not matched)
+  Object.keys(haystack).forEach((key) => {
+    if(typeof haystack[key] === 'object' && (!key.startsWith(needle)) && haystack[key] != null ){
+      // console.log('enter object at key: ', key);
+      doStageSelect(needle, haystack[key], found);
+    }
+  });
+
+  //return the list of found values to the caller of the function
+  return found;
+};
+
+// console.log('argv: ', process.argv[2]);
+//console.log('argv: ', process.argv[3]);
+let data = require('fs').readFileSync(process.argv[2]);
+let needle= process.argv[3];
+let d = JSON.parse(data);
+doStageSelect(needle, d); 
+console.log(JSON.stringify(d, null, '  '));

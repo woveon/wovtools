@@ -164,7 +164,8 @@ EOF
 
   # STEP 2: STAGE Select
   # - concat child attributes into parent that are prefixed by STAGEx, where x is your stage
-  jq '. * walk( if type == "object" and has("STAGE'"${WOV_STAGE}"'") then .|=.STAGE'"${WOV_STAGE}"' else . end) ' ${SECRETFILE} >> ${SECRETFILE}.1
+  cat ${SECRETFILE}
+  wov_stage-select ${SECRETFILE} STAGE${WOV_STAGE} > ${SECRETFILE}.1
   mv ${SECRETFILE}.1  ${SECRETFILE}
 
   # Is secret different from last run?

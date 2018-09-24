@@ -19,8 +19,8 @@ Redoing how the json is manages and configuration is managed with wovtools. Too 
 
 2. STAGE select - Select between configuration options, specific to a particular stage of development. Completely collapses down
   - NOTE: retain stages, so commands like database and such still have access to old commands, but don't make variables out of them
-  - `{plugin.plem: {"STAGE:cw: {dburl : "plemdb-cw-mongo"}}}` -> `{plugin.plem : {dburl : "plemdb-cw-mongo", STAGE: {cw: {dburl : "plemdb-cw-mongo"}}}}`
-  - this would make env var : `export WOV__plugin__db_url=plemdb-cw-mongo`
+  - `{plugin.plem: {"STAGEcw: {dburl : "plemdb-cw-mongo"}}}` -> `{plugin.plem : {dburl : "plemdb-cw-mongo", STAGE: {cw: {dburl : "plemdb-cw-mongo"}}}}`
+  - this would make env var : `export WOV_plugin_dburl=plemdb-cw-mongo`
 
 
 3. specialization/instance - a known concept to the code (ex. "plugin", "microservice", "ms") is specialized to be an instance.
@@ -31,7 +31,7 @@ Redoing how the json is manages and configuration is managed with wovtools. Too 
 ## Transform to Env Vars
 
 - start "WOV"
-- dots -> `__`
+- dots -> `_`
 - STAGE - trim
 - dot in key, should not have -> error
 
