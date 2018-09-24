@@ -164,7 +164,7 @@ EOF
 
   # STEP 2: STAGE Select
   # - concat child attributes into parent that are prefixed by STAGEx, where x is your stage
-  cat ${SECRETFILE}
+  # cat ${SECRETFILE}
   wov_stage-select ${SECRETFILE} STAGE${WOV_STAGE} > ${SECRETFILE}.1
   mv ${SECRETFILE}.1  ${SECRETFILE}
 
