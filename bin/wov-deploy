@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 
-
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
@@ -21,28 +20,15 @@ DORETAIN=0
 FOLD=$(tput cols)
 DRYRUN=0
 CONFONLY=0
+DEPLOYTYPE=
 
 K8SFILES=
+DEPLOYDIR=
 
 # Cache the current values
 WOV_CUR_PVER=${WOV_PVER}
 WOV_CUR_SVER=${WOV_SVER}
 
-
-# --------------------------------------------------------------------- 
-# test if string in array : 1 is yes, 0 is no
-#  ex. 
-# arr=( "A" "B" "a" "b" )
-# containsElement "a" "${arr[@]}"  # $? is 1
-# containsElement "c" "${arr[@]}"  # $? is 0
-# --------------------------------------------------------------------- 
-function containsElement () 
-{
-  local e match="$1"
-  shift
-  for e; do [[ "$e" == "$match" ]] && return 1; done
-  return 0
-}
 
 
 # --------------------------------------------------------------------- 
@@ -64,6 +50,60 @@ function doAddLabels()
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
 function doDeployConf()
+{
+  # Create ConfigMap PLUGIN
+  # --------------------------------------------------------------------- 
+  CMFILE=${DEPLOYDIR}/secrets/.cm
+  touch ${CMFILE}
+  chmod 600 ${CMFILE}
+  make gen_ck8s > ${CMFILE}
+  local f=$(wov-env --var WOV_PROJECT)
+
+  DATA=()
+  while read l; do
+    #echo ":$l"
+    d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
+    if [ "$d" != "" ]; then DATA+=("$d"); fi
+  done <${CMFILE}
+
+  kubectl delete configmap ${f} #2> /dev/null
+  kubectl create configmap ${f} "${DATA[@]}"
+  if [ "$?" != "0" ]; then
+    printf "\nERROR: failed creating ConfigMap $f from '${CMFILE}'.\n"
+    exit 1
+  fi
+  rm -f ${CMFILE}
+
+  # Create Secret PLUGIN
+  # --------------------------------------------------------------------- 
+  SEFILE=${DEPLOYDIR}/secrets/.se
+  touch ${SEFILE}
+  chmod 600 ${SEFILE}
+  make gen_sk8s > ${SEFILE}
+  local f=$(wov-env --var WOV_PROJECT)
+
+  DATA=()
+  while read l; do
+    #echo ":$l"
+    d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
+    if [ "$d" != "" ]; then DATA+=("$d"); fi
+  done <${SEFILE}
+
+  kubectl delete secret ${f} #2> /dev/null
+  kubectl create secret generic ${f} "${DATA[@]}"
+  kubectl label  secret ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+  if [ "$?" != "0" ]; then
+    printf "\nERROR: failed creating Secret $f from '${SEFILE}'.\n"
+    exit 1
+  fi
+  rm -f ${SEFILE}
+}
+
+# --------------------------------------------------------------------- 
+# NOTE: this function read in conf/* files to generate ConfigMaps and 
+#       Secrets, but those files no longer exist.
+# --------------------------------------------------------------------- 
+function doDeployConf_old()
 {
   # --------------------------------------------------------------------- 
   # Deploy the conf ConfigMap files
@@ -170,13 +210,21 @@ Deploys a running kubernetes project from an archive.
 
 files : all by default, or type them here and do individual only
 
+ Deploy Types (one required):
+  --deploy-dev   : Push current development environment to cluster. 
+  --deploy-stage : Proper call to roll a version to a stage in the cluster
+
+ Deploy Options:
   --pver|--sver X : sets the Project and Secret version for roll-backs
-  -r|--retain : retains the deployment values locally (potential security risk)
-  --dry-run : pull files but don't deploy
-  --conf-only : Only push configuration files (ConfigMaps and Secrets)
   -f : force push
+
+ Utility:
+  --conf-only : Only push configuration files (ConfigMaps and Secrets)
+  --dry-run : pull files but don't deploy
+  -r|--retain : retains the deployment values locally (potential security risk)
   -h : this help
   -q/-v : quiet/verbose
+
 
 EOF
 }
@@ -200,6 +248,103 @@ if [ "${WOV_STAGE}" == "prod" ]; then
     exit 1
   fi
 fi
+
+
+# ---------------------------------------------------------------------
+# Push current development environment to cluster. 
+# ---------------------------------------------------------------------
+function doDeployDev()
+{
+  if [ ${WOV_STAGE} == 'prod' ]; then
+    printf "\n\n\nERROR: deploying straight into production is not allowed. Do a 'wov-push' and then a 'wov-deploy --deploy-stage'.\n\n"
+    exit 1
+  fi
+
+  DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache/
+  printf " pver : ${WOV_PVER}   sver: ${WOV_SVER}: DEV DEPLOY\n"
+
+  if [ "${CONFONLY}" == "1" ]; then
+    doDeployConf
+  else
+    k8ses=( $* )
+    doAddLabels
+    doDeployConf
+    doDeployK8s $k8ses
+    # doCleanUp // no cleanup in devdeploy
+  fi
+
+}
+
+
+# ---------------------------------------------------------------------
+# Proper roll to stage call
+# ---------------------------------------------------------------------
+function doDeployStage()
+{
+  # Little more feedback
+  if [ "${WOV_CUR_PVER}" != "${WOV_PVER}" ] || [ "${WOV_CUR_SVER}" != "${WOV_SVER}" ]; then
+    printf " deploying version: ${WOV_STAGE}_${WOV_PVER}_${WOV_SVER}\n"
+  fi
+  printf "\n"
+
+  # printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
+
+
+  # If deploying the latest PVER, check that all code is pushed to archive
+  if [ "${WOV_CUR_PVER}" == "${WOV_PVER}" ]; then
+    wov-git-check ${WOV_BASEDIR}
+    R1=$?
+    wov-git-check ${WOV_BASEDIR}/wovtools/secrets
+    R2=$?
+    if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
+  fi
+  #printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
+
+  # If deploying the latest SVER, check that all env is pushed to archive
+  if [ "${WOV_CUR_SVER}" == "${WOV_SVER}" ]; then
+    #  deployenvargs=( "$@" )
+    #  set ""
+    #  . wov-push-env -q
+    #  set -- "${deployenvargs[@]}"
+    wov-push-env -q
+  fi
+
+  # printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
+
+  ARCHBASE=${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}
+
+  printf "  ... ARCHBASE : ${ARCHBASE}"
+
+  # --------------------------------------------------------------------- 
+  # Make directory to put files
+  DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache/.deployments/${WOV_PVER}_${WOV_STAGE}_${WOV_SVER}.$$
+  mkdir -p ${DEPLOYDIR}/conf
+  mkdir -p ${DEPLOYDIR}/k8s
+  chmod -R 700 ${DEPLOYDIR}
+
+
+  # printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
+
+  # --------------------------------------------------------------------- 
+  # Pull env files
+  aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/conf ${DEPLOYDIR}/conf  --delete
+  aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s ${DEPLOYDIR}/k8s  --delete
+
+  # printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
+
+  if [ "${DRYRUN}" == "0" ]; then 
+    if [ "${CONFONLY}" == "1" ]; then
+      doDeployConf
+    else
+      k8ses=( $* )
+      doAddLabels
+      doDeployConf
+      doDeployK8s $k8ses
+      doCleanUp
+    fi
+  fi
+
+}
 
 
 # ---------------------------------------------------------------------
@@ -231,6 +376,15 @@ while [[ $1 =~ ^- ]]; do
     shift
     CONFONLY=1
 
+
+  elif [ "$1" == "--deploy-dev" ]; then
+    shift
+    DEPLOYTYPE=dev
+
+  elif [ "$1" == "--deploy-stage" ]; then
+    shift
+    DEPLOYTYPE=stage
+
   elif [ "$1" == "--pver" ]; then
     shift
     WOV_PVER="$1"
@@ -255,66 +409,18 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
-# Little more feedback
-if [ "${WOV_CUR_PVER}" != "${WOV_PVER}" ] || [ "${WOV_CUR_SVER}" != "${WOV_SVER}" ]; then
-  printf " deploying version: ${WOV_STAGE}_${WOV_PVER}_${WOV_SVER}\n"
-fi
-printf "\n"
+if [ "${DEPLOYTYPE}" == "" ]; then
+  echo ""
+  echo "***ERROR deploy needs to specify incremental or full"
+  echo "  --deploy-dev  : just deploy current dev environment (non-production)"
+  echo "  --deploy-full : deploy versioned system"
+  echo ""
 
-# printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
+elif [ "${DEPLOYTYPE}" == "dev" ]; then
+  doDeployDev $*
 
+elif [ "${DEPLOYTYPE}" == "stage" ]; then
+  doDeployStage $*
 
-# If deploying the latest PVER, check that all code is pushed to archive
-if [ "${WOV_CUR_PVER}" == "${WOV_PVER}" ]; then
-  wov-git-check ${WOV_BASEDIR}
-  R1=$?
-  wov-git-check ${WOV_BASEDIR}/wovtools/secrets
-  R2=$?
-  if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
-fi
-#printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
-
-# If deploying the latest SVER, check that all env is pushed to archive
-if [ "${WOV_CUR_SVER}" == "${WOV_SVER}" ]; then
-#  deployenvargs=( "$@" )
-#  set ""
-#  . wov-push-env -q
-#  set -- "${deployenvargs[@]}"
-  wov-push-env -q
-fi
-
-# printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
-
-ARCHBASE=${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}
-
-printf "  ... ARCHBASE : ${ARCHBASE}"
-
-# --------------------------------------------------------------------- 
-# Make directory to put files
-DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache/.deployments/${WOV_PVER}_${WOV_STAGE}_${WOV_SVER}.$$
-mkdir -p ${DEPLOYDIR}/conf
-mkdir -p ${DEPLOYDIR}/k8s
-chmod -R 700 ${DEPLOYDIR}
-
-
-# printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
-
-# --------------------------------------------------------------------- 
-# Pull env files
-aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/conf ${DEPLOYDIR}/conf  --delete
-aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s ${DEPLOYDIR}/k8s  --delete
-
-# printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
-
-if [ "${DRYRUN}" == "0" ]; then 
-  if [ "${CONFONLY}" == "1" ]; then
-    doDeployConf
-  else
-    k8ses=( $* )
-    doAddLabels
-    doDeployConf
-    doDeployK8s $k8ses
-    doCleanUp
-  fi
 fi
 

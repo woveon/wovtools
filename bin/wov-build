@@ -230,8 +230,8 @@ function fBuildEnv()
 
 
   # build conf (and if stagemod, do that as well)
-  fCleanCacheConf
-  fBuildEnvDir conf conf ${SECRETFILE}
+  #fCleanCacheConf
+  #fBuildEnvDir conf conf ${SECRETFILE}
 
   # build k8s (no stagemod (will I regret this?... dunno))
   fCleanK8SConf

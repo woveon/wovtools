@@ -35,7 +35,7 @@ Command Options:
   --envs       : print all the configuration as environment variables (sep lines)
   --conf       : print all the configuration as environment variables (one line)
   --exports    : runs all the configuration as environment variables (no output, sourced)
-  --var X      : only operate on this variable X.. only for loaded env vars (not env files)
+  --var X      : print this variable X
 
 XXX deprecated
   --export X   : export the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
@@ -280,8 +280,12 @@ function fDoCluster()
 
 function doPrintVarX()
 {
-  if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
-  echo `doPrintVarsENVS | grep $1 | cut -f2 -d"="`
+  #if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
+  R=`doPrintVarsENVS | grep "$1=" | cut -f2 -d"=" | ${SED} -e "s/^'//" -e "s/'$//"`
+  if [ "$R" == "" ]; then
+    R=${!1}
+  fi
+  echo $R
 }
 
 function doPrintVarsENVS()
