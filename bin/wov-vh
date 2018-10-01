@@ -73,7 +73,8 @@ function doStart()
 
   # Wait a sec to make sure it is ready
   sleep 1
-  CF=$(doConfig)
+#  CF=$(doConfig)
+  CV=$(doConfigVol)
   echo "  ... creating a microservice development pod (vh) in ${WOV_NS}."
   cat <<EOF > ${WOV_BASEDIR}/wovtools/cache/.deployments/vh.$$.yaml
 apiVersion: v1
@@ -101,12 +102,17 @@ spec:
     volumeMounts:
     - mountPath: /usr/src/app
       name: vh-vol-${WOV_PROJECT}-${WOV_STAGE}
-${CF}
+    - mountPath: /etc/k8s-config
+      name: configmap-volume
+    - mountPath: /etc/k8s-secret
+      name: secret-volume
+# CF was here
   volumes:
   - name: vh-vol-${WOV_PROJECT}-${WOV_STAGE}
     awsElasticBlockStore:
       volumeID: ${volid}
       fsType: ext4
+${CV}
 EOF
 
   kubectl apply -f ${WOV_BASEDIR}/wovtools/cache/.deployments/vh.$$.yaml
@@ -152,11 +158,40 @@ EOF
 
 
 # ---------------------------------------------------------------------
-# Use patch to add the secrets
+# Add configmap and secret.
+# ---------------------------------------------------------------------
+function doConfig() {
+  local CF=""
+  printf -v CF   "    envFrom:\n"
+  printf -v CF "%s    - configMapRef:\n" "$CF"
+  printf -v CF "%s        name: ${WOV_PROJECT}\n" "$CF"
+  printf -v CF "%s    - secretRef:\n" "$CF"
+  printf -v CF "%s        name: ${WOV_PROJECT}\n" "$CF"
+  printf "$CF"
+}
+
+
+# ---------------------------------------------------------------------
+# Mount the configmap and secrets instead of attaching to Pod so they
+# can load immediately, instead of requiring a redeploy of the Pod.
+# ---------------------------------------------------------------------
+function doConfigVol() {
+  local CV=""
+  printf -v CV   "  - name: configmap-volume\n"
+  printf -v CV "%s    configMap:\n" "$CV"
+  printf -v CV "%s      name: ${WOV_PROJECT}\n" "$CV"
+  printf -v CV "%s  - name: secret-volume\n" "$CV"
+  printf -v CV "%s    secret:\n" "$CV"
+  printf -v CV "%s      secretName: ${WOV_PROJECT}\n" "$CV"
+  printf "$CV"
+}
+
+# ---------------------------------------------------------------------
+# Used to use conf files
 #  NOTE: previously attached all configmaps and secrets, but now, 
 #        only those in the deployment
 # ---------------------------------------------------------------------
-function doConfig()
+function doConfig_old()
 {
 #  echo "for now, echo it"
 

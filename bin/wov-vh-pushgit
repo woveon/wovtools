@@ -158,8 +158,9 @@ for gd in ${GITDIRS[@]}; do
   fi
 
   if [[ $CONTINUE == 1 ]]; then
-    printf "  ... tag archive with git revision number : `git rev-parse HEAD` "
-    git rev-parse HEAD > .gitrev.$$
+    printf "  ... tag archive with git branch/revision number : `git rev-parse HEAD` "
+    git rev-parse --abbrev-ref HEAD > .gitrev.$$
+    git rev-parse HEAD >> .gitrev.$$
     kubectl cp .gitrev.$$ vh:${G}/gitrev
     rm .gitrev.$$
   fi

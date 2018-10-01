@@ -1,6 +1,7 @@
 # A base image to develop on in the test namespace
 #FROM ubuntu:16.04
-FROM ubuntu:17.10
+#FROM ubuntu:17.10
+FROM ubuntu:bionic
 
 # --------------------------------------------------------------------- 
 # Package installs 
@@ -11,15 +12,18 @@ RUN apt-get -q update
 WORKDIR /usr/src/app
 
 # Some dev tools
-RUN apt-get -y install vim wget curl bash net-tools git iputils-ping dnsutils make ufw 
+RUN apt-get -y install vim wget curl bash net-tools git iputils-ping dnsutils make ufw gnupg 
 
 # Install NodeJS (after install curl above)
-RUN curl -sL https://deb.nodesource.com/setup_9.x | bash -
+RUN curl -sL https://deb.nodesource.com/setup_10.x | bash -
 RUN apt-get install -y nodejs
 ENV NODE_PATH /usr/lib/node_modules
 RUN npm install -g mocha bcryptjs nodemon
 RUN npm install -g npm
 
+
+# Because Mongo needs tzdata and it creates an interactive issue
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata
 
 # Install Mongo client v3.6
 # FROM HERE: https://docs.mongodb.com/manual/tutorial/install-mongodb-on-ubuntu/
@@ -47,9 +51,14 @@ RUN vim +PluginInstall +qall
 #RUN script -c bash "vim +PluginInstall +qall"
 
 #Other files
-COPY bash_profile /root/.bash_profile
+COPY bashrcext /root/.bashrcext
+RUN  cat /root/.bashrcext >> /root/.bashrc
+RUN  rm /root/.bashrcext
 COPY inputrc /root/.inputrc
 
 # Add github 
 RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
 RUN chmod 600 /root/.ssh/known_hosts
+
+# Add to /usr/local/bin
+COPY localbin /usr/local/bin
