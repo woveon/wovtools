@@ -1,0 +1,7 @@
+#alias ngrep="grep --exclude-dir node_modules --exclude-dir '_old*' --exclude-dir '.*' *"
+
+#export WOV_LOGGER_ASPECTS='listener listener.incoming listener.route listener.result'
+
+# anything needed to run on login 
+# ex. ConfigMaps mapped to a volume: readdirfilestoenv /etc/k8s-config
+. /usr/src/app/bin/.wovtoolsloginrc

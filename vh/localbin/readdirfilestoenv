@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+function ReadDirFilesToEnv()
+{
+  local thedir="$1"
+  local FILES=( $(ls ${thedir}) )
+
+  for F in "${FILES[@]}"; do
+#    echo ${F}
+    export ${F}="$(cat ${thedir}/${F})"
+  done
+}
+
+ReadDirFilesToEnv $1

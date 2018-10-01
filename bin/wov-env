@@ -59,7 +59,6 @@ if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fDisplayOptions; exit 0; fi
 # --------------------------------------------------------------------- 
 if [ "$1" == "--vh-label" ]; then echo "0.1"; exit 0; fi
 
-
 # --------------------------------------------------------------------- 
 WOV_VERSION=0
 WOV_BASEDIR=$(git rev-parse --show-toplevel)
@@ -280,7 +279,7 @@ function fDoCluster()
 
 function doPrintVarX()
 {
-  #if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
+  if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
   R=`doPrintVarsENVS | grep "$1=" | cut -f2 -d"=" | ${SED} -e "s/^'//" -e "s/'$//"`
   if [ "$R" == "" ]; then
     R=${!1}
@@ -293,7 +292,7 @@ function doPrintVarsENVS()
   if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
 
   cat ${WOV_SECRETFILE} |
-    jq  -r 'walk( if type == "object" then with_entries(select( .key | test("STAGE*") or test("//*") | not)) else . end) | [leaf_paths as $path | {"key": $path | join("_"), "value": getpath($path)}] | from_entries | keys[] as $k | "WOV_\($k)=" + @sh "\(.[$k])" '
+    jq  -r 'walk( if type == "object" then with_entries(select( .key | test("STAGE.+") or test("//*") | not)) else . end) | [leaf_paths as $path | {"key": $path | join("_"), "value": getpath($path)}] | from_entries | keys[] as $k | "WOV_\($k)=" + @sh "\(.[$k])" '
 
   HAS_BUILDENV=1
 }
@@ -309,7 +308,7 @@ function doPrintVarsEXPORTS()
   if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
 
   cat ${WOV_SECRETFILE} |
-    jq  -r 'walk( if type == "object" then with_entries(select( .key | test("STAGE*") or test("//*") | not)) else . end) | [leaf_paths as $path | {"key": $path | join("_"), "value": getpath($path)}] | from_entries | keys[] as $k | "export WOV_\($k)=" + @sh "\(.[$k])" '
+    jq  -r 'walk( if type == "object" then with_entries(select( .key | test("STAGE.+") or test("//*") | not)) else . end) | [leaf_paths as $path | {"key": $path | join("_"), "value": getpath($path)}] | from_entries | keys[] as $k | "export WOV_\($k)=" + @sh "\(.[$k])" '
 
   HAS_BUILDENV=1
 }

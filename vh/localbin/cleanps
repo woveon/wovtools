@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+
+# --------------------------------------------------------------------- 
+# This script deletes all processes except what keeps the pod running. 
+# This is important since there is no launchd for containers.
+# 
+#  Skipped procs are:
+#  - the first 2 (sleep procs),
+#  - parent process (i.e. bash)
+#  - self
+# --------------------------------------------------------------------- 
+
+ps -ef
+PROC=( $(ps -ef | awk '{print $2}' | tail -n +4) )
+
+#echo "${PROC[*]}"
+#echo "self $$"
+#echo "parent $PPID"
+
+for ps in ${PROC[*]}; do
+  if [[ "$ps" == "$$" ]]; then
+    echo " - $$ skipping self pid"
+  elif [[ "$ps" == "$PPID" ]]; then
+    echo " - $PPID skipping self bash shell (PPID)"
+  else
+#    echo " - checking $ps"
+    kill -0 $ps 2> /dev/null
+    if [[ "$?" == "0" ]]; then
+      echo " - $ps killing"
+      kill $ps
+    else
+      echo " - $ps skipping no longer running"
+    fi
+  fi
+done

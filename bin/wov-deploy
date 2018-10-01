@@ -56,16 +56,18 @@ function doDeployConf()
   CMFILE=${DEPLOYDIR}/secrets/.cm
   touch ${CMFILE}
   chmod 600 ${CMFILE}
-  make gen_ck8s > ${CMFILE}
+  USESWOVTOOLS=1 make gen_ck8s > ${CMFILE}
   local f=$(wov-env --var WOV_PROJECT)
 
   DATA=()
+  #DATA+=("--from-literal=WOV_STAGE=${WOV_STAGE}")
   while read l; do
     #echo ":$l"
     d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
     if [ "$d" != "" ]; then DATA+=("$d"); fi
   done <${CMFILE}
 
+  # echo "DATA: ${DATA[@]}"
   kubectl delete configmap ${f} #2> /dev/null
   kubectl create configmap ${f} "${DATA[@]}"
   if [ "$?" != "0" ]; then
@@ -79,7 +81,7 @@ function doDeployConf()
   SEFILE=${DEPLOYDIR}/secrets/.se
   touch ${SEFILE}
   chmod 600 ${SEFILE}
-  make gen_sk8s > ${SEFILE}
+  USESWOVTOOLS=1 make gen_sk8s > ${SEFILE}
   local f=$(wov-env --var WOV_PROJECT)
 
   DATA=()
