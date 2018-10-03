@@ -213,8 +213,8 @@ Deploys a running kubernetes project from an archive.
 files : all by default, or type them here and do individual only
 
  Deploy Types (one required):
-  --deploy-dev   : Push current development environment to cluster. 
-  --deploy-stage : Proper call to roll a version to a stage in the cluster
+  --dev   : Push current development environment to cluster. 
+  --stage : Proper call to roll a version to a stage in the cluster
 
  Deploy Options:
   --pver|--sver X : sets the Project and Secret version for roll-backs
@@ -258,7 +258,7 @@ fi
 function doDeployDev()
 {
   if [ ${WOV_STAGE} == 'prod' ]; then
-    printf "\n\n\nERROR: deploying straight into production is not allowed. Do a 'wov-push' and then a 'wov-deploy --deploy-stage'.\n\n"
+    printf "\n\n\nERROR: deploying straight into production is not allowed. Do a 'wov-push' and then a 'wov-deploy --stage'.\n\n"
     exit 1
   fi
 
@@ -379,11 +379,11 @@ while [[ $1 =~ ^- ]]; do
     CONFONLY=1
 
 
-  elif [ "$1" == "--deploy-dev" ]; then
+  elif [ "$1" == "--dev" ]; then
     shift
     DEPLOYTYPE=dev
 
-  elif [ "$1" == "--deploy-stage" ]; then
+  elif [ "$1" == "--stage" ]; then
     shift
     DEPLOYTYPE=stage
 
@@ -414,8 +414,8 @@ done
 if [ "${DEPLOYTYPE}" == "" ]; then
   echo ""
   echo "***ERROR deploy needs to specify incremental or full"
-  echo "  --deploy-dev  : just deploy current dev environment (non-production)"
-  echo "  --deploy-full : deploy versioned system"
+  echo "  --dev   : just deploy current dev environment (non-production)"
+  echo "  --stage : deploy versioned system"
   echo ""
 
 elif [ "${DEPLOYTYPE}" == "dev" ]; then

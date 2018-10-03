@@ -101,6 +101,6 @@ for p in $*; do
       echo "    ... waiting ${WAITTIME}s more for ${podname} to come online"
       sleep ${WAITTIME}
     fi
-    stat=`kubectl describe $NAMESPACE pods $podname | grep "^Status" | awk '{print $2}'`
+    stat=`kubectl describe $NAMESPACE pods $podname 2> /dev/null | grep "^Status" | awk '{print $2}'`
   done
 done

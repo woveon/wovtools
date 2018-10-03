@@ -115,7 +115,20 @@ spec:
 ${CV}
 EOF
 
-  kubectl apply -f ${WOV_BASEDIR}/wovtools/cache/.deployments/vh.$$.yaml
+  RR=$(kubectl get pod vh 2> /dev/null)
+  if [ "$?" == "0" ]; then
+    printf "\nERROR: existing pod 'vh'. Do 'wov-vh --stop' or wait for terminating pod to finish.\n"
+    exit 1
+  fi
+
+  RR=$(kubectl apply -f ${WOV_BASEDIR}/wovtools/cache/.deployments/vh.$$.yaml)
+  if [[ ! $RR =~ created$ ]]; then
+    echo $RR
+    echo "ERROR: did not create, something wrong. Try 'kubectl get pods'."
+    exit 1
+  fi
+
+  # TODO NOTE:  here, need to check for if vh stopped/stopping
 
   echo "  ... wait for running vh"
   wov-pwait -f 5 -w 5 vh
@@ -129,6 +142,12 @@ EOF
   fi
   kubectl cp ${WOV_BASEDIR}/wovtools/secrets/vh_${WOV_NS}_id_rsa     ${WOV_NS}/vh:/root/.ssh/id_rsa
   kubectl cp ${WOV_BASEDIR}/wovtools/secrets/vh_${WOV_NS}_id_rsa.pub ${WOV_NS}/vh:/root/.ssh/id_rsa.pub
+  if [ -e "${WOV_BASEDIR}/wovtools/vh/onbuild.sh" ]; then
+    echo "  ... running 'onbuild.sh' in wovtools/vh"
+    ${WOV_BASEDIR}/wovtools/vh/onbuild.sh
+  else
+    echo "  ... no 'onstart.sh' in wovtools/vh, so skipping"
+  fi
 
 
 cat <<EOF

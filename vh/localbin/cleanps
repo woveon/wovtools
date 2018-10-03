@@ -10,12 +10,14 @@
 #  - self
 # --------------------------------------------------------------------- 
 
+doPass() {
 ps -ef
 PROC=( $(ps -ef | awk '{print $2}' | tail -n +4) )
 
 #echo "${PROC[*]}"
 #echo "self $$"
 #echo "parent $PPID"
+
 
 for ps in ${PROC[*]}; do
   if [[ "$ps" == "$$" ]]; then
@@ -33,3 +35,11 @@ for ps in ${PROC[*]}; do
     fi
   fi
 done
+}
+
+
+printf "\n...Pass 1\n"
+doPass
+printf "...Pass 2\n"
+doPass
+printf "...complete\n"

@@ -37,6 +37,9 @@ RUN apt-get install -y mongodb-org
 # Install postgres v9.6 client (AWS is 9.6.5.. bummer)
 RUN apt-get install -y postgresql-client
 
+# parser
+RUN apt-get install -y jq
+
 # Available for keys to be copied in
 RUN mkdir /root/.ssh
 
