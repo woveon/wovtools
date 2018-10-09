@@ -35,7 +35,9 @@ NOTE: i really need a better name for vh... thinking 'virtual development, but t
 
   -s/--start : start the virtual host
   -S/--stop  : stop the virtual host
-  -l : login (alias for wov-pshell vh)
+  -l ... : login (alias for wov-pshell vh), with following commands run on login
+      ex. wov-vh -l "ls ; cd plem"
+      ex. wov-vh -l wcd we
 
   --config : mount all secrets and configmaps to the vh
 
@@ -315,7 +317,16 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == "-l" ]; then
     shift
-    kubectl exec -it "vh" -- /bin/bash
+    if [ "$#" == 0 ]; then
+      kubectl exec -it "vh" -- /bin/bash
+    else
+      # Generate and send an initfile (which also sources existing init file)
+      echo ". /root/.bashrc" > .initfile.$$
+      echo "$@" >> .initfile.$$
+      kubectl cp .initfile.$$ vh:/tmp/initfile.$$
+      rm .initfile.$$
+      kubectl exec -it "vh" -- /bin/bash --init-file /tmp/initfile.$$
+    fi
     # wov-pshell vh
     DIDCOMMAND=1
 
