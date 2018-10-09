@@ -61,6 +61,8 @@ fi
 DATABASESERVER=$1
 shift
 
+echo $DATABASESERVER
+
 # load env vars
 #eval $(wov-env --env ${DATABASESERVER}.ck8s --env ${DATABASESERVER}.sk8s )
 if [ "${WOV_stagemod}" != "" ]; then
@@ -87,8 +89,8 @@ DB_OP=
 DB_FILE=
 
 # NOTE: using bastion so this overrides cluster settings
-DB_PORT=$(wov-bastion --bhost ${WOV_CLUSTER}-bastion --ldp ${DATABASESERVER})
-DB_HOST=localhost   # bastion
+#DB_PORT=$(wov-bastion --bhost ${WOV_CLUSTER}-bastion --ldp ${DATABASESERVER})
+#DB_HOST=localhost   # bastion
 
 function doDatabaseConnectMessage()
 {
