@@ -48,15 +48,32 @@ function doAddLabels()
 
 
 # --------------------------------------------------------------------- 
+# Reads the files and creates ConfigMap and Secrets
+#  $1 = ConfigMap file
+#  $2 = Secret file
 # --------------------------------------------------------------------- 
 function doDeployConf()
 {
+  CMFILE=$1
+  if [ "$CMFILE" == "" ]; then
+    printf "\nERROR: doDeployConf needs CMFILE defined. Param #1.\n"
+    exit 1
+  fi
+
+  SEFILE=$2
+  if [ "$SEFILE" == "" ]; then
+    printf "\nERROR: doDeployConf needs SEFILE defined. Param #2.\n"
+    exit 1
+  fi
+
   # Create ConfigMap PLUGIN
   # --------------------------------------------------------------------- 
-  CMFILE=${DEPLOYDIR}/secrets/.cm
-  touch ${CMFILE}
-  chmod 600 ${CMFILE}
-  USESWOVTOOLS=1 make gen_ck8s > ${CMFILE}
+  #CMFILE=${DEPLOYDIR}/secrets/.cm
+  #rm -f ${CMFILE} || true
+  #touch ${CMFILE}
+  #chmod 600 ${CMFILE}
+  #wov-env --cm >> ${CMFILE}
+  #USESWOVTOOLS=1 make gen_ck8s > ${CMFILE}
   local f=$(wov-env --var WOV_PROJECT)
 
   DATA=()
@@ -74,15 +91,16 @@ function doDeployConf()
     printf "\nERROR: failed creating ConfigMap $f from '${CMFILE}'.\n"
     exit 1
   fi
-  rm -f ${CMFILE}
+  # rm -f ${CMFILE}
 
   # Create Secret PLUGIN
   # --------------------------------------------------------------------- 
-  SEFILE=${DEPLOYDIR}/secrets/.se
+  #SEFILE=${DEPLOYDIR}/secrets/.se
+  rm -f ${SEFILE} || true
   touch ${SEFILE}
   chmod 600 ${SEFILE}
-  USESWOVTOOLS=1 make gen_sk8s > ${SEFILE}
-  local f=$(wov-env --var WOV_PROJECT)
+  #USESWOVTOOLS=1 make gen_sk8s > ${SEFILE}
+  wov-env --se > ${SEFILE}
 
   DATA=()
   while read l; do
@@ -98,7 +116,7 @@ function doDeployConf()
     printf "\nERROR: failed creating Secret $f from '${SEFILE}'.\n"
     exit 1
   fi
-  rm -f ${SEFILE}
+  # rm -f ${SEFILE}
 }
 
 # --------------------------------------------------------------------- 
@@ -262,18 +280,36 @@ function doDeployDev()
     exit 1
   fi
 
-  DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache/
+  DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache
   printf " pver : ${WOV_PVER}   sver: ${WOV_SVER}: DEV DEPLOY\n"
+  local CMFILE=${DEPLOYDIR}/secrets/.cm
+  local SEFILE=${DEPLOYDIR}/secrets/.se
+
+  # Create CM File to read in
+  rm -f ${CMFILE} || true
+  touch ${CMFILE}
+  chmod 600 ${CMFILE}
+  wov-env --cm >> ${CMFILE}
+
+  # Create SE File to read in
+  rm -f ${SEFILE} || true
+  touch ${SEFILE}
+  chmod 600 ${SEFILE}
+  wov-env --se >> ${SEFILE}
 
   if [ "${CONFONLY}" == "1" ]; then
-    doDeployConf
+    doDeployConf "${CMFILE}" "${SEFILE}"
   else
     k8ses=( $* )
     doAddLabels
-    doDeployConf
+    doDeployConf "${CMFILE}" "${SEFILE}"
     doDeployK8s $k8ses
     # doCleanUp // no cleanup in devdeploy
   fi
+
+  # remove these
+  rm -f ${CMFILE} || true
+  rm -f ${SEFILE} || true
 
 }
 
@@ -333,14 +369,25 @@ function doDeployStage()
   aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s ${DEPLOYDIR}/k8s  --delete
 
   # printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
+  local CMFILE=${DEPLOYDIR}/conf/cm
+  local SEFILE=${DEPLOYDIR}/conf/se
+
+  if [ ! -f "$CMFILE" ]; then 
+    printf "\nERROR: K8s ConfigMap file does not exist at : '${CMFILE}'.\n"
+    exit 1
+  fi
+  if [ ! -f "$SEFILE" ]; then 
+    printf "\nERROR: K8s Secret file does not exist at : '${SEFILE}'.\n"
+    exit 1
+  fi
 
   if [ "${DRYRUN}" == "0" ]; then 
     if [ "${CONFONLY}" == "1" ]; then
-      doDeployConf
+      doDeployConf "${CMFILE}" "${SEFILE}"
     else
       k8ses=( $* )
       doAddLabels
-      doDeployConf
+      doDeployConf "${CMFILE}" "${SEFILE}"
       doDeployK8s $k8ses
       doCleanUp
     fi

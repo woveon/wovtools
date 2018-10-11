@@ -37,6 +37,11 @@ Command Options:
   --exports    : runs all the configuration as environment variables (no output, sourced)
   --var X      : print this variable X
 
+  Kubernetes Generation 
+  NOTE: These use Make to run a script... not good... need better way to run
+  --cm         : only config used by plugin, (sep lines)
+  --se         : only secrets used by plugin, (sep lines)
+
 XXX deprecated
   --export X   : export the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
   --env-var X  : print one variable of the environment variables (--var does all)
@@ -413,6 +418,19 @@ function fConvertRegionCodeAWS()
 }
 
 
+# --------------------------------------------------------------------- 
+function fCM()
+{
+  cd ${WOV_BASEDIR} ; USESWOVTOOLS=1 make gen_ck8s
+}
+
+# --------------------------------------------------------------------- 
+function fSE()
+{
+  cd ${WOV_BASEDIR} ; USESWOVTOOLS=1 make gen_sk8s
+}
+
+
 # Toggle local and remote
 # --------------------------------------------------------------------- 
 #function doManageDevmode()
@@ -513,6 +531,14 @@ while [[ $1 =~ ^- ]]; do
     fConvertRegionCodeAWS $1
     echo "$cRC"
     shift
+
+  elif [ "$1" == "--cm" ]; then
+    shift
+    fCM
+
+  elif [ "$1" == "--se" ]; then
+    shift
+    fSE
 
   elif [ "$1" == '--var' ]; then
     shift 

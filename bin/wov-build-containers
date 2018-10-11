@@ -12,7 +12,8 @@ wov-build -e
 
 pushcontainersargs=( "$@" )
 set ""
-. wov-env -c
+echo "NOTE: see how I load variables through this redirect and source... should do for all"
+. <(wov-env -c --exports)
 . wov-ns-check
 set -- "${pushcontainersargs[@]}"
 
@@ -148,13 +149,15 @@ EOF
 
   # --------------------------------------------------------------------- 
   # start building Dockerfile for the container
-
-  CONTAINERBASE=$(cat ${WOV_SECRETFILE} | jq -r '.'${WOV_PROJECT}${CONTAINERNAME}'.'${WOV_STAGE}'.containerfrom')
+  echo "**** Should do all variables like this ****"
+  _CONTAINERBASE="WOV_${WOV_PROJECT}_${CONTAINERNAME}_containerfrom"
+  CONTAINERBASE=${!_CONTAINERBASE}
+  #CONTAINERBASE=$(cat ${WOV_SECRETFILE} | jq -r '.'${WOV_PROJECT}'.'${CONTAINERNAME}'.containerfrom')
   if [ "${CONTAINERBASE}" == "null" ]; then
-    printf "\nERROR: Docker container for '${repo}' has no known base to build from in secret: '${WOV_PROJECT}${CONTAINERNAME}.${WOV_STAGE}.containerfrom'.\n\n"
+    printf "\nERROR: Docker container for '${repo}' has no known base to build from in secret: '${WOV_PROJECT}.${CONTAINERNAME}.containerfrom'.\n\n"
     printf "   Check: \n"
     printf "     - secrets are rebuilt (wov-build -e)\n"
-    printf "     - secrets contain entry for '${WOV_PROJECT}${CONTAINERNAME}.${WOV_STAGE}.containerfrom'. ('wov-ed -c secrets/current.json')\n"
+    printf "     - secrets contain entry for '${WOV_PROJECT}.${CONTAINERNAME}.containerfrom'. ('wov-ed -c secrets/current.json')\n"
     printf "     - secret file containing that entry is included in this stage (see wovtools/confing.json secrets.${WOV_STAGE})\n\n"
     exit 1
   fi

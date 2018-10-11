@@ -20,7 +20,7 @@ set -- "${pushenvargs[@]}"
 
 
 # Check all stagemods are off
-ONSTAGEMODS=( $(jq -r '.stagemods[] | select(.status == "on") | .["name"]' wovtools/config.json ) )
+ONSTAGEMODS=( $(jq -r '.stagemods[] | select(.status == "on") | .["name"]' ${WOV_BASEDIR}/wovtools/config.json ) )
 if [[ "$ONSTAGEMODS" != "" ]]; then
   printf "\nERROR: turn off stagemods when pushing content.\n"
   printf "  active stagemods: ${ONSTAGEMODS[*]}\n\n"
@@ -88,6 +88,29 @@ while [[ $1 =~ ^- ]]; do
   fi
 done
 
+
+# ---------------------------------------------------------------------
+# Generate variable files for K8s ConfigMap and Secrets
+# ---------------------------------------------------------------------
+
+# Create CM file to read in
+CMFILE=${WOV_BASEDIR}/wovtools/cache/conf/cm
+rm -f ${CMFILE} || true
+touch ${CMFILE}
+chmod 600 ${CMFILE}
+wov-env --cm >> ${CMFILE}
+
+# Create SE file to read in
+SEFILE=${WOV_BASEDIR}/wovtools/cache/conf/se
+rm -f ${SEFILE} || true
+touch ${SEFILE}
+chmod 600 ${SEFILE}
+wov-env --se >> ${SEFILE}
+
+
+# ---------------------------------------------------------------------
+# Push to Archive
+# ---------------------------------------------------------------------
 
 ARCHBASE=${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}
 

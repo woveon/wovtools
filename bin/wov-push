@@ -40,7 +40,7 @@ printf " version: ${WOV_STAGE}_${WOV_PVER}_${WOV_SVER}\n\n"
 
 
 # Check all stagemods are off
-ONSTAGEMODS=( $(jq -r '.stagemods[] | select(.status == "on") | .["name"]' wovtools/config.json ) )
+ONSTAGEMODS=( $(jq -r '.stagemods[] | select(.status == "on") | .["name"]' ${WOV_BASEDIR}/wovtools/config.json ) )
 if [[ "$ONSTAGEMODS" != "" ]]; then
   printf "\nERROR: turn off stagemods when pushing content.\n"
   printf "  active stagemods: ${ONSTAGEMODS[*]}\n\n"
