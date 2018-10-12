@@ -11,6 +11,7 @@ set -- "${args_wov_mod[@]}"
 
 DOECHO=1
 FOLD=$(tput cols)
+DIDCHANGE=0
 
 
 
@@ -29,8 +30,11 @@ ex. for microservice development, use a locally running version of apirest
 
   -h/--help    : this help output
   -q/-v        : quiet/verbose output
-  --on/--off X : turns an existing modroute on or off
+  --on/--off X : turns an existing modroute on or off, "--off ALL" turns all off
   -l [X]       : list all or a specific route X
+
+ TODO:
+  --get-on    : return all "on" mods as switches (ex. "--on X --on Y")
 
 TODO:
   -c route from to : create a route, mapping from, to to
@@ -118,28 +122,70 @@ function doOn()
 {
   if [ ${DOECHO} -ge 1 ]; then printf "turning on $1\n"; fi
   R=$(jq -r '.stagemods[] | select(.name == "'"$1"'")' ${WOV_BASEDIR}/wovtools/config.json)
-  if [ "$R" != "" ]; then
-    jq '(.stagemods[] | select(.name == "'"$1"'") | .status ) |= "on"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json
+
+  # Handle 'ALL'
+  if [ "$1" == "all" ] || [ "$1" == "ALL" ]; then
+    jq '(.stagemods[] | .status ) |= "on"' ${WOV_BASEDIR}/wovtools/config.json \
+                                          > ${WOV_BASEDIR}/wovtools/.config.json
     if [ $? -eq 0 ]; then
       mv ${WOV_BASEDIR}/wovtools/.config.json ${WOV_BASEDIR}/wovtools/config.json 
     fi
+
+  # Handle individual cases
   else 
-    printf "\nERROR: could not find '$1'.\n\n" 1>&2
+    if [ "$R" != "" ]; then
+      jq '(.stagemods[] | select(.name == "'"$1"'") | .status ) |= "on"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json
+      if [ $? -eq 0 ]; then
+        mv ${WOV_BASEDIR}/wovtools/.config.json ${WOV_BASEDIR}/wovtools/config.json 
+      fi
+    else 
+      printf "\nERROR: could not find '$1'.\n\n" 1>&2
+    fi
   fi
 }
 function doOff()
 {
   if [ ${DOECHO} -ge 1 ]; then printf "turning off $1\n"; fi
-  R=$(jq -r '.stagemods[] | select(.name == "'"$1"'")' ${WOV_BASEDIR}/wovtools/config.json)
-  if [ "$R" != "" ]; then
-    jq '(.stagemods[] | select(.name == "'"$1"'") | .status ) |= "off"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json
+
+  # Handle 'ALL'
+  if [ "$1" == "all" ] || [ "$1" == "ALL" ]; then
+    jq '(.stagemods[] | .status ) |= "off"' ${WOV_BASEDIR}/wovtools/config.json \
+                                          > ${WOV_BASEDIR}/wovtools/.config.json
     if [ $? -eq 0 ]; then
       mv ${WOV_BASEDIR}/wovtools/.config.json ${WOV_BASEDIR}/wovtools/config.json 
     fi
-  else 
-    printf "\nERROR: could not find '$1'.\n\n" 1>&2
+
+  # Handle individual cases
+  else
+
+    R=$(jq -r '.stagemods[] | select(.name == "'"$1"'")' ${WOV_BASEDIR}/wovtools/config.json)
+    if [ "$R" != "" ]; then
+      jq '(.stagemods[] | select(.name == "'"$1"'") | .status ) |= "off"' ${WOV_BASEDIR}/wovtools/config.json > ${WOV_BASEDIR}/wovtools/.config.json
+      if [ $? -eq 0 ]; then
+        mv ${WOV_BASEDIR}/wovtools/.config.json ${WOV_BASEDIR}/wovtools/config.json 
+      fi
+    else 
+      printf "\nERROR: could not find '$1'.\n\n" 1>&2
+    fi
+
   fi
 }
+
+
+# ---------------------------------------------------------------------
+# Return currently on settings as switches
+#  ex. if A on, B on, C off, returns: "--on A --on B"
+# ---------------------------------------------------------------------
+function doGetOnMods() 
+{
+  R=( $(jq -r '(.stagemods[] | select(.status == "on") | .name)' ${WOV_BASEDIR}/wovtools/config.json ) )
+  RET=""
+  for m in ${R[@]}; do
+    RET+="--on ${m} "
+  done
+  echo $RET
+}
+
 
 
 # ---------------------------------------------------------------------
@@ -159,11 +205,18 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--on" ]; then
     shift
     doOn $1
+    DIDCHANGE=1
     shift
 
   elif [ "$1" == "--off" ]; then
     shift
     doOff $1
+    DIDCHANGE=1
+    shift
+
+  elif [ "$1" == "--get-on" ]; then
+    shift
+    doGetOnMods
     shift
 
   elif [ "$1" == "-l" ]; then
@@ -188,3 +241,9 @@ while [[ $1 =~ ^- ]]; do
   fi
 
 done
+
+
+
+if [ "$DIDCHANGE" == "1" ]; then
+  wov-build -e
+fi

@@ -47,6 +47,8 @@ function doAddLabels()
 }
 
 
+
+
 # --------------------------------------------------------------------- 
 # Reads the files and creates ConfigMap and Secrets
 #  $1 = ConfigMap file
@@ -54,17 +56,22 @@ function doAddLabels()
 # --------------------------------------------------------------------- 
 function doDeployConf()
 {
+  # Variables for Configmap file
   CMFILE=$1
   if [ "$CMFILE" == "" ]; then
     printf "\nERROR: doDeployConf needs CMFILE defined. Param #1.\n"
     exit 1
   fi
 
+  # Variables for Secrets file
   SEFILE=$2
   if [ "$SEFILE" == "" ]; then
     printf "\nERROR: doDeployConf needs SEFILE defined. Param #2.\n"
     exit 1
   fi
+
+  # Extention to ConfigMap/Secrets entry name (ex. "-local" or "" for nothing)
+  FILEEXT=$3
 
   # Create ConfigMap PLUGIN
   # --------------------------------------------------------------------- 
@@ -74,7 +81,7 @@ function doDeployConf()
   #chmod 600 ${CMFILE}
   #wov-env --cm >> ${CMFILE}
   #USESWOVTOOLS=1 make gen_ck8s > ${CMFILE}
-  local f=$(wov-env --var WOV_PROJECT)
+  local f=$(wov-env --var WOV_PROJECT)"$FILEEXT"
 
   DATA=()
   #DATA+=("--from-literal=WOV_STAGE=${WOV_STAGE}")
@@ -284,25 +291,57 @@ function doDeployDev()
   printf " pver : ${WOV_PVER}   sver: ${WOV_SVER}: DEV DEPLOY\n"
   local CMFILE=${DEPLOYDIR}/secrets/.cm
   local SEFILE=${DEPLOYDIR}/secrets/.se
+  local CMFILEVH=${DEPLOYDIR}/secrets/.cm-vh
+  local SEFILEVH=${DEPLOYDIR}/secrets/.se-vh
 
-  # Create CM File to read in
-  rm -f ${CMFILE} || true
-  touch ${CMFILE}
-  chmod 600 ${CMFILE}
-  wov-env --cm >> ${CMFILE}
+  # Capture current wovmod, so can put back later
+  local CURWOVMOD=$(wov-mod --get-on)
 
-  # Create SE File to read in
-  rm -f ${SEFILE} || true
-  touch ${SEFILE}
-  chmod 600 ${SEFILE}
-  wov-env --se >> ${SEFILE}
+  # Build standard config files
+  {
+    wov-mod -q --off ALL
+
+    # Create CM File to read in
+    rm -f ${CMFILE} || true
+    touch ${CMFILE}
+    chmod 600 ${CMFILE}
+    wov-env --cm >> ${CMFILE}
+
+    # Create SE File to read in
+    rm -f ${SEFILE} || true
+    touch ${SEFILE}
+    chmod 600 ${SEFILE}
+    wov-env --se >> ${SEFILE}
+  }
+
+  # Build vh config files
+  {
+    wov-mod -q --on vh
+
+    # Create CM File to read in
+    rm -f ${CMFILEVH} || true
+    touch ${CMFILEVH}
+    chmod 600 ${CMFILEVH}
+    wov-env --cm >> ${CMFILEVH}
+
+    # Create SE File to read in
+    rm -f ${SEFILEVH} || true
+    touch ${SEFILEVH}
+    chmod 600 ${SEFILEVH}
+    wov-env --se >> ${SEFILEVH}
+  }
+
+  # Return wov-mod status
+  wov-mod -q --off ALL ${CURWOVMODS}
 
   if [ "${CONFONLY}" == "1" ]; then
     doDeployConf "${CMFILE}" "${SEFILE}"
+    doDeployConf "${CMFILEVH}" "${SEFILEVH}" "vh"
   else
     k8ses=( $* )
     doAddLabels
     doDeployConf "${CMFILE}" "${SEFILE}"
+    doDeployConf "${CMFILEVH}" "${SEFILEVH}" "vh"
     doDeployK8s $k8ses
     # doCleanUp // no cleanup in devdeploy
   fi
@@ -310,6 +349,8 @@ function doDeployDev()
   # remove these
   rm -f ${CMFILE} || true
   rm -f ${SEFILE} || true
+  rm -f ${CMFILEVH} || true
+  rm -f ${SEFILEVH} || true
 
 }
 

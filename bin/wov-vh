@@ -39,7 +39,7 @@ NOTE: i really need a better name for vh... thinking 'virtual development, but t
       ex. wov-vh -l "ls ; cd plem"
       ex. wov-vh -l wcd we
 
-  --config : mount all secrets and configmaps to the vh
+# DEPRECATED --config : mount all secrets and configmaps to the vh
 
   --route-service [service{:TARGETPORT}] - patches the service to point to vh
   --unroute-service [service] - puts service back to deplpoyment
@@ -200,10 +200,10 @@ function doConfigVol() {
   local CV=""
   printf -v CV   "  - name: configmap-volume\n"
   printf -v CV "%s    configMap:\n" "$CV"
-  printf -v CV "%s      name: ${WOV_PROJECT}\n" "$CV"
+  printf -v CV "%s      name: ${WOV_PROJECT}vh\n" "$CV"
   printf -v CV "%s  - name: secret-volume\n" "$CV"
   printf -v CV "%s    secret:\n" "$CV"
-  printf -v CV "%s      secretName: ${WOV_PROJECT}\n" "$CV"
+  printf -v CV "%s      secretName: ${WOV_PROJECT}vh\n" "$CV"
   printf "$CV"
 }
 
@@ -345,10 +345,10 @@ while [[ $1 =~ ^- ]]; do
     NAMESPACE="$1 "
     shift
 
-  elif [ "$1" == "--config" ]; then
-    shift
-    doConfig
-    DIDCOMMAND=1
+#  elif [ "$1" == "--config" ]; then
+#    shift
+#    doConfig
+#    DIDCOMMAND=1
 
   elif [ "$1" == "--unroute-service" ]; then
     shift 
