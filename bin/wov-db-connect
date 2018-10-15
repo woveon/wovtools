@@ -8,7 +8,7 @@
 wov-build -i -e
 pushenvargs=( "$@" )
 set ""
-. wov-env
+. <(wov-env --exports)
 #. wov-ns-check
 set -- "${pushenvargs[@]}"
 
@@ -16,6 +16,9 @@ DOECHO=1
 FOLD=$(tput cols)
 DATABASESERVER=
 #NAMESPACE="${WOV_NS}"
+DB_COMMAND=
+DB_OP=
+DB_FILE=
 
 
 # ---------------------------------------------------------------------
@@ -46,9 +49,8 @@ ex. -c 'SELECT * FROM logs WHERE database=\'mydatabase\' ORDER BY id DESC LIMIT 
 EOF
 }
 
-
 # Set the default commands
-if [ "$#" == "0" ]; then
+if [ "$#" == "0" ] && [ "$WOV_PROJECTTYPE" != "pl" ] ; then
   printf "\n\nERROR: need to provide the name of the database server.\n"
   sleep .8
   fDisplayOptions
@@ -61,32 +63,47 @@ fi
 DATABASESERVER=$1
 shift
 
-echo $DATABASESERVER
+#echo $DATABASESERVER
 
 # load env vars
 #eval $(wov-env --env ${DATABASESERVER}.ck8s --env ${DATABASESERVER}.sk8s )
-if [ "${WOV_stagemod}" != "" ]; then
-  eval $(wov-env --mod ${WOV_stagemod} --conf)
-else
-  eval $(wov-env --conf)
+#if [ "${WOV_stagemod}" != "" ]; then
+#  eval $(wov-env --mod ${WOV_stagemod} --conf)
+#else
+#  eval $(wov-env --conf)
+#fi
+
+# --------------------------------------------------------------------- 
+# Set config from env vars and project type
+# --------------------------------------------------------------------- 
+DB_TYPE=WOV_${DATABASESERVER}_type
+DB_DATABASE=WOV_${DATABASESERVER}_database
+DB_USERNAME=WOV_${DATABASESERVER}_username
+DB_PASSWORD=WOV_${DATABASESERVER}_password
+DB_HOST=WOV_${DATABASESERVER}_host
+DB_PORT=WOV_${DATABASESERVER}_port
+
+# Plugins use a mongodb
+if [ "${WOV_PROJECTTYPE}" == "pl" ]; then
+  DB_TYPE=WOV_we_db_type
+  DB_DATABASE=WOV_we_db_collection
+  DB_USERNAME=WOV_we_db_user
+  DB_PASSWORD=WOV_we_db_password
+  DB_HOST=WOV_we_db_url
+  DB_PORT=WOV_we_db_port
+  set -x
+  DATABASESERVER=${WOV_PROJECT}db
 fi
 
-# set to env vars
-DD=WOV_${DATABASESERVER}_type
-DB_TYPE=${!DD}
-DD=WOV_${DATABASESERVER}_database
-DB_DATABASE=${!DD}
-DD=WOV_${DATABASESERVER}_username
-DB_USERNAME=${!DD}
-DD=WOV_${DATABASESERVER}_password
-DB_PASSWORD=${!DD}
-DD=WOV_${DATABASESERVER}_host
-DB_HOST=${!DD}
-DD=WOV_${DATABASESERVER}_port_ext
-DB_PORT=${!DD}
-DB_COMMAND=
-DB_OP=
-DB_FILE=
+# Set variables to values of the name
+DB_TYPE=${!DB_TYPE}
+DB_DATABASE=${!DB_DATABASE}
+DB_USERNAME=${!DB_USERNAME}
+DB_PASSWORD=${!DB_PASSWORD}
+DB_HOST=${!DB_HOST}
+DB_PORT=${!DB_PORT}
+set +x
+
 
 # NOTE: using bastion so this overrides cluster settings
 #DB_PORT=$(wov-bastion --bhost ${WOV_CLUSTER}-bastion --ldp ${DATABASESERVER})
