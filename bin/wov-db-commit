@@ -274,7 +274,7 @@ function doPushCheck()
   #      printf "FAILED: if you have deltas in registry, you need to have db schema changes to account.\n"
       fi
     else
-      if [ "${chk_2}" == "T" ] ; then printf "BLOCK: you have ${1}.deltas in wovtools/db to commit.\n"; fi
+      if [ "${chk_2}" == "T" ] ; then printf "BLOCK: you have ${1}.deltas in wovtools/db to commit. Run 'wov-db-commit' to push deltas into registry.\n"; fi
       if [ "${chk_3}" == "T" ] ; then printf "BLOCK: project has changes to check into git.\n"; fi
       if [ "${chk_5}" == "T" ] ; then printf "BLOCK: wovtools/db/registry has changes to check into git.\n"; fi
     fi

@@ -43,9 +43,9 @@ do
 done
 
 PODSTEM="$1"
-set -x
+#set -x
 PODNAME=`kubectl --no-headers=true ${NAMESPACE} get pods ${PHASE} | \grep "^${PODSTEM}-" | sed -n "${ITH}p" | awk '{print $1}'`
-set +x
+#set +x
 
 if [ "${PODNAME}" == "" ]; then
   if [ "${ITH}" != "1" ]; then

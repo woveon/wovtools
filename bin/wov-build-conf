@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+DOFORCE=0
+FOLD=80
+
+DOPUSHTOARCHIVE=1
+
+RECIPES=( )
+  # eahc is a container recipe.
+
+CONFEXT=
+  # added to conf dir names (ex. "-vh" for vh specific)
+
+ALLOWSTAGEMODS=0
+  # Tests that all stagemods are off (i.e. ensure your local development config is not used in cluster)
+
+
+# --------------------------------------------------------------------- 
+# Import Env 
+# --------------------------------------------------------------------- 
+if [ ! -z ${WOV_stagemod+x} ]; then
+  printf "\nERROR: Can't have WOV_stagemod set when pushing content.\n\n"
+  exit 1
+fi
+pushenvargs=( "$@" )
+set ""
+. wov-env
+. wov-ns-check
+set -- "${pushenvargs[@]}"
+
+
+
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Generates all the conf files for the project (ConfigMap and Secrets). Then, pushes the conf and k8s to the Archive, from which we can deploy. This works with pushing secrets and containers into the Archive (which is actually several storage mediums).
+
+  --skip-push : generate ConfigMap and Secrets, but do not push to Archive
+  --conf-ext    : extension to the default conf file (ex. foo/conf/cm/apisocket -> foo/conf/cm/apisocket-vh with --conf-ext '-vh')
+
+  -f : force push
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "--allow-stagemods" ]; then
+    shift
+    ALLOWSTAGEMODS=1
+
+  elif [ "$1" == "--skip-push" ]; then
+    shift
+    DOPUSHTOARCHIVE=0
+
+  elif [ "$1" == "--conf-ext" ]; then
+    shift
+    CONFEXT=$1
+    shift
+
+  elif [ "$1" == "-f" ]; then
+    shift
+    DOFORCE=1
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+# Check all stagemods are off
+if [ "${ALLOWSTAGEMODS}" != "1" ]; then
+  ONSTAGEMODS=( $(jq -r '.stagemods[] | select(.status == "on") | .["name"]' ${WOV_BASEDIR}/wovtools/config.json ) )
+  if [[ "$ONSTAGEMODS" != "" ]]; then
+    printf "\nERROR: turn off stagemods when pushing content.\n"
+    printf "  active stagemods: ${ONSTAGEMODS[*]}\n\n"
+    for sm in ${ONSTAGEMODS[@]}; do
+      printf "  ex. wov-mod --off ${sm}\n"
+    done
+    printf "\n"
+    exit 1
+  fi
+fi
+
+
+# Check local code is checked in and pushed. if Allowing stagemods, don't check
+R1=0
+if [ "${ALLOWSTAGEMODS}" != "1" ]; then
+wov-git-check ${WOV_BASEDIR}
+R1=$?
+fi
+wov-git-check ${WOV_BASEDIR}/wovtools/secrets
+R2=$?
+if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 1; fi
+
+
+# Make sure directories exist
+mkdir -p ${WOV_BASEDIR}/wovtools/cache/conf/cm
+mkdir -p ${WOV_BASEDIR}/wovtools/cache/conf/se
+chmod 700 ${WOV_BASEDIR}/wovtools/cache/conf/se
+
+# Clear them out
+#rm ${WOV_BASEDIR}/wovtools/cache/conf/cm/*
+#rm ${WOV_BASEDIR}/wovtools/cache/conf/se/*
+
+
+# ---------------------------------------------------------------------
+# Generate variable files for K8s ConfigMap and Secrets
+# ---------------------------------------------------------------------
+
+# Each container recipe is for a microservice
+RECIPES=( "$@" )
+if [ "${#RECIPES[@]}" == "0" ]; then
+  RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+fi
+#echo "Recipes: ${RECIPES}"
+
+# Build ConfigMap and Secrets if needed
+for f in ${RECIPES}; do
+
+  CONTAINERNAME=$f
+  MICROSERVICE=${WOV_PROJECT}${CONTAINERNAME}
+
+  # if [ $DOECHO -ge 1 ]; then printf "\n%-${FOLD}s\n" "-" | tr ' ' '-' ; echo "... build ConfigMap and Secret for '${f}'."; fi
+  if [ $DOECHO -ge 1 ]; then echo "... build ConfigMap and Secret for '${MICROSERVICE}${CONFEXT}'."; fi
+
+
+  # Create CM file to read in
+  CMFILE=${WOV_BASEDIR}/wovtools/cache/conf/cm/${MICROSERVICE}${CONFEXT}
+  rm -f ${CMFILE} || true
+  touch ${CMFILE}
+  chmod 600 ${CMFILE}
+  wov-env --cm ${MICROSERVICE} >> ${CMFILE}
+  if [ "$?" != "0" ]; then exit 1; fi
+
+  # Create SE file to read in
+  SEFILE=${WOV_BASEDIR}/wovtools/cache/conf/se/${MICROSERVICE}${CONFEXT}
+  rm -f ${SEFILE} || true
+  touch ${SEFILE}
+  chmod 600 ${SEFILE}
+  wov-env --se ${MICROSERVICE} >> ${SEFILE}
+  if [ "$?" != "0" ]; then exit 1; fi
+
+done
+
+
+
+
+
+
+
+# ---------------------------------------------------------------------
+# Push to Archive
+# ---------------------------------------------------------------------
+
+if [ "$DOPUSHTOARCHIVE" == "1" ]; then
+
+  ARCHBASE=${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}
+
+  #echo "ECHO: aws s3 sync ${WOV_BASEDIR}/wovtools/cache/k8s  ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s  --delete"
+  if [ $DOECHO -ge 1 ]; then echo "... pushing ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s"; fi
+  if [ $DOECHO -ge 2 ]; then ls ${WOV_BASEDIR}/wovtools/cache/k8s; fi
+  aws s3 sync ${WOV_BASEDIR}/wovtools/cache/k8s  ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s  --delete
+
+  #echo "ECHO: aws s3 sync ${WOV_BASEDIR}/wovtools/cache/conf ${WOV_ARCHIVEENV}/${ARCHBASE}/conf --delete"
+  if [ $DOECHO -ge 1 ]; then echo "... pushing ${WOV_ARCHIVEENV}/${ARCHBASE}/conf"; fi
+  if [ $DOECHO -ge 2 ]; then ls ${WOV_BASEDIR}/wovtools/cache/conf; fi
+  aws s3 sync ${WOV_BASEDIR}/wovtools/cache/conf ${WOV_ARCHIVEENV}/${ARCHBASE}/conf --delete
+
+  if [ $DOECHO -ge 1 ]; then echo "... success"; fi
+
+else
+
+  if [ $DOECHO -ge 1 ]; then echo "... skipping push to archive"; fi
+
+fi

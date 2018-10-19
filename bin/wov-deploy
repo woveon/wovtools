@@ -48,133 +48,84 @@ function doAddLabels()
 
 
 
-
 # --------------------------------------------------------------------- 
 # Reads the files and creates ConfigMap and Secrets
-#  $1 = ConfigMap file
-#  $2 = Secret file
+#  $1 = directory extention (ex. 'vh' so reads not conf/cm/X, but conf/cm/Xvh)
 # --------------------------------------------------------------------- 
 function doDeployConf()
 {
-  # Variables for Configmap file
-  CMFILE=$1
-  if [ "$CMFILE" == "" ]; then
-    printf "\nERROR: doDeployConf needs CMFILE defined. Param #1.\n"
-    exit 1
-  fi
+  RECIPES=()
+  RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+  # echo "RECIPES: ${RECIPES}"
 
-  # Variables for Secrets file
-  SEFILE=$2
-  if [ "$SEFILE" == "" ]; then
-    printf "\nERROR: doDeployConf needs SEFILE defined. Param #2.\n"
-    exit 1
-  fi
+  # Files for Configmap file
+  CMDIR=${WOV_BASEDIR}/wovtools/cache/conf/cm
 
-  # Extention to ConfigMap/Secrets entry name (ex. "-local" or "" for nothing)
-  FILEEXT=$3
+  # Files for Secrets file
+  SEDIR=${WOV_BASEDIR}/wovtools/cache/conf/se
 
+  # Extention to ConfigMap/Secrets entry name (ex. "vh" or "" for nothing)
+  FILEEXT=$1
+
+  # --------------------------------------------------------------------- 
   # Create ConfigMap PLUGIN
   # --------------------------------------------------------------------- 
-  #CMFILE=${DEPLOYDIR}/secrets/.cm
-  #rm -f ${CMFILE} || true
-  #touch ${CMFILE}
-  #chmod 600 ${CMFILE}
-  #wov-env --cm >> ${CMFILE}
-  #USESWOVTOOLS=1 make gen_ck8s > ${CMFILE}
-  local f=$(wov-env --var WOV_PROJECT)"$FILEEXT"
 
-  DATA=()
-  #DATA+=("--from-literal=WOV_STAGE=${WOV_STAGE}")
-  while read l; do
-    #echo ":$l"
-    d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
-    if [ "$d" != "" ]; then DATA+=("$d"); fi
-  done <${CMFILE}
+  # Read files from directory (note the appended FILEEXT)
+  #CMFILES=( $(cd ${CMDIR} && ls 2> /dev/null) )
+  for f in ${RECIPES}; do
 
-  # echo "DATA: ${DATA[@]}"
-  kubectl delete configmap ${f} #2> /dev/null
-  kubectl create configmap ${f} "${DATA[@]}"
-  if [ "$?" != "0" ]; then
-    printf "\nERROR: failed creating ConfigMap $f from '${CMFILE}'.\n"
-    exit 1
-  fi
-  # rm -f ${CMFILE}
+    local MSROOT=${WOV_PROJECT}${f}${FILEEXT}
+    local CMFILE="${CMDIR}/${MSROOT}"          # full path to file
+
+    # Convert X=Y into ConfigMap commands in DATA
+    DATA=()
+    while read l; do
+      #echo ":$l"
+      d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
+      if [ "$d" != "" ]; then DATA+=("$d"); fi
+    done <${CMFILE}
+
+    # echo "DATA: ${DATA[@]}"
+    kubectl delete configmap ${MSROOT} 2> /dev/null
+    kubectl create configmap ${MSROOT} "${DATA[@]}"
+    if [ "$?" != "0" ]; then
+      printf "\nERROR: failed creating ConfigMap $f from '${CMFILE}'.\n"
+      exit 1
+    fi
+  done
+
 
   # Create Secret PLUGIN
   # --------------------------------------------------------------------- 
-  #SEFILE=${DEPLOYDIR}/secrets/.se
-  rm -f ${SEFILE} || true
-  touch ${SEFILE}
-  chmod 600 ${SEFILE}
-  #USESWOVTOOLS=1 make gen_sk8s > ${SEFILE}
-  wov-env --se > ${SEFILE}
 
-  DATA=()
-  while read l; do
-    #echo ":$l"
-    d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
-    if [ "$d" != "" ]; then DATA+=("$d"); fi
-  done <${SEFILE}
+  # Read files from directory (note the appended FILEEXT)
+  #SEFILES=( $(cd ${SEDIR} && ls 2> /dev/null) )
+  for f in ${RECIPES}; do
 
-  kubectl delete secret ${f} #2> /dev/null
-  kubectl create secret generic ${f} "${DATA[@]}"
-  kubectl label  secret ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
-  if [ "$?" != "0" ]; then
-    printf "\nERROR: failed creating Secret $f from '${SEFILE}'.\n"
-    exit 1
-  fi
-  # rm -f ${SEFILE}
-}
+    local MSROOT=${WOV_PROJECT}${f}${FILEEXT}
+    local SEFILE="${SEDIR}/${MSROOT}"          # full path to file
 
-# --------------------------------------------------------------------- 
-# NOTE: this function read in conf/* files to generate ConfigMaps and 
-#       Secrets, but those files no longer exist.
-# --------------------------------------------------------------------- 
-function doDeployConf_old()
-{
-  # --------------------------------------------------------------------- 
-  # Deploy the conf ConfigMap files
-  FILES=$(cd ${DEPLOYDIR}/conf; ls *.ck8s 2> /dev/null)
-  for F in ${FILES}; do
-    f=${F%.ck8s}
-    if [ $DOECHO -ge 1 ]; then echo "  ... creating ConfigMap ${f} from ${F}"; fi
-
-    #DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 }' | gsed ':a;N;$!ba;s/\n/ /g')
+    # Convert X=Y into Secret commands in DATA
     DATA=()
     while read l; do
       #echo ":$l"
       d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
       if [ "$d" != "" ]; then DATA+=("$d"); fi
-    done <${DEPLOYDIR}/conf/${F}
+    done <${SEFILE}
 
-    kubectl delete configmap ${f} #2> /dev/null
-    kubectl create configmap ${f} "${DATA[@]}"
+    kubectl delete secret ${MSROOT} 2> /dev/null
+    kubectl create secret generic ${MSROOT} "${DATA[@]}"
     if [ "$?" != "0" ]; then
-      printf "\nERROR: failed creating ConfigMap $f.\n"
-      printf " - check file ${DEPLOYDIR}/conf/${F}\n"
+      printf "\nERROR: failed creating Secret $MSROOT from '${SEFILE}'.\n"
       exit 1
     fi
-    kubectl label  configmap ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+    kubectl label  secret ${MSROOT} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+    if [ "$?" != "0" ]; then
+      printf "\nWARNING: failed labeling ${MSROOT}. CONTINUING...\n"
+    fi
   done
 
-  # --------------------------------------------------------------------- 
-  # Deploy the conf secret files
-  FILES=$(cd ${DEPLOYDIR}/conf; ls *.sk8s 2> /dev/null)
-  for F in ${FILES}; do
-    f=${F%.sk8s}
-    if [ $DOECHO -ge 1 ]; then echo "  ... creating Secret ${f} from ${F}"; fi
-    #  DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 , "\\" }')
-    #DATA=$(awk 'NF { print }' ${DEPLOYDIR}/conf/${F} | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "    --from-literal=" $0 }' | gsed ':a;N;$!ba;s/\n/ /g')
-    DATA=()
-    while read l; do
-      #echo ":$l"
-      d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
-      if [ "$d" != "" ]; then DATA+=("$d"); fi
-    done <${DEPLOYDIR}/conf/${F}
-    kubectl delete secret ${f} #2> /dev/null
-    kubectl create secret generic ${f} "${DATA[@]}"
-    kubectl label  secret ${f} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
-  done
 }
 
 
@@ -287,12 +238,11 @@ function doDeployDev()
     exit 1
   fi
 
-  DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache
-  printf " pver : ${WOV_PVER}   sver: ${WOV_SVER}: DEV DEPLOY\n"
-  local CMFILE=${DEPLOYDIR}/secrets/.cm
-  local SEFILE=${DEPLOYDIR}/secrets/.se
-  local CMFILEVH=${DEPLOYDIR}/secrets/.cm-vh
-  local SEFILEVH=${DEPLOYDIR}/secrets/.se-vh
+  # Clear them out
+  echo "... removing old conf"
+  rm ${WOV_BASEDIR}/wovtools/cache/conf/cm/* 2> /dev/null || true
+  rm ${WOV_BASEDIR}/wovtools/cache/conf/se/* 2> /dev/null || true
+
 
   # Capture current wovmod, so can put back later
   local CURWOVMOD=$(wov-mod --get-on)
@@ -300,58 +250,38 @@ function doDeployDev()
   # Build standard config files
   {
     wov-mod -q --off ALL
-
-    # Create CM File to read in
-    rm -f ${CMFILE} || true
-    touch ${CMFILE}
-    chmod 600 ${CMFILE}
-    wov-env --cm >> ${CMFILE}
-
-    # Create SE File to read in
-    rm -f ${SEFILE} || true
-    touch ${SEFILE}
-    chmod 600 ${SEFILE}
-    wov-env --se >> ${SEFILE}
+    if [ "$?" != "0" ]; then exit 1; fi
+    wov-build-conf --skip-push
+    if [ "$?" != "0" ]; then exit 1; fi
   }
 
   # Build vh config files
   {
     wov-mod -q --on vh
-
-    # Create CM File to read in
-    rm -f ${CMFILEVH} || true
-    touch ${CMFILEVH}
-    chmod 600 ${CMFILEVH}
-    wov-env --cm >> ${CMFILEVH}
-
-    # Create SE File to read in
-    rm -f ${SEFILEVH} || true
-    touch ${SEFILEVH}
-    chmod 600 ${SEFILEVH}
-    wov-env --se >> ${SEFILEVH}
+    if [ "$?" != "0" ]; then
+      echo "ERROR: no entry for vh. set that up in wovtools/config.json."
+    fi
+    wov-build-conf --skip-push --allow-stagemods --conf-ext vh
+    if [ "$?" != "0" ]; then exit 1; fi
   }
 
   # Return wov-mod status
   wov-mod -q --off ALL ${CURWOVMODS}
 
+  DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache
+
+  # Depploy to cluster, the relevant K8s "stuff"
   if [ "${CONFONLY}" == "1" ]; then
-    doDeployConf "${CMFILE}" "${SEFILE}"
-    doDeployConf "${CMFILEVH}" "${SEFILEVH}" "vh"
+    doDeployConf
+    doDeployConf vh
   else
     k8ses=( $* )
     doAddLabels
-    doDeployConf "${CMFILE}" "${SEFILE}"
-    doDeployConf "${CMFILEVH}" "${SEFILEVH}" "vh"
+    doDeployConf
+    doDeployConf vh
     doDeployK8s $k8ses
     # doCleanUp // no cleanup in devdeploy
   fi
-
-  # remove these
-  rm -f ${CMFILE} || true
-  rm -f ${SEFILE} || true
-  rm -f ${CMFILEVH} || true
-  rm -f ${SEFILEVH} || true
-
 }
 
 
@@ -397,7 +327,8 @@ function doDeployStage()
   # --------------------------------------------------------------------- 
   # Make directory to put files
   DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache/.deployments/${WOV_PVER}_${WOV_STAGE}_${WOV_SVER}.$$
-  mkdir -p ${DEPLOYDIR}/conf
+  mkdir -p ${DEPLOYDIR}/conf/cm
+  mkdir -p ${DEPLOYDIR}/conf/se
   mkdir -p ${DEPLOYDIR}/k8s
   chmod -R 700 ${DEPLOYDIR}
 
@@ -410,25 +341,25 @@ function doDeployStage()
   aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s ${DEPLOYDIR}/k8s  --delete
 
   # printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
-  local CMFILE=${DEPLOYDIR}/conf/cm
-  local SEFILE=${DEPLOYDIR}/conf/se
+#  local CMFILE=${DEPLOYDIR}/conf/cm
+#  local SEFILE=${DEPLOYDIR}/conf/se
 
-  if [ ! -f "$CMFILE" ]; then 
-    printf "\nERROR: K8s ConfigMap file does not exist at : '${CMFILE}'.\n"
-    exit 1
-  fi
-  if [ ! -f "$SEFILE" ]; then 
-    printf "\nERROR: K8s Secret file does not exist at : '${SEFILE}'.\n"
-    exit 1
-  fi
+#  if [ ! -f "$CMFILE" ]; then 
+#    printf "\nERROR: K8s ConfigMap file does not exist at : '${CMFILE}'.\n"
+#    exit 1
+#  fi
+#  if [ ! -f "$SEFILE" ]; then 
+#    printf "\nERROR: K8s Secret file does not exist at : '${SEFILE}'.\n"
+#    exit 1
+#  fi
 
   if [ "${DRYRUN}" == "0" ]; then 
     if [ "${CONFONLY}" == "1" ]; then
-      doDeployConf "${CMFILE}" "${SEFILE}"
+      doDeployConf
     else
       k8ses=( $* )
       doAddLabels
-      doDeployConf "${CMFILE}" "${SEFILE}"
+      doDeployConf
       doDeployK8s $k8ses
       doCleanUp
     fi

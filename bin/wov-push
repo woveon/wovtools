@@ -76,7 +76,7 @@ usage: `basename $0` [options]
 
 Macro command that pushes containers, then env. It uses:
    wov-build-containers
-   wov-push-env
+   wov-build-conf
 
   --skip-db-checks : skip the checks for database inconsistencies
 
@@ -135,8 +135,8 @@ wov-build-containers ${METAARGS}
 if [ "$?" != "0" ]; then
   exit 1
 fi
-echo "  ... wov-push-env ${METAARGS}"
-wov-push-env ${METAARGS}
+echo "  ... wov-build-conf ${METAARGS}"
+wov-build-conf ${METAARGS}
 if [ "$?" != "0" ]; then
   exit 1
 fi

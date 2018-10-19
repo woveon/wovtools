@@ -5,7 +5,7 @@ BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service wov-ed wov-ls wov-vh wov-pw
 	        wov-pshell wov-cmd wov-kui wov-git-check wov-vh-pulldir wov-db wov-db-commit wov-db-connect wov-db-connect2 wov-cd \
 					wov-portforward wov-envg wov-project wov-vh-pushgit wov-bastion wov-bastion-connection
 BINS=wov-env wov-ns-check wov-stage wov-build wov-compile  \
-		 wov-pushcode-check wov-pushcontainer-check wov-pushenv-check wov-build-containers wov-push-env wov-push-secrets wov-push \
+		 wov-pushcode-check wov-pushcontainer-check wov-pushenv-check wov-build-containers wov-build-conf wov-push-secrets wov-push \
 		 wov-deploy wov-deploy-info wov-hbs wov-db-deploy  wov-deploy-dev \
 		 wov-users wov-cl wov-mod  wov-env-build  wov_stage-select \
 		 $(BINS-UTIL) $(BINS-GLOBAL)

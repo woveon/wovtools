@@ -150,7 +150,7 @@ EOF
   # --------------------------------------------------------------------- 
   # start building Dockerfile for the container
   echo "**** Should do all variables like this ****"
-  _CONTAINERBASE="WOV_${WOV_PROJECT}_${CONTAINERNAME}_containerfrom"
+  _CONTAINERBASE="WOV_${WOV_PROJECT}${CONTAINERNAME}_containerfrom"
   CONTAINERBASE=${!_CONTAINERBASE}
   #CONTAINERBASE=$(cat ${WOV_SECRETFILE} | jq -r '.'${WOV_PROJECT}'.'${CONTAINERNAME}'.containerfrom')
   if [ "${CONTAINERBASE}" == "null" ]; then

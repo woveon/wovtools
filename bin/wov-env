@@ -39,8 +39,8 @@ Command Options:
 
   Kubernetes Generation 
   NOTE: These use Make to run a script... not good... need better way to run
-  --cm         : only config used by plugin, (sep lines)
-  --se         : only secrets used by plugin, (sep lines)
+  --cm X       : only config used by plugin, (sep lines)
+  --se X       : only secrets used by plugin, (sep lines)
 
 XXX deprecated
   --export X   : export the environment variables in file X in wovtools/cache/conf/X (NOTE: removes comments)
@@ -305,7 +305,6 @@ function doPrintVarsENVS()
 function doPrintVarsCONF()
 {
   doPrintVarsENVS | tr '\n' ' '
-  HAS_BUILDENV=1
 }
 
 function doPrintVarsEXPORTS()
@@ -419,15 +418,43 @@ function fConvertRegionCodeAWS()
 
 
 # --------------------------------------------------------------------- 
-function fCM()
-{
-  cd ${WOV_BASEDIR} ; USESWOVTOOLS=1 make gen_ck8s
-}
-
+# Generate only the necessary env variables for microservices.
+#  $1 - microservice name. ex. apisocket, apihal, etc.
+#  $2 - "cm" or "se" for ConfigMap or Secrets
+# NOTE: This works by calling a javscript or shell script that 
+#   generates the env vars. This script must end in 'js' or 'sh' and
+#   be in ${1}/src/${1}config* or src/${1}config*.
 # --------------------------------------------------------------------- 
-function fSE()
+function fConfGeneration()
 {
-  cd ${WOV_BASEDIR} ; USESWOVTOOLS=1 make gen_sk8s
+
+  # Read in envs
+  if [ "${HAS_BUILDENV}" != "1" ]; then . <(doPrintVarsEXPORTS); fi
+
+  # Get echo env vars, checking multiple locations
+  if [ -e "${WOV_BASEDIR}/${1}/src/${1}config.js" ]; then
+    local MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.js"
+    if [ "$2" == "cm" ]; then   node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())" ; 
+    elif [ "$2" == "se" ]; then node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())" ; fi
+
+  elif [ -e "${WOV_BASEDIR}/src/${1}config.js" ]; then
+    local MSCFILE="${WOV_BASEDIR}/src/${1}config.js"
+    if [ "$2" == "cm" ]; then   node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())" ; 
+    elif [ "$2" == "se" ]; then node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())" ; fi
+
+  elif [ -e "${WOV_BASEDIR}/${1}/src/${1}config.sh" ]; then
+    local MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.sh"
+    ${MSCFILE} $2
+
+  elif [ -e "${WOV_BASEDIR}/src/${1}config.sh" ]; then
+    local MSCFILE="${WOV_BASEDIR}/src/${1}config.sh"
+    ${MSCFILE} $2
+
+  else
+    (>&2 printf "\nERROR: could not find '${1}config.js'. Should be in ./src or ./${1}/src.\n\n")
+    exit 1
+  fi
+
 }
 
 
@@ -534,11 +561,11 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == "--cm" ]; then
     shift
-    fCM
+    fConfGeneration $1 cm
 
   elif [ "$1" == "--se" ]; then
     shift
-    fSE
+    fConfGeneration $1 se
 
   elif [ "$1" == '--var' ]; then
     shift 
