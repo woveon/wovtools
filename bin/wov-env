@@ -421,6 +421,7 @@ function fConvertRegionCodeAWS()
 # Generate only the necessary env variables for microservices.
 #  $1 - microservice name. ex. apisocket, apihal, etc.
 #  $2 - "cm" or "se" for ConfigMap or Secrets
+#  $3 - ?has newline? '1' puts on different lines, '0' all on same
 # NOTE: This works by calling a javscript or shell script that 
 #   generates the env vars. This script must end in 'js' or 'sh' and
 #   be in ${1}/src/${1}config* or src/${1}config*.
@@ -428,32 +429,42 @@ function fConvertRegionCodeAWS()
 function fConfGeneration()
 {
 
+  local R=
   # Read in envs
   if [ "${HAS_BUILDENV}" != "1" ]; then . <(doPrintVarsEXPORTS); fi
 
   # Get echo env vars, checking multiple locations
   if [ -e "${WOV_BASEDIR}/${1}/src/${1}config.js" ]; then
     local MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.js"
-    if [ "$2" == "cm" ]; then   node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())" ; 
-    elif [ "$2" == "se" ]; then node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())" ; fi
+    if [ "$2" == "cm" ]; then   R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ) ; 
+    elif [ "$2" == "se" ]; then R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") ) ; fi
 
   elif [ -e "${WOV_BASEDIR}/src/${1}config.js" ]; then
     local MSCFILE="${WOV_BASEDIR}/src/${1}config.js"
-    if [ "$2" == "cm" ]; then   node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())" ; 
-    elif [ "$2" == "se" ]; then node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())" ; fi
+    if [ "$2" == "cm" ]; then   R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ) ; 
+    elif [ "$2" == "se" ]; then R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") ) ; fi
 
   elif [ -e "${WOV_BASEDIR}/${1}/src/${1}config.sh" ]; then
     local MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.sh"
-    ${MSCFILE} $2
+    R=( $(${MSCFILE} $2) )
 
   elif [ -e "${WOV_BASEDIR}/src/${1}config.sh" ]; then
     local MSCFILE="${WOV_BASEDIR}/src/${1}config.sh"
-    ${MSCFILE} $2
+    R=( $(${MSCFILE} $2) )
 
   else
     (>&2 printf "\nERROR: could not find '${1}config.js'. Should be in ./src or ./${1}/src.\n\n")
     exit 1
   fi
+
+#  R+=( WOV_STAGE=${WOV_STAGE} WOV_ME=${WOV_ME} )
+
+  local SEP=' '
+  if [ "$3" == "1" ]; then SEP='\n'; fi
+
+  for f in "${R[@]}"; do
+    printf "$f$SEP"
+  done
 
 }
 
@@ -561,11 +572,19 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == "--cm" ]; then
     shift
-    fConfGeneration $1 cm
+    fConfGeneration $1 cm 1
 
   elif [ "$1" == "--se" ]; then
     shift
-    fConfGeneration $1 se
+    fConfGeneration $1 se 1
+
+  elif [ "$1" == "--CM" ]; then
+    shift
+    fConfGeneration $1 cm 0
+
+  elif [ "$1" == "--SE" ]; then
+    shift
+    fConfGeneration $1 se 0
 
   elif [ "$1" == '--var' ]; then
     shift 

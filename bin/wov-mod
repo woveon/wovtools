@@ -245,5 +245,5 @@ done
 
 
 if [ "$DIDCHANGE" == "1" ]; then
-  wov-build -e
+  wov-build -q -e
 fi

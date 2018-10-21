@@ -121,18 +121,24 @@ function doPackContainer
   for repo in "${PRIVATEREPOS[@]}"; do
     # for each item in private repo, append to ssh/config and add its key
     # echo "  ... add in repo key ${repo}, update .ssh/config"
+
+    repoURL=$(cat ${WOV_SECRETFILE} | jq -r '.repositories["'${repo}'"].host')
+    #echo "    ... repoURL ${repoURL}"
+
 #    repoUser=$(ssh -G ${repo} | grep "^user " | awk '{print $2}')
     repoUser=$(cat ${WOV_SECRETFILE} | jq -r '.repositories["'${repo}'"].user')
     #echo "    ... repoUser ${repoUser}"
+
     #repoKeyFile=$(ssh -G ${repo} | grep "^identityfile " | awk '{print $2}')
     repoKeyFile=$(cat ${WOV_SECRETFILE} | jq -r '.repositories["'${repo}'"].privkeyloc')
     repoKeyFile="${repoKeyFile/#\~/$HOME}"
       # expand tilde to $HOME
     #echo "    ... repoKeyFile ${repoKeyFile}"
-    echo "    ... repo: '${repo}'  user: '${repoUser}'  keyfile: '${repoKeyFile}'"
+    echo "    ... repo: '${repo}'  url: '${repoURL}'  user: '${repoUser}'  keyfile: '${repoKeyFile}'"
     cat <<EOF >> ${DESTDIR}/SECRET/ssh-config
 
-Host ${repo}
+# repo: ${repo}
+Host ${repoURL}
   User ${repoUser}
   IdentityFile /root/.ssh/$(basename ${repoKeyFile})
 EOF
@@ -173,6 +179,9 @@ EOF
 # ===================================================================== 
 FROM ${CONTAINERBASE} as wovtools
 
+# alpine linux does not have ssh client
+RUN if which apk; then apk add --no-cache openssh-client; fi
+
 # Use specific keys for private repos
 RUN mkdir -p /root/.ssh
 RUN touch /root/.ssh/known_hosts
@@ -192,10 +201,11 @@ EOF
 
   if [ $DOECHO -ge 2 ]; then echo "  ... add in call to each repo, so it adds to known hosts"; fi
   for repo in "${PRIVATEREPOS[@]}"; do
+    local repoURL=$(cat ${WOV_SECRETFILE} | jq -r '.repositories["'${repo}'"].host')
     cat <<EOF >> ${DESTDIR}/Dockerfile
 
 # Adding repos to ssh known_hosts  (||true because returns non-0 on success, so added '-v' for output)
-RUN ssh -o StrictHostKeyChecking=no -vT ${repo} || true
+RUN ssh -o StrictHostKeyChecking=no -vT ${repoURL} || true
 EOF
   done
 
@@ -265,6 +275,9 @@ EOF
 # - copied from 'run.docker'
 # ===================================================================== 
 FROM ${CONTAINERBASE}
+RUN if which apk;     then apk --no-cache update; fi
+RUN if which apt-get; then apt-get -y update;     fi
+
 COPY --from=wovtools /usr/src/app /usr/src/app
 WORKDIR /usr/src/app
 
@@ -411,10 +424,20 @@ if [ "${BLOCK}" == "0" ]; then
 
       doPackContainer ${f}
 
+      # Just packed container, do we need to build it? Do diffs against archive, then compare remote container
       NEEDSBUILD=0
-      #echo "  ... check push container status"
-      wov-pushcontainer-check -q ${f}
+      diff -q -r ${DESTDIR} ${ARCHDIR} > /dev/null
       NEEDSBUILD=$?
+      if [ "$NEEDSBUILD" != "0" ]; then 
+        echo "  ... packed container differs so will build.";
+      else
+        echo "  ... check push container status"
+        wov-pushcontainer-check -q ${f}
+        NEEDSBUILD=$?
+        if [ "$NEEDSBUILD" != "0" ]; then 
+          echo "  ... pushed containers differ so will build.";
+        fi
+      fi
         #echo "NEEDSBUILD: ${NEEDSBUILD}"
         # printf "\n\n\n\nNEEDSBUILD: $NEEDSBUILD\n\n\n"
         #    echo "NEEDSBUILDOUT: $NEEDSBUILDOUT"

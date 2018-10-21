@@ -21,9 +21,10 @@ FOLD=$(tput cols)
 DRYRUN=0
 CONFONLY=0
 DEPLOYTYPE=
+BUILDVH=1
 
-K8SFILES=
 DEPLOYDIR=
+DEPLOYCONF_EXT=
 
 # Cache the current values
 WOV_CUR_PVER=${WOV_PVER}
@@ -37,13 +38,14 @@ function doAddLabels()
 {
   # --------------------------------------------------------------------- 
   # Add labels
-  if [ $DOECHO -ge 1 ]; then echo "  ... labeling namespace"; fi
+  if [ $DOECHO -ge 1 ]; then echo "... labeling namespace"; fi
   R=$(kubectl get namespaces | grep ${WOV_NS})
   if [ "$?" != "0" ]; then
     printf "\n\nERROR: missing namespace '${WOV_NS}'. Type : 'kubectl create namespace ${WOV_NS}' to create one.\n\n"
     exit 1
   fi
-  kubectl label namespace ${WOV_NS} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+  kubectl label namespace ${WOV_NS} -v=0 --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+   # --quiet=true
 }
 
 
@@ -54,9 +56,11 @@ function doAddLabels()
 # --------------------------------------------------------------------- 
 function doDeployConf()
 {
-  RECIPES=()
-  RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
-  # echo "RECIPES: ${RECIPES}"
+  RECIPES=( "$@" )
+  if [ "${#RECIPES[@]}" == "0" ]; then
+    RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+  fi
+#  echo "RECIPES: ${RECIPES[@]}"
 
   # Files for Configmap file
   CMDIR=${WOV_BASEDIR}/wovtools/cache/conf/cm
@@ -65,7 +69,7 @@ function doDeployConf()
   SEDIR=${WOV_BASEDIR}/wovtools/cache/conf/se
 
   # Extention to ConfigMap/Secrets entry name (ex. "vh" or "" for nothing)
-  FILEEXT=$1
+  FILEEXT=${DEPLOYCONF_EXT}
 
   # --------------------------------------------------------------------- 
   # Create ConfigMap PLUGIN
@@ -86,7 +90,7 @@ function doDeployConf()
       if [ "$d" != "" ]; then DATA+=("$d"); fi
     done <${CMFILE}
 
-    # echo "DATA: ${DATA[@]}"
+    #echo "DATA: ${DATA[@]}"
     kubectl delete configmap ${MSROOT} 2> /dev/null
     kubectl create configmap ${MSROOT} "${DATA[@]}"
     if [ "$?" != "0" ]; then
@@ -129,6 +133,32 @@ function doDeployConf()
 }
 
 
+# If dev deploy, then might not have an image to use. test if aws image exists
+# NOTE: only for AWS ECR... other Docker registries will be problematic...
+function doCheckContainersExist()
+{
+  local imageissues=()
+
+  echo "... testing container images exist"
+  if [ "${DEPLOYTYPE}" == "dev" ]; then
+
+    for f in ${RECIPES}; do
+      local img="${WOV_PROJECT}/${WOV_PROJECT}${f}"
+      local tag="${WOV_STAGE}_${WOV_PVER}"
+
+      # test if image exists
+      aws ecr list-images --repository-name ${img} --filter=tagStatus=TAGGED | jq '.imageIds[].imageTag' | grep "${tag}" > /dev/null
+      if [ "$?" != "0" ]; then
+        echo "***WARNING*** : image '${img}:${tag}' does not exist in AWS ECR! This will fail to load pod."
+        imgissues+=( $f )
+      fi
+    done
+
+    if [ "${#imgissues}" != "0" ]; then echo "" ; echo "  run: 'wov-build-containers ${imgissues[*]}'"; echo ""; fi
+  fi
+}
+
+
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
 function doDeployK8s()
@@ -138,15 +168,20 @@ function doDeployK8s()
   if [ $DOECHO -ge 1 ]; then echo "... deploying Kubernetes"; fi
   if [ $DOECHO -ge 2 ]; then echo "  ... from ${DEPLOYDIR}/k8s"; fi
 
+  # If $# is not empty, then this is called with recipes, so convert those to files
   if [ "$#" != "0" ]; then
-    K8SFILES=( $* )
+    FILES=()
+    local RECIPES=$*
+    for r in "${RECIPES[@]}"; do
+      FILES+=( "${WOV_PROJECT}$r" )
+    done
   else
-    K8SFILES=( $(cd ${DEPLOYDIR}/k8s/ && ls * | sed -e 's/\(.*\)\..*/\1/') )
+    FILES=( $(cd ${DEPLOYDIR}/k8s/ && ls *.yaml | sed -e 's/\(.*\)\..*/\1/') )
   fi
 
-  # printf "K8S FILES: ${K8SFILES[*]}"
+  # printf "K8S FILES: ${FILES[*]}\n"
 
-  for f in "${K8SFILES[@]}"; do
+  for f in "${FILES[@]}"; do
     if [ ! -e ${DEPLOYDIR}/k8s/$f.yaml ]; then
       printf "ERROR: unknown k8s file '$f.yaml'.\n"
 
@@ -195,6 +230,8 @@ files : all by default, or type them here and do individual only
  Deploy Options:
   --pver|--sver X : sets the Project and Secret version for roll-backs
   -f : force push
+  --vh : build vh (default)
+  --VH : no build VH
 
  Utility:
   --conf-only : Only push configuration files (ConfigMaps and Secrets)
@@ -244,44 +281,59 @@ function doDeployDev()
   rm ${WOV_BASEDIR}/wovtools/cache/conf/se/* 2> /dev/null || true
 
 
-  # Capture current wovmod, so can put back later
-  local CURWOVMOD=$(wov-mod --get-on)
+  # Move to side current secrets, so can put back later
+  #local CURWOVMOD=$(wov-mod --get-on)
+  mv ${WOV_BASEDIR}/wovtools/cache/secrets/current.json ${WOV_BASEDIR}/wovtools/cache/secrets/current.json.$$
+  touch ${WOV_BASEDIR}/wovtools/cache/secrets/current.json
 
-  # Build standard config files
+  # Build standard conf files
+  echo "... build conf files"
   {
     wov-mod -q --off ALL
     if [ "$?" != "0" ]; then exit 1; fi
-    wov-build-conf --skip-push
+    wov-build-conf -q --skip-push $*
     if [ "$?" != "0" ]; then exit 1; fi
   }
 
   # Build vh config files
-  {
+  echo "... build 'vh' conf files"
+  if [ "$BUILDVH" == "1" ]; then
     wov-mod -q --on vh
     if [ "$?" != "0" ]; then
       echo "ERROR: no entry for vh. set that up in wovtools/config.json."
     fi
-    wov-build-conf --skip-push --allow-stagemods --conf-ext vh
+    wov-build-conf -q --skip-push --allow-stagemods --conf-ext vh $*
     if [ "$?" != "0" ]; then exit 1; fi
-  }
+  fi
 
   # Return wov-mod status
-  wov-mod -q --off ALL ${CURWOVMODS}
+  echo "... return env to previous state"
+  #wov-mod -q --off ALL ${CURWOVMODS}
+  mv ${WOV_BASEDIR}/wovtools/cache/secrets/current.json.$$ ${WOV_BASEDIR}/wovtools/cache/secrets/current.json
 
   DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache
 
   # Depploy to cluster, the relevant K8s "stuff"
   if [ "${CONFONLY}" == "1" ]; then
-    doDeployConf
-    doDeployConf vh
+    doDeployConf $*
+    if [ "$BUILDVH" == "1" ]; then
+      DEPLOYCONF_EXT=vh
+      doDeployConf $*
+      DEPLOYCONF_EXT=
+    fi
   else
-    k8ses=( $* )
     doAddLabels
-    doDeployConf
-    doDeployConf vh
-    doDeployK8s $k8ses
+    doDeployConf $*
+    if [ "$BUILDVH" == "1" ]; then
+      DEPLOYCONF_EXT=vh
+      doDeployConf $*
+      DEPLOYCONF_EXT=
+    fi
+    doDeployK8s $*
     # doCleanUp // no cleanup in devdeploy
   fi
+
+  doCheckContainersExist $*
 }
 
 
@@ -355,12 +407,11 @@ function doDeployStage()
 
   if [ "${DRYRUN}" == "0" ]; then 
     if [ "${CONFONLY}" == "1" ]; then
-      doDeployConf
+      doDeployConf $*
     else
-      k8ses=( $* )
       doAddLabels
-      doDeployConf
-      doDeployK8s $k8ses
+      doDeployConf $*
+      doDeployK8s $*
       doCleanUp
     fi
   fi
@@ -398,6 +449,17 @@ while [[ $1 =~ ^- ]]; do
     CONFONLY=1
 
 
+  elif [ "$1" == "--vh" ]; then
+    shift
+    BUILDVH=1
+  elif [ "$1" == "--VH" ]; then
+    shift
+    BUILDVH=0
+
+
+
+
+
   elif [ "$1" == "--dev" ]; then
     shift
     DEPLOYTYPE=dev
@@ -429,6 +491,11 @@ while [[ $1 =~ ^- ]]; do
   fi
 done
 
+if [ "$#*" != "0" ]; then
+  printf " microservice recipes: $*\n"
+else
+  printf " microservice recipes: ALL\n"
+fi
 
 if [ "${DEPLOYTYPE}" == "" ]; then
   echo ""
