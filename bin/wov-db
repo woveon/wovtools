@@ -2,17 +2,22 @@
 
 THISCMD=$(basename $0)
 
+wov-build -e
 
 # ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
 wovvargs=( "$@" )
 set ""
-. wov-env -c
+. <(wov-env -c --exports)
 . wov-ns-check
 set -- "${wovvargs[@]}"
 
-wov-build -e
+
+#echo "WOV_apidb_instanceAvailabilityZone: ${WOV_apidb_instanceAvailabilityZone}"
+#echo "WOV_apidb_instanceAvailabilityZoneAlt: ${WOV_apidb_instanceAvailabilityZoneAlt}"
+
+
 
 DIDCOMMAND=0
 RETVAL=0
@@ -369,7 +374,8 @@ function doCreateDBServer()
     --db-subnet-group-name ${DBSNGR1} \
     --vpc-security-group-ids  ${WOVDB_LAST_SGID} \
     --availability-zone ${CL_REGION}${WOVDB_AVAILZONE} \
-    --storage-type gp2
+    --storage-type gp2 \
+    --storage-encrypted
 
   doInitDB
 }
@@ -505,12 +511,14 @@ function doDryRun()
 
 function doGetSchemaDB()
 {
+  set -x
   HOSTADDR=$(resName DNS ${WOVDB_DBNAME})
   kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${WOV_apidb_password} pg_dump \
       -s \
       -h ${HOSTADDR}  \
       -U ${WOV_apidb_username} \
       -d ${WOV_apidb_database}"
+  set +x
 }
 
 
@@ -711,7 +719,7 @@ while [[ $1 =~ ^- ]]; do
     shift
     WOVDB_DBNAME=$1
     # TODO: here, when set DB, should take all WOV_apidb and put as WOVDB_* variables so it is not specific to apidb!
-    eval $(wov-env --env ${WOVDB_DBNAME}.ck8s --env ${WOVDB_DBNAME}.sk8s)
+    #eval $(wov-env --env ${WOVDB_DBNAME}.ck8s --env ${WOVDB_DBNAME}.sk8s)
     WOVDB_AVAILZONE=${WOV_apidb_instanceAvailabilityZone}
     WOVDB_AVAILZONEALT=${WOV_apidb_instanceAvailabilityZoneAlt}
     WOVDB_ROLLTARGET=${WOV_PVER}

@@ -187,6 +187,23 @@ function doGetOnMods()
 }
 
 
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doTestMod()
+{
+  RET="0"
+  R=`jq -r '(.stagemods[] | select(.status == "on") | select(.name == "'"$1"'" ) | .name )' ${WOV_BASEDIR}/wovtools/config.json `
+  RR=$?
+  if [ "$RR" != "0" ]; then
+    printf "\n\nERROR: failed testing '$1'.\n\n"
+    exit 1
+  fi
+  if [ "$R" != "" ]; then
+    RET="1"
+  fi
+  echo $RET
+}
+
 
 # ---------------------------------------------------------------------
 # Handle Params
@@ -217,6 +234,18 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--get-on" ]; then
     shift
     doGetOnMods
+    shift
+
+  elif [ "$1" == "--test" ] || [ "$1" == "-t" ]; then
+    shift
+    R=`doTestMod $1`
+    echo $R
+    shift
+
+  elif [ "$1" == "--test-throw" ] || [ "$1" == "-tt" ]; then
+    shift
+    R=`doTestMod $1`
+    if [ "$R" == "0" ]; then exit 1; fi
     shift
 
   elif [ "$1" == "-l" ]; then

@@ -19,7 +19,9 @@ function fDisplayOptions()
 
 usage: `basename $0` [options]
 
-Manages an ssh connection to a bastion host for the Kubernetes cluster. When an ssh connection is open, it allows the ssh tunnel to internal AWS resources and the K8s cluster. Make sure the .ssh/config env is set. See wov-bastion command.
+Manages an ssh connection to a bastion host for the Kubernetes cluster.
+
+When an ssh connection is open, it allows the ssh tunnel to internal AWS resources and the K8s cluster. Make sure the .ssh/config env is set. See wov-bastion command.
 
   -q/--quiet      : quiet
   -v/--verbose    : verbose
@@ -38,10 +40,10 @@ function doDisconnect()
   CL=$(wov-env --var WOV_CLUSTER)
   PP=$(ps | \grep "[s]sh ${CL}-bastion" | awk '{print $1}')
   if [[ "$PP" == "" ]]; then
-    printf "\nERROR: no known connection.\n\n"
+    printf "\nWARNING: no existing connections to disconnect. Continuing...\n\n"
   else
     kill $PP
-    if [[ "$?" == "0" ]]; then echo "  ... success"; fi
+    if [[ "$?" == "0" ]]; then echo "  ... disconnected existing connection"; fi
   fi
 
 }

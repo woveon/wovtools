@@ -299,6 +299,10 @@ function doPrintVarsENVS()
   cat ${WOV_SECRETFILE} |
     jq  -r 'walk( if type == "object" then with_entries(select( .key | test("STAGE.+") or test("//*") | not)) else . end) | [leaf_paths as $path | {"key": $path | join("_"), "value": getpath($path)}] | from_entries | keys[] as $k | "WOV_\($k)=" + @sh "\(.[$k])" '
 
+  if [ "${CL_REGION}" != "" ]; then echo "CL_REGION='${CL_REGION}'"; fi
+  if [ "${CL_ZONES}"  != "" ]; then echo "CL_ZONES='${CL_ZONES}'"; fi
+  if [ "${CL_VPC}"    != "" ]; then echo "CL_VPC='${CL_VPC}'"; fi
+
   HAS_BUILDENV=1
 }
 
@@ -313,6 +317,10 @@ function doPrintVarsEXPORTS()
 
   cat ${WOV_SECRETFILE} |
     jq  -r 'walk( if type == "object" then with_entries(select( .key | test("STAGE.+") or test("//*") | not)) else . end) | [leaf_paths as $path | {"key": $path | join("_"), "value": getpath($path)}] | from_entries | keys[] as $k | "export WOV_\($k)=" + @sh "\(.[$k])" '
+
+  if [ "${CL_REGION}" != "" ]; then echo "export CL_REGION='${CL_REGION}'"; fi
+  if [ "${CL_ZONES}"  != "" ]; then echo "export CL_ZONES='${CL_ZONES}'"; fi
+  if [ "${CL_VPC}"    != "" ]; then echo "export CL_VPC='${CL_VPC}'"; fi
 
   HAS_BUILDENV=1
 }
@@ -335,6 +343,8 @@ function doPrintVarsEXPORTS()
 #    doEnv $c
 #  done
 #}
+
+#NOTE: never called
 function doLoadExports()
 {
   CONFS=( $(cd ${WOV_BASEDIR}/wovtools/cache/conf/ && ls *.ck8s *.sk8s 2> /dev/null) )
@@ -430,27 +440,44 @@ function fConfGeneration()
 {
 
   local R=
+
   # Read in envs
   if [ "${HAS_BUILDENV}" != "1" ]; then . <(doPrintVarsEXPORTS); fi
 
   # Get echo env vars, checking multiple locations
   if [ -e "${WOV_BASEDIR}/${1}/src/${1}config.js" ]; then
     local MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.js"
-    if [ "$2" == "cm" ]; then   R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ) ; 
-    elif [ "$2" == "se" ]; then R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") ) ; fi
+    if [ "$2" == "cm" ]; then 
+      R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ) 
+      RR=$?
+    elif [ "$2" == "se" ]; then
+      R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") )
+      RR=$?
+    fi
+    if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code."; exit 1 ; fi
 
   elif [ -e "${WOV_BASEDIR}/src/${1}config.js" ]; then
     local MSCFILE="${WOV_BASEDIR}/src/${1}config.js"
-    if [ "$2" == "cm" ]; then   R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ) ; 
-    elif [ "$2" == "se" ]; then R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") ) ; fi
+    if [ "$2" == "cm" ]; then
+      R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ) 
+      RR=$?
+    elif [ "$2" == "se" ]; then 
+      R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") ) 
+      RR=$?
+    fi
+    if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code."; exit 1 ; fi
 
   elif [ -e "${WOV_BASEDIR}/${1}/src/${1}config.sh" ]; then
     local MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.sh"
     R=( $(${MSCFILE} $2) )
+    RR=$?
+    if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code."; exit 1 ; fi
 
   elif [ -e "${WOV_BASEDIR}/src/${1}config.sh" ]; then
     local MSCFILE="${WOV_BASEDIR}/src/${1}config.sh"
     R=( $(${MSCFILE} $2) )
+    RR=$?
+    if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code."; exit 1 ; fi
 
   else
     (>&2 printf "\nERROR: could not find '${1}config.js'. Should be in ./src or ./${1}/src.\n\n")

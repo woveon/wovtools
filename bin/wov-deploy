@@ -58,9 +58,10 @@ function doDeployConf()
 {
   RECIPES=( "$@" )
   if [ "${#RECIPES[@]}" == "0" ]; then
-    RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+    RECIPES=( $(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null) )
+    RECIPES+=( "" )
   fi
-#  echo "RECIPES: ${RECIPES[@]}"
+  echo "RECIPES: ${RECIPES[@]}"
 
   # Files for Configmap file
   CMDIR=${WOV_BASEDIR}/wovtools/cache/conf/cm
@@ -77,10 +78,16 @@ function doDeployConf()
 
   # Read files from directory (note the appended FILEEXT)
   #CMFILES=( $(cd ${CMDIR} && ls 2> /dev/null) )
-  for f in ${RECIPES}; do
+  for f in "${RECIPES[@]}"; do
 
     local MSROOT=${WOV_PROJECT}${f}${FILEEXT}
     local CMFILE="${CMDIR}/${MSROOT}"          # full path to file
+
+    # delete existing configmap
+    kubectl delete configmap ${MSROOT} 2> /dev/null
+
+    # if no configmap file, continue on
+    if [ ! -e "${CMFILE}" ]; then continue; fi
 
     # Convert X=Y into ConfigMap commands in DATA
     DATA=()
@@ -91,7 +98,6 @@ function doDeployConf()
     done <${CMFILE}
 
     #echo "DATA: ${DATA[@]}"
-    kubectl delete configmap ${MSROOT} 2> /dev/null
     kubectl create configmap ${MSROOT} "${DATA[@]}"
     if [ "$?" != "0" ]; then
       printf "\nERROR: failed creating ConfigMap $f from '${CMFILE}'.\n"
@@ -105,10 +111,16 @@ function doDeployConf()
 
   # Read files from directory (note the appended FILEEXT)
   #SEFILES=( $(cd ${SEDIR} && ls 2> /dev/null) )
-  for f in ${RECIPES}; do
+  for f in "${RECIPES[@]}"; do
 
     local MSROOT=${WOV_PROJECT}${f}${FILEEXT}
     local SEFILE="${SEDIR}/${MSROOT}"          # full path to file
+
+    # delete existing secret
+    kubectl delete secret ${MSROOT} 2> /dev/null
+
+    # if no secret file, continue on
+    if [ ! -e "${SEFILE}" ]; then continue; fi
 
     # Convert X=Y into Secret commands in DATA
     DATA=()
@@ -118,7 +130,6 @@ function doDeployConf()
       if [ "$d" != "" ]; then DATA+=("$d"); fi
     done <${SEFILE}
 
-    kubectl delete secret ${MSROOT} 2> /dev/null
     kubectl create secret generic ${MSROOT} "${DATA[@]}"
     if [ "$?" != "0" ]; then
       printf "\nERROR: failed creating Secret $MSROOT from '${SEFILE}'.\n"
@@ -291,7 +302,7 @@ function doDeployDev()
   {
     wov-mod -q --off ALL
     if [ "$?" != "0" ]; then exit 1; fi
-    wov-build-conf -q --skip-push $*
+    wov-build-conf -q --skip-push --nogitchecks $*
     if [ "$?" != "0" ]; then exit 1; fi
   }
 
@@ -302,8 +313,51 @@ function doDeployDev()
     if [ "$?" != "0" ]; then
       echo "ERROR: no entry for vh. set that up in wovtools/config.json."
     fi
-    wov-build-conf -q --skip-push --allow-stagemods --conf-ext vh $*
+
+    # create the blank compoound files ( ex. {WOV_PROJECT}vh )
+    VHcmFILE="${WOV_BASEDIR}/wovtools/cache/conf/cm/${WOV_PROJECT}vh"
+    echo -n "" > ${VHcmFILE}
+    chmod 600 ${VHcmFILE}
+    VHseFILE="${WOV_BASEDIR}/wovtools/cache/conf/se/${WOV_PROJECT}vh"
+    echo -n "" > ${VHseFILE}
+    chmod 600 ${VHseFILE}
+
+    # create individual files (or maybe just one compound)
+    wov-build-conf -q --skip-push --allow-stagemods --nogitchecks --conf-ext "vh" $*
     if [ "$?" != "0" ]; then exit 1; fi
+
+    # merge all cm files into one, so can be loaded as one file in vh
+    VHcmFILES=$(cd ${WOV_BASEDIR}/wovtools/cache/conf/cm ; find * -maxdepth 0 -type f | \grep 'vh$')
+    for f in ${VHcmFILES}; do
+      if [ "$f" == "${WOV_PROJECT}vh" ]; then continue; fi   # skip compound file
+      echo "  ... append file ${f} into ${VHcmFILE}"
+      cat ${WOV_BASEDIR}/wovtools/cache/conf/cm/${f} >> ${VHcmFILE}
+    done
+
+    # sort and uniq the file to remove duplicates
+    rm ${VHcmFILE}.1 >& /dev/null || true
+    touch ${VHcmFILE}.1
+    chmod 600 ${VHcmFILE}.1
+    sort ${VHcmFILE} | uniq >> ${VHcmFILE}.1
+    rm ${VHcmFILE}
+    mv ${VHcmFILE}.1 ${VHcmFILE}
+
+    # merge all those into one, so can be loaded as one file in vh
+    VHseFILES=$(cd ${WOV_BASEDIR}/wovtools/cache/conf/se ; find * -maxdepth 0 -type f | \grep 'vh$')
+    for f in ${VHseFILES}; do
+      if [ "$f" == "${WOV_PROJECT}vh" ]; then continue; fi   # skip compound file
+      echo "  ... append file ${f} into ${VHseFILE}"
+      cat ${WOV_BASEDIR}/wovtools/cache/conf/se/${f} >> ${VHseFILE}
+    done
+
+    # sort and uniq the file to remove duplicates
+    rm ${VHseFILE}.1 >& /dev/null || true
+    touch ${VHseFILE}.1
+    chmod 600 ${VHseFILE}.1
+    sort ${VHseFILE} | uniq >> ${VHseFILE}.1
+    rm ${VHseFILE}
+    mv ${VHseFILE}.1 ${VHseFILE}
+
   fi
 
   # Return wov-mod status
@@ -333,9 +387,64 @@ function doDeployDev()
     # doCleanUp // no cleanup in devdeploy
   fi
 
+  doPatchDeployments $*
+
   doCheckContainersExist $*
 }
 
+function join_by { local IFS="$1"; shift; echo "$*"; }
+
+# Patch deployemnts to point to STAGE_dev. each deployment overwrites this, so call each time to keep
+function doPatchDeployments()
+{
+  if [ ${WOV_STAGE} == 'prod' ]; then
+    printf "\n\n\nERROR: patching straight into production is not allowed. Do a 'wov-push' and then a 'wov-deploy --stage'.\n\n"
+    exit 1
+  fi
+
+  local DEPS=( "$@" )
+  if [ "${#DEPS[@]}" == "0" ]; then
+    DEPS=( $(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null) )
+    # DEPS+=( "" )
+  fi
+  #local DEPS=( `kubectl get --no-headers=true deployments | awk '{print $1}'` )
+  echo "DEPS: '${DEPS[*]}'"
+
+  # for each Deployment, patch it
+  for c in "${DEPS[@]}"; do
+
+    local d="${WOV_PROJECT}${c}"
+
+    echo "Deployment: $d, container: $c"
+
+    # get container and remove trailing tag
+    cntr=`kubectl get deployment $d -o json | jq -r '.spec.template.spec.containers[0].image'`
+    cntr_bits=(${cntr//:/ })
+    #echo "${cntr_bits[@]}"
+    unset 'cntr_bits[${#cntr_bits[@]}-1]'
+    #echo "${cntr_bits[@]}"
+    cntr1=`join_by : ${cntr_bits}`
+    #echo "  cntr1: ${cntr1}"
+    cntr2="${cntr1}:${WOV_STAGE}_dev"
+    #echo "  cntr2: ${cntr2}"
+
+    # patch for ${STAGE}_dev containers for deployment
+    local patchport="{ \"spec\" : { \"template\" : { \"spec\" : { \"containers\" : [{ \"name\" : \"$d\", \"image\" : \"${cntr2}\"}]}}}}"
+    #printf "    ${patchport}\n"
+    kubectl patch deployment $d -p "$patchport"
+    A=$?
+    if [[ $A == 0 ]]; then
+      printf "  ... patch success\n"
+      RETVAL=0
+    elif [[ $A == 1 ]]; then
+      printf "  ... not patched\n"
+      RETVAL=0
+    else
+      printf "  ... patch failed (error code $A)\n"
+      RETVAL=1
+  fi
+  done
+}
 
 # ---------------------------------------------------------------------
 # Proper roll to stage call
@@ -478,6 +587,11 @@ while [[ $1 =~ ^- ]]; do
     WOV_SVER="$1"
     shift
 
+  elif [ "$1" == "-p" ] || [ "$1" == "--patch" ]; then
+    shift
+    DEPLOYTYPE=patch
+    #doPatchDeployments
+
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
     exit 0
@@ -500,15 +614,18 @@ fi
 if [ "${DEPLOYTYPE}" == "" ]; then
   echo ""
   echo "***ERROR deploy needs to specify incremental or full"
-  echo "  --dev   : just deploy current dev environment (non-production)"
-  echo "  --stage : deploy versioned system"
+  echo "  --dev   [...] : just deploy current dev environment (non-production)"
+  echo "  --stage [...] :  deploy versioned system"
+  echo "  --patch [...] : patch deployments to point to the STAGE_dev container (--dev does for its own deployments)"
   echo ""
 
 elif [ "${DEPLOYTYPE}" == "dev" ]; then
   doDeployDev $*
 
+elif [ "${DEPLOYTYPE}" == "patch" ]; then
+  doPatchDeployments $*
+
 elif [ "${DEPLOYTYPE}" == "stage" ]; then
   doDeployStage $*
-
 fi
 

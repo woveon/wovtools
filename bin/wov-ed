@@ -30,7 +30,9 @@ function fDisplayOptions()
 
 usage: `basename $0` [options] resource/file 
 
-Opens an editor to edit the project's WovTools src or compiled resource file. Exact path not required.
+Opens an editor to edit the project's WovTools src or compiled resource file. 
+
+Exact path not required.
 NOTE: this will test for '.wov' extension if needed.
 
   ex. `basename $0` -s conf/a.ck8s

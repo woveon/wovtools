@@ -26,8 +26,7 @@ Builds the environment information of a WovTools distribution. Specifically, the
   -e : build the environment files (-s assumed)
   --clean : cleans the cache
 
-Stage Modifiers:
-Developing locally requires port forwarding to the cluster, but also changes to configuration so that your code connects to local ports an hosts, as opposed to what it would try in the cluster. 
+
 
 EOF
 }
@@ -80,10 +79,11 @@ function fBuildSecret()
 
   # create dir, file, and remove prying eyes...
   mkdir -p ${SECRET_CACHE_DIR}
+  echo "" > ${SECRETFILE}
   chmod 600 ${SECRETFILE}
 
   # start with abbreviated versions of "basic config"
-  cat > ${SECRETFILE} <<EOF
+  cat >> ${SECRETFILE} <<EOF
 {
   "CONTEXT"  : "${K8S_CONTEXT}",
   "CLUSTER"  : "${WOV_CLUSTER}",
@@ -128,6 +128,8 @@ EOF
   # STEP 0: merge files in order
   for sf in ${SECRETFILES[*]}; do
     if [ "$DOECHO" == "2" ]; then echo "  ... adding secret file $sf"; fi
+    echo "" > ${SECRETFILE}.1
+    chmod 600 ${SECRETFILE}.1
     jq -s ".[0] * .[1]" ${SECRETFILE} ${WOV_BASEDIR}/wovtools/secrets/$sf >> ${SECRETFILE}.1
     mv ${SECRETFILE}.1 ${SECRETFILE}
   done
@@ -153,6 +155,8 @@ EOF
       #echo "rt: ${rtfrom} -> ${rtto}"
 
       # rewrite routes in SECRETFILE, remove original graft, then move back to SECREFILE for next mod
+      echo "" > ${SECRETFILE}.1
+      chmod 600 ${SECRETFILE}.1
       jq '.'"${rtto}"' += .'"${rtfrom}"'' ${SECRETFILE} >> ${SECRETFILE}.1
       # TODO: remove original graft
 
@@ -164,7 +168,9 @@ EOF
   # STEP 2: STAGE Select
   # - concat child attributes into parent that are prefixed by STAGEx, where x is your stage
   # cat ${SECRETFILE}
-  wov_stage-select ${SECRETFILE} STAGE${WOV_STAGE} > ${SECRETFILE}.1
+  echo "" > ${SECRETFILE}.1
+  chmod 600 ${SECRETFILE}.1
+  wov_stage-select ${SECRETFILE} STAGE${WOV_STAGE} >> ${SECRETFILE}.1
   mv ${SECRETFILE}.1  ${SECRETFILE}
 
   # Is secret different from last run?
@@ -221,6 +227,10 @@ function _fCleanCache()
 # --------------------------------------------------------------------- 
 function fBuildEnv()
 {
+  wov-build-conf
+
+  return
+
   if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
 
   mkdir -p ${WOV_BASEDIR}/wovtools/cache/conf
@@ -244,41 +254,39 @@ function fBuildEnv()
 }
 
 
-# --------------------------------------------------------------------- 
-# build all .wov files 
-#   from ${WOV_BASEDIR}/wovtools/$1 
-#     to ${WOV_BASEDIR}/wovtools/cache/$2
-# --------------------------------------------------------------------- 
-fBuildEnvDir()
-{
-
-  mkdir -p ${WOV_BASEDIR}/wovtools/cache/$2
-  DEST=${WOV_BASEDIR}/wovtools/cache/$2/${f%.wov}
-
-  # Find src files to compile
-  WOVFILES=$(cd ${WOV_BASEDIR}/wovtools/$1; ls *.wov 2> /dev/null)
-  if [ "${WOVFILES}" == "" ]; then echo "  ... no files found in wovtools/$1/*.wov."; fi
-
-  # Compile them
-  for f in ${WOVFILES}; do
-
-    SRC=${WOV_BASEDIR}/wovtools/$1/${f}
-    DEST=${WOV_BASEDIR}/wovtools/cache/$2/${f%.wov}
-    USESECRET=$3
-
-    # check if need to compile
-    if [ "${SRC}" -nt "${DEST}" ] || [ "$SECRETDIFF" == "1" ]; then
-      if [ "$DOECHO" == "2" ] || [ "$DOECHO" == "2" ]; then echo "  ... build ${SRC}"; fi
-      #echo " --- `basename ${DEST}` needs to be built"
-#      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
-      wov-compile ${USESECRET} ${SRC} > ${DEST}
-    else
-      if [ "$DOECHO" == "2" ]; then echo "  ... skipping ${SRC}"; fi
-    fi
-  done
-
-
-}
+## --------------------------------------------------------------------- 
+## build all .wov files 
+##   from ${WOV_BASEDIR}/wovtools/$1 
+##     to ${WOV_BASEDIR}/wovtools/cache/$2
+## --------------------------------------------------------------------- 
+#fBuildEnvDir()
+#{
+#
+#  mkdir -p ${WOV_BASEDIR}/wovtools/cache/$2
+#  DEST=${WOV_BASEDIR}/wovtools/cache/$2/${f%.wov}
+#
+#  # Find src files to compile
+#  WOVFILES=$(cd ${WOV_BASEDIR}/wovtools/$1; ls *.wov 2> /dev/null)
+#  if [ "${WOVFILES}" == "" ]; then echo "  ... no files found in wovtools/$1/*.wov."; fi
+#
+#  # Compile them
+#  for f in ${WOVFILES}; do
+#
+#    SRC=${WOV_BASEDIR}/wovtools/$1/${f}
+#    DEST=${WOV_BASEDIR}/wovtools/cache/$2/${f%.wov}
+#    USESECRET=$3
+#
+#    # check if need to compile
+#    if [ "${SRC}" -nt "${DEST}" ] || [ "$SECRETDIFF" == "1" ]; then
+#      if [ "$DOECHO" == "2" ] || [ "$DOECHO" == "2" ]; then echo "  ... build ${SRC}"; fi
+#      #echo " --- `basename ${DEST}` needs to be built"
+##      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
+#      wov-compile ${USESECRET} ${SRC} > ${DEST}
+#    else
+#      if [ "$DOECHO" == "2" ]; then echo "  ... skipping ${SRC}"; fi
+#    fi
+#  done
+#}
 
 
 

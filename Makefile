@@ -8,7 +8,7 @@ BINS=wov-env wov-ns-check wov-stage wov-build wov-compile  \
 		 wov-pushcode-check wov-pushcontainer-check wov-pushenv-check wov-build-containers wov-build-conf wov-push-secrets wov-push \
 		 wov-deploy wov-deploy-info wov-hbs wov-db-deploy  wov-deploy-dev \
 		 wov-users wov-cl wov-mod  wov-env-build  wov_stage-select \
-		 $(BINS-UTIL) $(BINS-GLOBAL)
+		 $(BINS-UTIL) $(BINS-GLOBAL) wov-aws wov
 
 .PHONY: vh
 

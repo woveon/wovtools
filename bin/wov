@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+  
+
+DOECHO=1
+FOLD=140
+DIDCOMMAND=0
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` 
+
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# display commands
+# ---------------------------------------------------------------------
+function fDisplayCommands()
+{
+
+  cat <<EOF | fold -w ${FOLD} -s
+
+CONFIG and OPS:
+wov-cd        - Changes directory to the *project* directory. These projects are defined in the wovtools file, found in your HOME directory.
+wov-env       - Export the context as variables for scripts or export specific variables. 
+wov-bastion   - Lookup information about the bastion host
+wov-bastion-connection - Manages an ssh connection to a bastion host for the Kubernetes cluster.
+wov-cmd       - Runs a command found in the cmds directory.
+wov-ed        - Opens an editor to edit the project's WovTools src or compiled resource file.
+wov-git-check - Checks that the git archives on path(s) are committed and pushed to origin.
+wov-ls        - Lists information of the current file space.
+wov-ns        - Display namespace information
+wov-ns-check  - Ensures that the Kubernets namespace and git branch align
+
+DEVLOPMENT:
+wov-build
+wov-build-conf
+wov-build-containers
+wov-compile
+wov-push
+wov-pushcontainer-check
+
+DATABASE:
+wov-db
+wov-db-connect
+wov-db-commit
+wov-db-deploy
+
+VIRTUALCLUSTER:
+wov-vh
+wov-vh-pulldir
+wov-vh-pushgit
+
+CLUSTER:
+wov-cl
+wov-mod
+wov-p
+wov-plog
+wov-pwait
+wov-deploy
+wov-deploy-info
+wov-service
+
+
+
+IGNORE: (will be deleted or under development)
+wov-envg
+wov-hbs
+wov-init - under dev
+wov-portforward
+wov-project
+wov-pshell
+wov-stage
+wov-users
+wov_stage-select
+wovg-dir
+
+
+
+EOF
+}
+
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    DIDCOMMAND=1
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+if [ "$DIDCOMMAND" == "0" ]; then
+  fDisplayCommands
+fi

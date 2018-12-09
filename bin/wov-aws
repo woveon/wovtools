@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+wovawsvargs=( "$@" )
+set ""
+. <(wov-env -c --exports)
+. wov-ns-check
+set -- "${wovawsvargs[@]}"
+DOECHO=1
+FOLD=$(tput cols)
+EXIT=1
+
+
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [command]
+
+  volume-
+    describe
+    id
+    create
+    ensure
+  
+EOF
+
+}
+
+function doVolumeDescribe() 
+{
+  local VOLNAME=$1
+  aws ec2 describe-volumes --filter Name="tag:Name",Values=\"${VOLNAME}\" | jq '.Volumes[0]' -r
+}
+
+function doVolumeID() 
+{
+  local VOLNAME=$1
+  aws ec2 describe-volumes --filter Name="tag:Name",Values=\"${VOLNAME}\" | jq '.Volumes[0].VolumeId' -r
+}
+
+function doVolumeCheck() 
+{
+  local VOLNAME=$1
+  R=$(aws ec2 describe-volumes --filter Name="tag:Name",Values=\"${VOLNAME}\" | jq '.Volumes[0].VolumeId' -r )
+  RET=$?
+  if [ "${RET}" != "0" ]; then 
+    printf "\n\nERROR: ${R}.\n\n" >&2
+    return ${RET};
+  elif [ "${R}" == "null" ]; then 
+    return 1
+  else
+    return 0
+  fi
+}
+
+function doVolumeCreate()
+{
+  set -x
+  local CL_ZONES_ARRAY=($CL_ZONES)
+  local VOLNAME=$1
+  local VOLSIZE=$2
+  local RES=`aws ec2 create-volume --size ${VOLSIZE} --region ${CL_REGION} \
+    --availability-zone ${CL_REGION}${CL_ZONES_ARRAY[0]} --volume-type gp2 \
+    --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=${VOLNAME}}]" | jq ".VolumeId" -r`
+  RET=$?
+  echo "Create: $RES"
+  set +x
+  return $RET
+}
+
+function doVolumeEnsure() 
+{
+  local VOLNAME=$1
+  local VOLSIZE=$2
+
+  local VOLID=`doVolumeID ${VOLNAME}`
+  local VOLCHECK=$?
+  if [ "${VOLCHECK}" != "0" ]; then 
+    VOLID=`doVolumeCreate ${VOLNAME} ${VOLSIZE}`
+    if [ ${DOECHO} -ge 2 ]; then echo "volume ${VOLNAME} created as ${VOLID}"; fi
+  else 
+    if [ ${DOECHO} -ge 2 ]; then echo "volume ${VOLNAME} exists as ${VOLID}"; fi
+  fi
+
+  echo ${VOLID}
+  return 0
+}
+
+
+
+# ---------------------------------------------------------------------
+# Handle Modifying Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+COMMAND=$1
+shift
+
+if   [ "${COMMAND}" == "volume-id" ]; then
+  doVolumeID       $*
+  EXIT=$?
+elif [ "${COMMAND}" == "volume-describe" ]; then
+  doVolumeDescribe $*
+  EXIT=$?
+elif [ "${COMMAND}" == "volume-check" ]; then
+  doVolumeCheck    $*
+  EXIT=$?
+  printf "\n\nCould not find volume with name '$*'.\n\n" >&2
+elif [ "${COMMAND}" == "volume-create" ]; then
+  doVolumeCreate   $*
+  EXIT=$?
+elif [ "${COMMAND}" == "volume-ensure" ]; then
+  doVolumeEnsure   $*
+  EXIT=$?
+
+else
+  printf "\n\nERROR: unknown command \"${COMMAND}\".\n\n" 1>&2
+fi
+
+
+exit ${EXIT}

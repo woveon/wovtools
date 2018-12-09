@@ -15,6 +15,9 @@ CONFEXT=
 ALLOWSTAGEMODS=0
   # Tests that all stagemods are off (i.e. ensure your local development config is not used in cluster)
 
+NOGITCHECK=0
+  # By default, checks that all code is checked in. Turns off git checks if ALLOWSTAGEMODS is true, or this is true
+
 
 # --------------------------------------------------------------------- 
 # Import Env 
@@ -28,7 +31,6 @@ set ""
 . wov-env
 . wov-ns-check
 set -- "${pushenvargs[@]}"
-
 
 
 
@@ -47,6 +49,8 @@ Generates all the conf files for the project (ConfigMap and Secrets). Then, push
   --skip-push : generate ConfigMap and Secrets, but do not push to Archive
   --conf-ext    : extension to the default conf file (ex. foo/conf/cm/apisocket -> foo/conf/cm/apisocket-vh with --conf-ext '-vh')
 
+  --nogitchecks : turns off the checks for changes to local code
+
   -f : force push
   -h : this help
   -q/-v : quiet/verbose
@@ -54,6 +58,42 @@ Generates all the conf files for the project (ConfigMap and Secrets). Then, push
 EOF
 }
 
+
+# ---------------------------------------------------------------------
+# build all .wov files
+#   from ${WOV_BASEDIR}/wovtools/$1
+#     to ${WOV_BASEDIR}/wovtools/cache/$2
+# ---------------------------------------------------------------------
+fBuildEnvDir()
+{
+
+  mkdir -p ${WOV_BASEDIR}/wovtools/cache/$2
+  DEST=${WOV_BASEDIR}/wovtools/cache/$2/${f%.wov}
+
+  # Find src files to compile
+  WOVFILES=$(cd ${WOV_BASEDIR}/wovtools/$1; ls *.wov 2> /dev/null)
+  if [ "${WOVFILES}" == "" ]; then echo "  ... no files found in wovtools/$1/*.wov."; fi
+
+  # Compile them
+  for f in ${WOVFILES}; do
+
+    SRC=${WOV_BASEDIR}/wovtools/$1/${f}
+    DEST=${WOV_BASEDIR}/wovtools/cache/$2/${f%.wov}
+    USESECRET=$3
+
+    # check if need to compile
+    if [ "${SRC}" -nt "${DEST}" ] || [ "$SECRETDIFF" == "1" ]; then
+      if [ "$DOECHO" == "2" ] || [ "$DOECHO" == "2" ]; then echo "  ... build ${SRC}"; fi
+      #echo " --- `basename ${DEST}` needs to be built"
+#      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
+      wov-compile ${USESECRET} ${SRC} > ${DEST}
+    else
+      if [ "$DOECHO" == "2" ]; then echo "  ... skipping ${SRC}"; fi
+    fi
+  done
+}
+
+fBuildEnvDir k8s k8s SECRETFILE
 
 # ---------------------------------------------------------------------
 # Handle Params
@@ -67,6 +107,10 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-v" ]; then
     shift
     DOECHO=2
+
+  elif [ "$1" == "--nogitchecks" ]; then
+    shift
+    NOGITCHECK=1
 
   elif [ "$1" == "--allow-stagemods" ]; then
     shift
@@ -116,7 +160,7 @@ fi
 
 # Check local code is checked in and pushed. if Allowing stagemods, don't check
 R1=0
-if [ "${ALLOWSTAGEMODS}" != "1" ]; then
+if [ "${ALLOWSTAGEMODS}" == "0" ] && [ "${NOGITCHECK}" == "0" ] ; then
 wov-git-check ${WOV_BASEDIR}
 R1=$?
 fi
@@ -146,6 +190,9 @@ if [ "${#RECIPES[@]}" == "0" ]; then
 fi
 #echo "Recipes: ${RECIPES}"
 
+hasbuiltbase=0
+  # --- ex. {PROJECT}{CONTAINER} is normal, but base would be {PROJECT} ex. plem vs plemov
+
 # Build ConfigMap and Secrets if needed
 for f in ${RECIPES}; do
 
@@ -161,16 +208,46 @@ for f in ${RECIPES}; do
   rm -f ${CMFILE} || true
   touch ${CMFILE}
   chmod 600 ${CMFILE}
-  wov-env --cm ${MICROSERVICE} >> ${CMFILE}
-  if [ "$?" != "0" ]; then exit 1; fi
+  # wov-env --cm ${MICROSERVICE} >> ${CMFILE}
+  # R=$((wov-env --cm ${MICROSERVICE} >> ${CMFILE}) 2>&1)
+  wov-env --cm ${MICROSERVICE} >> ${CMFILE} 2>&1
+  A=$?
+  if [ "$A" != "0" ]; then 
+    rm ${CMFILE}
+    CMFILE=${WOV_BASEDIR}/wovtools/cache/conf/cm/${WOV_PROJECT}${CONFEXT}
+    if [ "$hasbuiltbase" == "0" ]; then
+      echo "  ... using config for ${WOV_PROJECT}, instead of ${MICROSERVICE}"
+      wov-env --cm ${WOV_PROJECT} >> ${CMFILE}
+      A=$?
+      # echo "A is ${A}"
+      # if [ "$?" != "0" ]; then echo $R; exit 1; fi
+      if [ "$A" != "0" ]; then exit 1; fi
+#    else
+      # echo "  ... skipping rebuild of ${WOV_PROJECT}"
+    fi
+  fi
 
   # Create SE file to read in
   SEFILE=${WOV_BASEDIR}/wovtools/cache/conf/se/${MICROSERVICE}${CONFEXT}
   rm -f ${SEFILE} || true
   touch ${SEFILE}
   chmod 600 ${SEFILE}
-  wov-env --se ${MICROSERVICE} >> ${SEFILE}
-  if [ "$?" != "0" ]; then exit 1; fi
+  # wov-env --se ${MICROSERVICE} >> ${SEFILE}
+  R=$((wov-env --se ${MICROSERVICE} >> ${SEFILE}) 2>&1)
+  if [ "$?" != "0" ]; then 
+    rm ${SEFILE}
+    SEFILE=${WOV_BASEDIR}/wovtools/cache/conf/se/${WOV_PROJECT}${CONFEXT}
+    if [ "$hasbuiltbase" == "0" ]; then
+      # echo "  ... using config for ${WOV_PROJECT}, instead of ${MICROSERVICE}"
+      wov-env --se ${WOV_PROJECT} >> ${SEFILE}
+      A=$?
+      # if [ "$?" != "0" ]; then echo $R; exit 1; fi
+      if [ "$A" != "0" ]; then exit 1; fi
+#    else
+      # echo "  ... skipping rebuild of ${WOV_PROJECT}"
+    fi
+    hasbuiltbase=1
+  fi
 
 done
 

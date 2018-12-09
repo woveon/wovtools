@@ -3,3 +3,4 @@
 *.swp
 bin/wov-context.app
 bin/dev
+tests/WovTools_test_tp1

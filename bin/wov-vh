@@ -62,16 +62,31 @@ function doStart()
   DIDCOMMAND=1
   CL_ZONES_ARRAY=($CL_ZONES)
 
-  echo "  ... ensuring a volume in AWS: 'vh-vol-${WOV_PROJECT}-${WOV_STAGE}'"
+  local VOLNAME="vh-vol-${WOV_PROJECT}-${WOV_STAGE}"
+  echo "  ... ensuring a volume in AWS: '${VOLNAME}'"
+  volid=`wov-aws volume-ensure "${VOLNAME}" 20`
+#  volid=`aws ec2 describe-volumes --filter Name="tag:Name",Values=\"vh-vol-${WOV_PROJECT}-${WOV_STAGE}\" | jq '.Volumes[0].VolumeId' -r`
+#  if [ "$volid" == "null" ]; then
+#    volid=`aws ec2 create-volume --size 20 --region ${CL_REGION} --availability-zone ${CL_REGION}${CL_ZONES_ARRAY[0]} --volume-type gp2 \
+#      --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=vh-vol-${WOV_PROJECT}-${WOV_STAGE}}]" | jq ".VolumeId" -r`
+#  fi
+#
+  echo "  ... Volume: ${VOLNAME}, VolumeId: $volid"
 
-  volid=`aws ec2 describe-volumes --filter Name="tag:Name",Values=\"vh-vol-${WOV_PROJECT}-${WOV_STAGE}\" | jq '.Volumes[0].VolumeId' -r`
-
-  if [ "$volid" == "null" ]; then
-    volid=`aws ec2 create-volume --size 20 --region ${CL_REGION} --availability-zone ${CL_REGION}${CL_ZONES_ARRAY[0]} --volume-type gp2 \
-      --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=vh-vol-${WOV_PROJECT}-${WOV_STAGE}}]" | jq ".VolumeId" -r`
+  echo "  ... ensure Configmap and Secrets in AWS: '${WOV_PROJECT}vh'"
+  kubectl get cm      ${WOV_PROJECT}vh &> /dev/null
+  CHECKCM=$?
+  kubectl get secrets ${WOV_PROJECT}vh &> /dev/null
+  CHECKSE=$?
+  if [ "${CHECKCM}" != "0" ]; then echo "FAILED: no Configmap of ${WOV_PROJECT}vh."; fi
+  if [ "${CHECKSE}" != "0" ]; then echo "FAILED: no Secret    of ${WOV_PROJECT}vh."; fi
+  if [ "${CHECKCM}" != "0" ] || [ "${CHECKCM}" != "0" ]; then
+    echo
+    echo "run 'wov-deploy --dev --conf-only' to generate these"
+    echo 
+    exit 1
   fi
 
-  echo "  ... Volume: vh-vol-${WOV_PROJECT}-${WOV_STAGE}, VolumeId: $volid"
 
   # Wait a sec to make sure it is ready
   sleep 1
@@ -204,6 +219,23 @@ function doConfigVol() {
   printf -v CV "%s  - name: secret-volume\n" "$CV"
   printf -v CV "%s    secret:\n" "$CV"
   printf -v CV "%s      secretName: ${WOV_PROJECT}vh\n" "$CV"
+
+#  local RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+#
+#  # add all generated ConfigMap (via wov-build-conf)
+#  for f in ${RECIPES}; do
+#    printf -v CV   "  - name: configmap-volume\n"
+#    printf -v CV "%s    configMap:\n" "$CV"
+#    printf -v CV "%s      name: ${WOV_PROJECT}${f}\n" "$CV"
+#  done
+#
+#  # add all generated Secrets (via wov-build-conf)
+#  for f in ${RECIPES}; do
+#    printf -v CV "%s  - name: secret-volume\n" "$CV"
+#    printf -v CV "%s    secret:\n" "$CV"
+#    printf -v CV "%s      secretName: ${WOV_PROJECT}${f}\n" "$CV"
+#  done
+
   printf "$CV"
 }
 

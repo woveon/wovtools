@@ -2,17 +2,24 @@
 
 DOECHO=1
 FOLD=80
+DIDLIST=0
 
-
-# --------------------------------------------------------------------- 
-# Import Env 
-# --------------------------------------------------------------------- 
 cmdargs=( "$@" )
 set ""
 . wov-build -e
 . wov-env
 . wov-ns-check
 set -- "${cmdargs[@]}"
+CMDDIR=${WOV_BASEDIR}/wovtools/cmds
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doList() 
+{
+  ls ${CMDDIR}
+  DIDLIST=1
+}
 
 # check that stages align, but project does not need to for commands,
 # as this allows running commands in another project withouth changing K8s namespace
@@ -21,6 +28,7 @@ set -- "${cmdargs[@]}"
 #  printf "\n\nERROR: stages do not match.\n\n"
 #  exit 1
 #fi
+
 
 
 # --------------------------------------------------------------------- 
@@ -32,15 +40,15 @@ function fDisplayOptions()
 
 usage: `basename $0` [options]
 
-Runs a command found in the cmds directory. These commands have access to wov-env variables.
+Runs a command found in the cmds directory. 
+
+These commands have access to wov-env variables.
 
   -v|-q : verbose/quiet output
   -h    : this help text
 
 EOF
 }
-
-
 
 # ---------------------------------------------------------------------
 # Handle Params
@@ -56,6 +64,10 @@ while [[ $1 =~ ^- ]]; do
     shift
     DOECHO=2
 
+  elif [ "$1" == "-l" ]; then
+    shift
+    doList
+
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
     exit 0
@@ -69,15 +81,23 @@ while [[ $1 =~ ^- ]]; do
   fi
 done
 
-CMDFILE=${WOV_BASEDIR}/wovtools/cmds/$1
 
-if [ ! -e  ${CMDFILE} ]; then
-  printf "\n\nERROR: no cmd named '$1'.\n" 2>&1
-  exit 1
-elif [ ! -x ${CMDFILE} ]; then
-  printf "\n\nERROR: cmd '$1' not executable (run 'chmod 775 wovtools/cmds/$1').\n" 2>&1
-  exit 1
-else
-  shift
-  ${CMDFILE} $*
+
+
+if [ "$DIDLIST" == "0" ]; then
+
+  CMDFILE=${CMDDIR}/$1
+
+  if [ ! -e  ${CMDFILE} ]; then
+    printf "\n\nERROR: no cmd named '$1'.\n" 2>&1
+    exit 1
+  elif [ ! -x ${CMDFILE} ]; then
+    printf "\n\nERROR: cmd '$1' not executable (run 'chmod 775 ${CMDFILE}').\n" 2>&1
+    exit 1
+  else
+    shift
+    ${CMDFILE} $*
+  fi
+
 fi
+
