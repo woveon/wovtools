@@ -104,13 +104,13 @@ function resName()
     if [ "$1" == "SN" ]; then
       # 3rd params sets availability zone
       if [ "$3" != "" ]; then z=$3; else z=${WOVDB_AVAILZONE}; fi
-      echo "sn-${K8S_CONTEXT}-${2}-${z}"
+      echo "sn-${WOV_CONTEXT}-${2}-${z}"
     elif [ "$1" == "DBSNG" ]; then
-      echo "dbsng-${K8S_CONTEXT}-${2}"
+      echo "dbsng-${WOV_CONTEXT}-${2}"
     elif [ "$1" == "SG" ]; then
-      echo "SG-${K8S_CONTEXT}-${2}"
+      echo "SG-${WOV_CONTEXT}-${2}"
     elif [ "$1" == "DB" ]; then
-      echo "db-${K8S_CONTEXT}-${2}"
+      echo "db-${WOV_CONTEXT}-${2}"
     elif [ "$1" == "DNS" ]; then
       DBNAME=$(resName DB ${2})
       echo $(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.Address' --output text)
@@ -225,7 +225,7 @@ function resCreate()
 
       local R=$(aws rds create-db-subnet-group \
         --db-subnet-group-name ${2} \
-        --db-subnet-group-description "DBSubnet for postgres database ${K8S_CONTEXT}-${2}." \
+        --db-subnet-group-description "DBSubnet for postgres database ${WOV_CONTEXT}-${2}." \
         --subnet-ids ${SNIDS})
       local RR=$?
 #      echo "R=$R" 1>&2

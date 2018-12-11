@@ -3,10 +3,14 @@
 FOLD=$(tput cols)
 DOECHO=1
 HAS_SECRET=0
-HAS_BUILDENV=0
 HAS_CLEAN=0
-SECRETDIFF=1
-DONSIGNORE=0
+HAS_BUILDENV=0
+#DONSIGNORE=0
+DOFORCE=0
+LOCALCONTEXT=
+
+CONFEXT=
+  # see wov-build-conf
 
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
@@ -17,14 +21,17 @@ function fDisplayOptions()
 
 usage: `basename $0` [options]
 
-Builds the environment information of a WovTools distribution. Specifically, the environment variables and K8s ConfigMap and Secrets.
+Builds WovTool configurations for secrets (-s) and clusters (-c) (K8s, ConfigMap and Secrets). By default, clusters are any 'on' secrets mods, the 'localcontext' (in the wovtools/local.json file) and current context from CLUSTER and STAGE settings.
 
-  -q : quiet
-  -v : verbose
-  -l : use local variables in build
-  -s : build the secret file
-  -e : build the environment files (-s assumed)
-  --clean : cleans the cache
+
+  -q             : quiet
+  -v             : verbose
+  --clean        : cleans the cache
+  -f/--force     : force build of secrets and cluster
+
+  -s/--secrets X : build secrets for cluster X
+  -c/--cluster X : build the secret and Kubernetes files for cluster X
+  --local        : build local secrets
 
 
 
@@ -40,52 +47,95 @@ if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fDisplayOptions; exit 0; fi
 buildargs=( "$@" )
 set ""
 . wov-env
-#. wov-ns-check
 set -- "${buildargs[@]}"
 
 
 # --------------------------------------------------------------------- 
 # vars
 # --------------------------------------------------------------------- 
-SECRET_CACHE_DIR=${WOV_BASEDIR}/wovtools/cache/secrets
-SECRETFILE=${SECRET_CACHE_DIR}/current.json
-SECRETFILELAST=${SECRET_CACHE_DIR}/last.json
-SECRETMODFILE=
-SECRETMODFILELAST=
+SECRET_CACHE_DIR=${WOV_BASEDIR}/wovtools/cache
+SECRETSFILE_RAW=${WOV_BASEDIR}/wovtools/config.json
+SECRETSFILELOCAL_RAW=${WOV_BASEDIR}/wovtools/local.json
+SECRETSFILEMERGED_RAW=${SECRET_CACHE_DIR}/.merged.json
 
+#SECRETFILE_BASE=${SECRET_CACHE_DIR}/current
+#SECRETFILELAST_BASE=${SECRET_CACHE_DIR}/last
 
 
 # --------------------------------------------------------------------- 
-# Generates the 
+# Ensure the SECRET_CACHE_DIR exists and is protected and then merge
+# files config.json and local.json together in SECRETSFILEMERGED_RAW 
+# if they have changed.
 # --------------------------------------------------------------------- 
-function fBuildSecret()
+mkdir -p ${SECRET_CACHE_DIR}
+chmod -R 700 ${SECRET_CACHE_DIR}
+if [ ${SECRETSFILE_RAW} -nt ${SECRETSFILEMERGED_RAW} ] || [ ${SECRETSFILELOCAL_RAW} -nt ${SECRETSFILEMERGED_RAW} ]; then
+  echo "... merged file out of date, creating: ${SECRETSFILEMERGED_RAW}"
+  echo "" > ${SECRETSFILEMERGED_RAW}
+  chmod 600 ${SECRETSFILEMERGED_RAW}
+  jq -s ".[0] * .[1]" ${SECRETSFILE_RAW} ${SECRETSFILELOCAL_RAW} >> ${SECRETSFILEMERGED_RAW}
+fi
+
+
+# --------------------------------------------------------------------- 
+# Creates the local context secrets.json file
+# --------------------------------------------------------------------- 
+function fBuildLocalSecrets()
 {
+  retreiveLocalContextCluster
+  fBuildSecrets $LOCALCONTEXT
+}
 
+
+# --------------------------------------------------------------------- 
+# Store the local context cluster (from merged raw file) in $LOCALCONTEXT
+# --------------------------------------------------------------------- 
+function retreiveLocalContextCluster()
+{ if [ "${LOCALCONTEXT}" == "" ]; then LOCALCONTEXT=`jq -r ".localcontext" ${SECRETSFILEMERGED_RAW}`; fi }
+
+
+# --------------------------------------------------------------------- 
+# Generates the secrets for a cluster
+#  wovtools/cache/secrets/current_X.json
+# --------------------------------------------------------------------- 
+function fBuildSecrets()
+{
+  local MV=cp
+#  local MV=mv
+  local CLUSTER=$1
+  if [ "$CLUSTER" == "" ]; then printf "\n\nERROR: no CLUSTER defined for building secret.\n\n"; exit 1; fi
+
+  local CLUSTER_DIR="${SECRET_CACHE_DIR}/clusters/${CLUSTER}"
+  mkdir -p ${CLUSTER_DIR}
+  chmod -R 700 ${CLUSTER_DIR}
+
+  local SECRETFILE="${CLUSTER_DIR}/secrets.json"
+  local SECRETFILELAST="${CLUSTER_DIR}/.last.json"
+
+  if [ "$DOECHO" == "2" ]; then echo "CLUSTER=${CLUSTER}"; fi
+  if [ "$DOECHO" == "2" ]; then echo "SECRETFILE=${SECRETFILE}"; fi
+
+  # Read the source secrets files from SECRETSFILEMERGED_RAW , to 
+  # generate the SECRETFILE for the CLUSTER.
   # ---------------------------------------------------------------------
-  # Read config for SECRETFILES
-  # ---------------------------------------------------------------------
-  local SECRETFILES=( $(jq -r ".secrets.${WOV_STAGE}[] " ${WOV_BASEDIR}/wovtools/config.json 2> /dev/null) )
-  if [ "$?" != "0" ]; then
-    printf "\n\nERROR: no entry for stage '${WOV_STAGE}' in config.json file '.secrets'.\n"
+  local SRCSECRETFILES=( $(jq -r ".secrets.${WOV_STAGE}[] " ${SECRETSFILEMERGED_RAW} 2> /dev/null) )
+  if [ "$?" != "0" ] || [ "${#SRCSECRETFILES}" == "0" ]; then
+    printf "\n\nERROR: either no entry or no files for stage '${WOV_STAGE}' in config.json file '.secrets'.\n"
     printf "  - You probably just need to create an entry, similar to the other stages.\n\n"
     exit 1
   fi
-  # echo "SECRETFILES=${SECRETFILES[*]}"
 
 
+  # ---------------------------------------------------------------------
   # Build secret file
   # ---------------------------------------------------------------------
-  if [ "$DOECHO" == "2" ]; then echo "SECRETFILE=${SECRETFILE}"; fi
-
-  # create dir, file, and remove prying eyes...
-  mkdir -p ${SECRET_CACHE_DIR}
   echo "" > ${SECRETFILE}
   chmod 600 ${SECRETFILE}
 
   # start with abbreviated versions of "basic config"
   cat >> ${SECRETFILE} <<EOF
 {
-  "CONTEXT"  : "${K8S_CONTEXT}",
+  "CONTEXT"  : "${WOV_CONTEXT}",
   "CLUSTER"  : "${WOV_CLUSTER}",
   "CLTYPE"   : "${WOV_CLTYPE}",
   "PROVIDER" : "${WOV_PROVIDER}",
@@ -116,8 +166,8 @@ function fBuildSecret()
 }
 EOF
 
-  # Check for source file existence
-  for sf in ${SECRETFILES[*]}; do
+  # STEP 1: Check for source file existence
+  for sf in ${SRCSECRETFILES[*]}; do
     if [ ! -e ${WOV_BASEDIR}/wovtools/secrets/$sf ]; then
       printf "\n\nERROR: file for secret build does not exist: 'wovtools/secrets/$sf'.\n"
       exit 1
@@ -125,26 +175,56 @@ EOF
   done
 
 
-  # STEP 0: merge files in order
-  for sf in ${SECRETFILES[*]}; do
+  # STEP 2: merge src secret files files in order
+  for sf in ${SRCSECRETFILES[*]}; do
     if [ "$DOECHO" == "2" ]; then echo "  ... adding secret file $sf"; fi
-    echo "" > ${SECRETFILE}.1
-    chmod 600 ${SECRETFILE}.1
-    jq -s ".[0] * .[1]" ${SECRETFILE} ${WOV_BASEDIR}/wovtools/secrets/$sf >> ${SECRETFILE}.1
-    mv ${SECRETFILE}.1 ${SECRETFILE}
+    echo "" > ${SECRETFILE}.2
+    chmod 600 ${SECRETFILE}.2
+    jq -s ".[0] * .[1]" ${SECRETFILE} ${WOV_BASEDIR}/wovtools/secrets/$sf >> ${SECRETFILE}.2
+    ${MV} ${SECRETFILE}.2 ${SECRETFILE}
   done
 
 
-  # STEP 1: Grafting
-  # - get mods that are 'on'
-  SMODS=$(jq -r '.stagemods[] | select(.status == "on") | .["name"]' ${WOV_BASEDIR}/wovtools/config.json)
-  #echo "SMODS: ${SMODS}"
-  # for each mod
-  for m in ${SMODS[*]}; do
+  # TODO: move this to -s switch, as it is how we find mods that are on
+#  # - get mods that are 'on'
+#  SMODS=$(jq -r '.stagemods[] | select(.status == "on") | .["name"]' ${SECRETSFILEMERGED_RAW} )
+#  #echo "SMODS: ${SMODS}"
+#  # for each mod
+#  for m in ${SMODS[*]}; do
     #echo "m: $m"
-    # get routes
-    rts=( $(jq -r '.stagemods[] | select(.name == "'"${m}"'") | .routes[] | "\(.[0]) \(.[1])"' ${WOV_BASEDIR}/wovtools/config.json) )
-    # echo "rts: ${#rts[@]} ${rts[@]}"
+#  done
+
+
+  # STEP 3: CLUSTER Select
+  # - concat child attributes into parent that are prefixed by CLUSTERx, where x is your CLUSTER
+  echo "" > ${SECRETFILE}.3
+  chmod 600 ${SECRETFILE}.3
+  if [[ $DOECHO -ge 1 ]]; then   echo "  ... using cluster     : ${WOV_CLUSTER}"; fi
+  wov_stage-select ${SECRETFILE} CLUSTER${WOV_CLUSTER} >> ${SECRETFILE}.3
+  ${MV} ${SECRETFILE}.3  ${SECRETFILE}
+
+
+  # STEP 4: STAGE Select
+  # - concat child attributes into parent that are prefixed by STAGEx, where x is your stage
+  # cat ${SECRETFILE}
+  echo "" > ${SECRETFILE}.4
+  chmod 600 ${SECRETFILE}.4
+  if [[ $DOECHO -ge 1 ]]; then   echo "  ... using stage       : ${WOV_STAGE}"; fi
+  wov_stage-select ${SECRETFILE} STAGE${WOV_STAGE} >> ${SECRETFILE}.4
+  ${MV} ${SECRETFILE}.4  ${SECRETFILE}
+
+
+  # STEP 5: Secrets Mods for a cluster (from wovtools/config.json|local.json), which applies modifications for a cluster to MERGED_RAW data
+  #       : NOTE: also any STAGEME is converted to the WOV_ME variable stage
+  # get routes
+  local clusterentry=`jq -r '.secretsmods.'"${CLUSTER}"  ${SECRETSFILEMERGED_RAW}` 
+  if [ "${clusterentry}" != "null" ]; then
+    if [[ $DOECHO -ge 1 ]]; then echo "  ... using secretsmods : ${CLUSTER}"; fi
+
+    local rts=( $(jq -r '.secretsmods.'"${CLUSTER}"' | .routes[] | "\(.[0]) \(.[1])"' ${SECRETSFILEMERGED_RAW} ) )
+    #echo "rts: ${#rts[@]} ${rts[@]}"
+
+    # NOTE: doing this in order of entries
     while [[ "${#rts[@]}" != "0" ]]; do
       rtfrom=${rts[0]}
       rtto=${rts[1]}
@@ -155,26 +235,33 @@ EOF
       #echo "rt: ${rtfrom} -> ${rtto}"
 
       # rewrite routes in SECRETFILE, remove original graft, then move back to SECREFILE for next mod
-      echo "" > ${SECRETFILE}.1
-      chmod 600 ${SECRETFILE}.1
-      jq '.'"${rtto}"' += .'"${rtfrom}"'' ${SECRETFILE} >> ${SECRETFILE}.1
+      echo "" > ${SECRETFILE}.5
+      chmod 600 ${SECRETFILE}.5
+      jq '.'"${rtto}"' += .'"${rtfrom}"'' ${SECRETFILE} >> ${SECRETFILE}.5
       # TODO: remove original graft
 
       # mv file
-      mv ${SECRETFILE}.1 ${SECRETFILE}
+      ${MV} ${SECRETFILE}.5 ${SECRETFILE}
     done
-  done
+  else
+    if [ "$DOECHO" == "2" ]; then echo "  ... no secretsmods entry for cluster: ${CLUSTER}"; fi
+  fi
 
-  # STEP 2: STAGE Select
-  # - concat child attributes into parent that are prefixed by STAGEx, where x is your stage
-  # cat ${SECRETFILE}
-  echo "" > ${SECRETFILE}.1
-  chmod 600 ${SECRETFILE}.1
-  wov_stage-select ${SECRETFILE} STAGE${WOV_STAGE} >> ${SECRETFILE}.1
-  mv ${SECRETFILE}.1  ${SECRETFILE}
+  # mark as secret being updated
+  HAS_SECRET=1
+
+
+  # Update local context if this was it
+  retreiveLocalContextCluster
+  if [ "${LOCALCONTEXT}" == "${CLUSTER}" ]; then
+    if [ "$DOECHO" == "2" ]; then echo "  ... updating local context"; fi
+    mkdir -p     "${SECRET_CACHE_DIR}/clusters/local"
+    chmod -R 700 "${SECRET_CACHE_DIR}/clusters/local"
+    cp "${SECRET_CACHE_DIR}/clusters/${LOCALCONTEXT}/secrets.json" "${SECRET_CACHE_DIR}/clusters/local/secrets.json" 
+  fi
 
   # Is secret different from last run?
-  # By default, is 1
+  local SECRETDIFF=1
   if [ -e "${SECRETFILELAST}" ]; then
     if [ "`diff ${SECRETFILE} ${SECRETFILELAST} && echo $?`" == "0" ]; then
       SECRETDIFF=0
@@ -182,16 +269,14 @@ EOF
     fi
   fi
 
-
-  # mark as secret being updated
-  HAS_SECRET=1
-
-  if [ "$DOECHO" == "2" ]; then
-    echo "... SECRETDIFF=${SECRETDIFF}";
-  elif [ "$DOECHO" == "1" ] && [ "$SECRETDIFF" == "1" ]; then
-    echo "... secret needs to be (re)built."
+  if [ "$DOECHO" == "2" ] && [[ $SECRETDIFF -gt 0 ]]; then
+    echo "... (re)build secrets for '${CLUSTER}'."
   fi
 
+  # Update secret since it was used
+  cp ${SECRETFILE} ${SECRETFILELAST}
+
+  return ${SECRETDIFF}
 }
 
 
@@ -201,15 +286,7 @@ EOF
 function fCleanCacheAll() 
 {
   HAS_CLEAN=1
-  _fCleanCache "conf" "k8s" "secret"
-}
-function fCleanK8SConf()
-{
-  _fCleanCache "k8s"
-}
-function fCleanCacheConf()
-{
-  _fCleanCache "conf"
+  _fCleanCache "clusters" "secrets"
 }
 function _fCleanCache() 
 {
@@ -222,71 +299,168 @@ function _fCleanCache()
 }
 
 
-
-# --------------------------------------------------------------------- 
-# --------------------------------------------------------------------- 
-function fBuildEnv()
+# ---------------------------------------------------------------------
+# build all .wov files in a directory
+#   from ${WOV_BASEDIR}/wovtools/{ks8|cm|se}
+#     to ${WOV_BASEDIR}/wovtools/cache/clusters/$1/X
+#  $2 - 1 if secrets have changed
+# ---------------------------------------------------------------------
+fBuildClusterDir()
 {
-  wov-build-conf
-
-  return
-
-  if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
-
-  mkdir -p ${WOV_BASEDIR}/wovtools/cache/conf
-  mkdir -p ${WOV_BASEDIR}/wovtools/cache/k8s
-  chmod 700 ${WOV_BASEDIR}/wovtools/cache
+  # printf "\nfBuildClusterDir\n\n\n"
+  local CLUSTER=$1
+  if [ "$CLUSTER" == "" ]; then printf "\n\nERROR: no CLUSTER defined for building secret.\n\n"; exit 1; fi
+  local CLUSTER_DIR="${SECRET_CACHE_DIR}/clusters/${1}"
+  local SECRETFILE="${CLUSTER_DIR}/secrets.json"
+  local SECRETFILELAST="${CLUSTER_DIR}/.last.json"
 
 
-  # build conf (and if stagemod, do that as well)
-  #fCleanCacheConf
-  #fBuildEnvDir conf conf ${SECRETFILE}
+  # ---------------------------------------------------------------------
+  # Clear out old files
+  # ---------------------------------------------------------------------
+  #_fCleanCache "clusters/${CLUSTER}/k8s" "clusters/${CLUSTER}/se" "clusters/${CLUSTER}/cm"
 
-  # build k8s (no stagemod (will I regret this?... dunno))
-  fCleanK8SConf
-  fBuildEnvDir k8s k8s ${SECRETFILE}
+
+  # ---------------------------------------------------------------------
+  # K8s files, compile
+  # ---------------------------------------------------------------------
+  mkdir -p  "${CLUSTER_DIR}/k8s"
+  chmod 700 "${CLUSTER_DIR}/k8s"
+
+  # Find k8s files to compile
+  WOVFILES=$(cd ${WOV_BASEDIR}/wovtools/k8s; ls *.wov 2> /dev/null)
+  if [ "${WOVFILES}" == "" ]; then echo "  ... no files found in wovtools/k8s/*.wov."; fi
+
+  # Compile them if needed
+  for f in ${WOVFILES}; do
+
+    # file versions 
+    SRC=${WOV_BASEDIR}/wovtools/k8s/${f}
+    DEST=${CLUSTER_DIR}/k8s/${f%.wov}
+
+    # check if we need to compile
+    # ------------------------
+    local dowecompile=${DOFORCE}
+    if [ "$2" == "1" ]; then dowecompile=1;                         # secrets changed?
+    elif [ ! -e "${DEST}" ]; then dowecompile=1;                     # no dest file
+    elif [ "${SRC}" -nt "${DEST}" ]; then dowecompile=1;             # src has changed after dest
+    # elif [ "${SECRETFILE}" -nt "${DEST}" ]; then dowecompile=1;    # secrets have changed after dest
+    fi
+
+    # compile dir if needed
+    if [[ ${dowecompile} -eq 1 ]]; then
+      if [ "$DOECHO" == "2" ] || [ "$DOECHO" == "2" ]; then echo "  ... build ${SRC}"; fi
+      #echo " --- `basename ${DEST}` needs to be built"
+#      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
+      wov-compile ${SECRETFILE} ${SRC} > ${DEST}
+    else
+      if [ "$DOECHO" == "2" ]; then echo "  ... skipping ${SRC}"; fi
+    fi
+
+  done
+
+
+  # ---------------------------------------------------------------------
+  # cm/se : build K8s ConfigMap and Secrets
+  # ---------------------------------------------------------------------
+  # Each container recipe is for a microservice
+  local RECIPES=( )   # here, specify 
+  if [ "${#RECIPES[@]}" == "0" ]; then
+    RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+  fi
+  # echo "Container Recipes: ${RECIPES}"
+
+  # ensure directories
+  mkdir -p  "${CLUSTER_DIR}/cm"
+  mkdir -p  "${CLUSTER_DIR}/se"
+  chmod 700 "${CLUSTER_DIR}/cm"
+  chmod 700 "${CLUSTER_DIR}/se"
+
+  local hasbuiltbasecm=0
+  local hasbuiltbasese=0
+  # --- ex. {PROJECT}{CONTAINER} is normal, but base would be {PROJECT} ex. plem vs plemov
+
+  # Build ConfigMap and Secrets if needed
+  for f in ${RECIPES}; do
+
+    local CONTAINERNAME=$f
+    local MICROSERVICE=${WOV_PROJECT}${CONTAINERNAME}
+    if [ $DOECHO -ge 2 ]; then echo "... build ConfigMap and Secret for '${MICROSERVICE}${CONFEXT}'."; fi
+
+    # Create CM file to read in
+    local CMFILE1=${CLUSTER_DIR}/cm/${MICROSERVICE}${CONFEXT}
+    local CMFILE2=${CLUSTER_DIR}/cm/${WOV_PROJECT}${CONFEXT}
+
+    # Check if we need to compile K8s ConfigMap
+    local dowecompile=${DOFORCE}
+    if [ "$2" == "1" ]; then dowecompile=1;                                  # secrets changed?
+    elif [ ! -e "${CMFILE1}" ] && [ ! -e "${CMFILE2}" ] ; then dowecompile=1; # no CMFILE file
+    fi
+
+    # Compile K8s ConfigMap file
+    if [ "${dowecompile}" == "1" ]; then 
+      local CMFILE="${CMFILE1}"
+      rm -f ${CMFILE} || true
+      touch ${CMFILE}
+      chmod 600 ${CMFILE}
+      wov-env --cm ${MICROSERVICE} >> ${CMFILE} 2>&1
+      if [ "$?" != "0" ]; then
+        rm ${CMFILE}
+        CMFILE="${CMFILE2}"
+        if [ "$hasbuiltbasecm" == "0" ]; then
+          if [[ $DOECHO -ge 2 ]]; then echo "  ... using config for ${WOV_PROJECT}, instead of ${MICROSERVICE}"; fi
+          wov-env --cm ${WOV_PROJECT} >> ${CMFILE}
+          if [ "$?" != "0" ]; then exit 1; fi
+          hasbuiltbasecm=1
+          if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${CMFILE}."; fi
+        fi
+      else
+        if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${CMFILE}."; fi
+      fi
+    else
+      if [ "${DOECHO}" == "2" ]; then echo "  ... skipped K8s ConfigMap file."; fi
+    fi
+
+    # Create SE file to read in
+    local SEFILE1=${CLUSTER_DIR}/se/${MICROSERVICE}${CONFEXT}
+    local SEFILE2=${CLUSTER_DIR}/se/${WOV_PROJECT}${CONFEXT}
+
+    # Check if we need to compile K8s Secrets
+    local dowecompile=${DOFORCE}
+    if [ "$2" == "1" ]; then dowecompile=1;                                  # secrets changed?
+    elif [ ! -e "${SEFILE1}" ] && [ ! -e "${SEFILE2}" ] ; then dowecompile=1; # no SEFILE file
+    fi
+
+    # Compile K8s Secrets file
+    if [ "${dowecompile}" == "1" ]; then
+      local SEFILE="${SEFILE1}"
+      rm -f ${SEFILE} || true
+      touch ${SEFILE}
+      chmod 600 ${SEFILE}
+      wov-env --se ${MICROSERVICE} >> ${SEFILE} 2>&1
+      if [ "$?" != "0" ]; then
+        rm ${SEFILE}
+        SEFILE="${SEFILE2}"
+        if [ "$hasbuiltbasese" == "0" ]; then
+          wov-env --se ${WOV_PROJECT} >> ${SEFILE}
+          if [ "$?" != "0" ]; then exit 1; fi
+          hasbuiltbasese=1
+          if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${SEFILE}."; fi
+        fi
+      else
+        if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${SEFILE}."; fi
+      fi
+    else
+      if [ "${DOECHO}" == "2" ]; then echo "  ... skipped K8s Secret file."; fi
+    fi
+
+  done
+
 
   # mark as done
   HAS_BUILDENV=1
 
-  # Update secret since it was used
-  cp ${SECRETFILE} ${SECRETFILELAST}
 }
-
-
-## --------------------------------------------------------------------- 
-## build all .wov files 
-##   from ${WOV_BASEDIR}/wovtools/$1 
-##     to ${WOV_BASEDIR}/wovtools/cache/$2
-## --------------------------------------------------------------------- 
-#fBuildEnvDir()
-#{
-#
-#  mkdir -p ${WOV_BASEDIR}/wovtools/cache/$2
-#  DEST=${WOV_BASEDIR}/wovtools/cache/$2/${f%.wov}
-#
-#  # Find src files to compile
-#  WOVFILES=$(cd ${WOV_BASEDIR}/wovtools/$1; ls *.wov 2> /dev/null)
-#  if [ "${WOVFILES}" == "" ]; then echo "  ... no files found in wovtools/$1/*.wov."; fi
-#
-#  # Compile them
-#  for f in ${WOVFILES}; do
-#
-#    SRC=${WOV_BASEDIR}/wovtools/$1/${f}
-#    DEST=${WOV_BASEDIR}/wovtools/cache/$2/${f%.wov}
-#    USESECRET=$3
-#
-#    # check if need to compile
-#    if [ "${SRC}" -nt "${DEST}" ] || [ "$SECRETDIFF" == "1" ]; then
-#      if [ "$DOECHO" == "2" ] || [ "$DOECHO" == "2" ]; then echo "  ... build ${SRC}"; fi
-#      #echo " --- `basename ${DEST}` needs to be built"
-##      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
-#      wov-compile ${USESECRET} ${SRC} > ${DEST}
-#    else
-#      if [ "$DOECHO" == "2" ]; then echo "  ... skipping ${SRC}"; fi
-#    fi
-#  done
-#}
 
 
 
@@ -300,37 +474,57 @@ while [[ $1 =~ ^- ]]; do
     shift
     DOECHO=0
 
-  elif [ "$1" == "-i" ]; then
-    shift
-    DONSIGNORE=1
+#  elif [ "$1" == "-i" ]; then
+#    shift
+#    DONSIGNORE=1
 
   elif [ "$1" == "-v" ]; then
     shift
     DOECHO=2
 
-  elif [ "$1" == "-s" ]; then
+  elif [ "$1" == "--local" ]; then
     shift
-    if [ "$DONSIGNORE" == "0" ]; then
-      buildargs=( "$@" )
-      set ""
-      . wov-ns-check
-      set -- "${buildargs[@]}"
-    fi
-    fBuildSecret
+    fBuildLocalSecrets
 
-  elif [ "$1" == "-e" ]; then
+  elif [ "$1" == "-s" ] || [ "$1" == "--secrets" ]; then
     shift
-    if [ "$DONSIGNORE" == "0" ]; then
-      buildargs=( "$@" )
-      set ""
-      . wov-ns-check
-      set -- "${buildargs[@]}"
-    fi
-    fBuildEnv
+    fBuildSecrets $1
+    shift
+
+  elif [ "$1" == "-c" ] || [ "$1" == "--cluster" ]; then
+    shift
+    fBuildSecrets $1
+    SECRETDIFF=$?
+    fBuildClusterDir $1 ${SECRETDIFF}
+    shift
+
+#  elif [ "$1" == "-s" ] || [ "$1" == "--secrets" ]; then
+#    echo "IMPLEMENT THIS: do multiple calls to fBuildSecrets X and fBuildClusterDir X"
+#    exit 1
+#    shift
+#    if [ "$DONSIGNORE" == "0" ]; then
+#      buildargs=( "$@" )
+#      set ""
+#      . wov-ns-check
+#      set -- "${buildargs[@]}"
+#    fi
+#    fBuildSecrets
+
+
+#  elif [ "$1" == "-k" ]; then
+#    echo "IMPLEMENT THIS: do multiple calls to fBuildSecrets X and fBuildClusterDir X"
+#    exit 1
+#    shift
+#    fBuildClusterDir $1
+#    shift
 
   elif [ "$1" == "--clean" ]; then
     shift
-    _fCleanCacheAll
+    fCleanCacheAll
+
+  elif [ "$1" == "-f" ] || [ "$1" == "--force" ]; then
+    shift
+    DOFORCE=1
 
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
@@ -346,7 +540,7 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
-if [ ${HAS_SECRET} -eq 0 ] && [ ${HAS_BUILDENV} -eq 0 ] && [ ${HAS_CLEAN} -eq 0 ]; then
+if [[ ${HAS_SECRET} -eq 0 ]] && [[ ${HAS_BUILDENV} -eq 0 ]] && [[ ${HAS_CLEAN} -eq 0 ]]; then
   echo
   echo "ERROR: no command passed."
   echo

@@ -63,7 +63,7 @@ cat <<EOF
 
 - wov-pshell --------------------------------------------------------- 
  Pod: '$SERVICE' 
-  ... in context '$K8S_CONTEXT'
+  ... in context '$WOV_CONTEXT'
   ... in namespace '$NAMESPACE'
 --------------------------------------------------------------------- 
 

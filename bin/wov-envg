@@ -25,7 +25,7 @@ function fConvertRegionCodeAWS()
 
 # --------------------------------------------------------------------- 
 function doEcho() {
-  printf "K8S_CONTEXT=${K8S_CONTEXT}\n"
+  printf "WOV_CONTEXT=${WOV_CONTEXT}\n"
   printf "WOV_KSTAGE=${WOV_KSTAGE}\n"
   printf "WOV_KPROJECT=${WOV_KPROJECT}\n"
   printf "WOV_NS=${WOV_NS}\n"
@@ -41,10 +41,10 @@ function doEcho() {
 }
 
 # K8S
-export K8S_CONTEXT=$(kubectl config current-context)
+export WOV_CONTEXT=$(kubectl config current-context)
 OLDIFS=$IFS
 IFS='-'
-array=( $K8S_CONTEXT )
+array=( $WOV_CONTEXT )
 IFS=$OLDIFS
 export WOV_KSTAGE=${array[5]}
 export WOV_KPROJECT=${array[4]}
