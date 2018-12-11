@@ -100,8 +100,8 @@ function retreiveLocalContextCluster()
 # --------------------------------------------------------------------- 
 function fBuildSecrets()
 {
-  local MV=cp
-#  local MV=mv
+  # local MV=cp
+  local MV=mv
   local CLUSTER=$1
   if [ "$CLUSTER" == "" ]; then printf "\n\nERROR: no CLUSTER defined for building secret.\n\n"; exit 1; fi
 
@@ -217,11 +217,11 @@ EOF
   # STEP 5: Secrets Mods for a cluster (from wovtools/config.json|local.json), which applies modifications for a cluster to MERGED_RAW data
   #       : NOTE: also any STAGEME is converted to the WOV_ME variable stage
   # get routes
-  local clusterentry=`jq -r '.secretsmods.'"${CLUSTER}"  ${SECRETSFILEMERGED_RAW}` 
+  local clusterentry=`jq -r '.secretsmods.'"${CLUSTER}"  ${SECRETSFILEMERGED_RAW} 2> /dev/null` 
   if [ "${clusterentry}" != "null" ]; then
     if [[ $DOECHO -ge 1 ]]; then echo "  ... using secretsmods : ${CLUSTER}"; fi
 
-    local rts=( $(jq -r '.secretsmods.'"${CLUSTER}"' | .routes[] | "\(.[0]) \(.[1])"' ${SECRETSFILEMERGED_RAW} ) )
+    local rts=( $(jq -r '.secretsmods.'"${CLUSTER}"' | .routes[] | "\(.[0]) \(.[1])"' ${SECRETSFILEMERGED_RAW} 2> /dev/null ) )
     #echo "rts: ${#rts[@]} ${rts[@]}"
 
     # NOTE: doing this in order of entries
