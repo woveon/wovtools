@@ -10,11 +10,11 @@ DOFORCE=0
 LOCALCONTEXT=
 
 CONFEXT=
-  # see wov-build-conf
+  # see wov-push-k8s
 
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
-function fDisplayOptions()
+function fWovEnvBuildDisplayOptions()
 {
   cat <<EOF | fold -w ${FOLD} -s
 
@@ -37,7 +37,7 @@ Builds WovTool configurations for secrets (-s) and clusters (-c) (K8s, ConfigMap
 
 EOF
 }
-if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fDisplayOptions; exit 0; fi
+if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fWovEnvBuildDisplayOptions; exit 0; fi
 
 
 
@@ -51,30 +51,30 @@ set -- "${buildargs[@]}"
 
 
 # --------------------------------------------------------------------- 
-# vars
+# vars - NOTE: moved to wov-env
 # --------------------------------------------------------------------- 
-SECRET_CACHE_DIR=${WOV_BASEDIR}/wovtools/cache
-SECRETSFILE_RAW=${WOV_BASEDIR}/wovtools/config.json
-SECRETSFILELOCAL_RAW=${WOV_BASEDIR}/wovtools/local.json
-SECRETSFILEMERGED_RAW=${SECRET_CACHE_DIR}/.merged.json
+#WOV_CACHEDIR=${WOV_BASEDIR}/wovtools/cache
+#SECRETSFILE_RAW=${WOV_BASEDIR}/wovtools/config.json
+#SECRETSFILELOCAL_RAW=${WOV_BASEDIR}/wovtools/local.json
+#SECRETSFILEMERGED_RAW=${WOV_CACHEDIR}/.merged.json
 
-#SECRETFILE_BASE=${SECRET_CACHE_DIR}/current
-#SECRETFILELAST_BASE=${SECRET_CACHE_DIR}/last
+#SECRETFILE_BASE=${WOV_CACHEDIR}/current
+#SECRETFILELAST_BASE=${WOV_CACHEDIR}/last
 
 
 # --------------------------------------------------------------------- 
-# Ensure the SECRET_CACHE_DIR exists and is protected and then merge
+# Ensure the WOV_CACHEDIR exists and is protected and then merge
 # files config.json and local.json together in SECRETSFILEMERGED_RAW 
 # if they have changed.
 # --------------------------------------------------------------------- 
-mkdir -p ${SECRET_CACHE_DIR}
-chmod -R 700 ${SECRET_CACHE_DIR}
-if [ ${SECRETSFILE_RAW} -nt ${SECRETSFILEMERGED_RAW} ] || [ ${SECRETSFILELOCAL_RAW} -nt ${SECRETSFILEMERGED_RAW} ]; then
-  echo "... merged file out of date, creating: ${SECRETSFILEMERGED_RAW}"
-  echo "" > ${SECRETSFILEMERGED_RAW}
-  chmod 600 ${SECRETSFILEMERGED_RAW}
-  jq -s ".[0] * .[1]" ${SECRETSFILE_RAW} ${SECRETSFILELOCAL_RAW} >> ${SECRETSFILEMERGED_RAW}
-fi
+#mkdir -p ${WOV_CACHEDIR}
+#chmod -R 700 ${WOV_CACHEDIR}
+#if [ ${SECRETSFILE_RAW} -nt ${SECRETSFILEMERGED_RAW} ] || [ ${SECRETSFILELOCAL_RAW} -nt ${SECRETSFILEMERGED_RAW} ]; then
+#  echo "... merged file out of date, creating: ${SECRETSFILEMERGED_RAW}"
+#  echo "" > ${SECRETSFILEMERGED_RAW}
+#  chmod 600 ${SECRETSFILEMERGED_RAW}
+#  jq -s ".[0] * .[1]" ${SECRETSFILE_RAW} ${SECRETSFILELOCAL_RAW} >> ${SECRETSFILEMERGED_RAW}
+#fi
 
 
 # --------------------------------------------------------------------- 
@@ -91,7 +91,7 @@ function fBuildLocalSecrets()
 # Store the local context cluster (from merged raw file) in $LOCALCONTEXT
 # --------------------------------------------------------------------- 
 function retreiveLocalContextCluster()
-{ if [ "${LOCALCONTEXT}" == "" ]; then LOCALCONTEXT=`jq -r ".localcontext" ${SECRETSFILEMERGED_RAW}`; fi }
+{ if [ "${LOCALCONTEXT}" == "" ]; then LOCALCONTEXT=`jq -r ".localcontext" ${WOV_FILE_SECRETSMERGED}`; fi }
 
 
 # --------------------------------------------------------------------- 
@@ -105,7 +105,7 @@ function fBuildSecrets()
   local CLUSTER=$1
   if [ "$CLUSTER" == "" ]; then printf "\n\nERROR: no CLUSTER defined for building secret.\n\n"; exit 1; fi
 
-  local CLUSTER_DIR="${SECRET_CACHE_DIR}/clusters/${CLUSTER}"
+  local CLUSTER_DIR="${WOV_CACHEDIR}/clusters/${CLUSTER}"
   mkdir -p ${CLUSTER_DIR}
   chmod -R 700 ${CLUSTER_DIR}
 
@@ -115,10 +115,10 @@ function fBuildSecrets()
   if [ "$DOECHO" == "2" ]; then echo "CLUSTER=${CLUSTER}"; fi
   if [ "$DOECHO" == "2" ]; then echo "SECRETFILE=${SECRETFILE}"; fi
 
-  # Read the source secrets files from SECRETSFILEMERGED_RAW , to 
+  # Read the source secrets files from WOV_FILE_SECRETSMERGED , to 
   # generate the SECRETFILE for the CLUSTER.
   # ---------------------------------------------------------------------
-  local SRCSECRETFILES=( $(jq -r ".secrets.${WOV_STAGE}[] " ${SECRETSFILEMERGED_RAW} 2> /dev/null) )
+  local SRCSECRETFILES=( $(jq -r ".secrets.${WOV_STAGE}[] " ${WOV_FILE_SECRETSMERGED} 2> /dev/null) )
   if [ "$?" != "0" ] || [ "${#SRCSECRETFILES}" == "0" ]; then
     printf "\n\nERROR: either no entry or no files for stage '${WOV_STAGE}' in config.json file '.secrets'.\n"
     printf "  - You probably just need to create an entry, similar to the other stages.\n\n"
@@ -187,7 +187,7 @@ EOF
 
   # TODO: move this to -s switch, as it is how we find mods that are on
 #  # - get mods that are 'on'
-#  SMODS=$(jq -r '.stagemods[] | select(.status == "on") | .["name"]' ${SECRETSFILEMERGED_RAW} )
+#  SMODS=$(jq -r '.stagemods[] | select(.status == "on") | .["name"]' ${WOV_FILE_SECRETSMERGED} )
 #  #echo "SMODS: ${SMODS}"
 #  # for each mod
 #  for m in ${SMODS[*]}; do
@@ -217,11 +217,11 @@ EOF
   # STEP 5: Secrets Mods for a cluster (from wovtools/config.json|local.json), which applies modifications for a cluster to MERGED_RAW data
   #       : NOTE: also any STAGEME is converted to the WOV_ME variable stage
   # get routes
-  local clusterentry=`jq -r '.secretsmods.'"${CLUSTER}"  ${SECRETSFILEMERGED_RAW} 2> /dev/null` 
+  local clusterentry=`jq -r '.secretsmods.'"${CLUSTER}"  ${WOV_FILE_SECRETSMERGED} 2> /dev/null` 
   if [ "${clusterentry}" != "null" ]; then
     if [[ $DOECHO -ge 1 ]]; then echo "  ... using secretsmods : ${CLUSTER}"; fi
 
-    local rts=( $(jq -r '.secretsmods.'"${CLUSTER}"' | .routes[] | "\(.[0]) \(.[1])"' ${SECRETSFILEMERGED_RAW} 2> /dev/null ) )
+    local rts=( $(jq -r '.secretsmods.'"${CLUSTER}"' | .routes[] | "\(.[0]) \(.[1])"' ${WOV_FILE_SECRETSMERGED} 2> /dev/null ) )
     #echo "rts: ${#rts[@]} ${rts[@]}"
 
     # NOTE: doing this in order of entries
@@ -255,9 +255,9 @@ EOF
   retreiveLocalContextCluster
   if [ "${LOCALCONTEXT}" == "${CLUSTER}" ]; then
     if [ "$DOECHO" == "2" ]; then echo "  ... updating local context"; fi
-    mkdir -p     "${SECRET_CACHE_DIR}/clusters/local"
-    chmod -R 700 "${SECRET_CACHE_DIR}/clusters/local"
-    cp "${SECRET_CACHE_DIR}/clusters/${LOCALCONTEXT}/secrets.json" "${SECRET_CACHE_DIR}/clusters/local/secrets.json" 
+    mkdir -p     "${WOV_CACHEDIR}/clusters/local"
+    chmod -R 700 "${WOV_CACHEDIR}/clusters/local"
+    cp "${WOV_CACHEDIR}/clusters/${LOCALCONTEXT}/secrets.json" "${WOV_CACHEDIR}/clusters/local/secrets.json" 
   fi
 
   # Is secret different from last run?
@@ -310,7 +310,7 @@ fBuildClusterDir()
   # printf "\nfBuildClusterDir\n\n\n"
   local CLUSTER=$1
   if [ "$CLUSTER" == "" ]; then printf "\n\nERROR: no CLUSTER defined for building secret.\n\n"; exit 1; fi
-  local CLUSTER_DIR="${SECRET_CACHE_DIR}/clusters/${1}"
+  local CLUSTER_DIR="${WOV_CACHEDIR}/clusters/${1}"
   local SECRETFILE="${CLUSTER_DIR}/secrets.json"
   local SECRETFILELAST="${CLUSTER_DIR}/.last.json"
 
@@ -527,14 +527,14 @@ while [[ $1 =~ ^- ]]; do
     DOFORCE=1
 
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-    fDisplayOptions
+    fWovEnvBuildDisplayOptions
     exit 0
 
   else
     echo
     echo "***ERROR: unknown option '$1'."
     echo
-    fDisplayOptions
+    fWovEnvBuildDisplayOptions
     exit 1
   fi
 done
@@ -544,6 +544,6 @@ if [[ ${HAS_SECRET} -eq 0 ]] && [[ ${HAS_BUILDENV} -eq 0 ]] && [[ ${HAS_CLEAN} -
   echo
   echo "ERROR: no command passed."
   echo
-  fDisplayOptions
+  fWovEnvBuildDisplayOptions
   exit 1
 fi

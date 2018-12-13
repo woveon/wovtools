@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 
 
-set -x
-
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
-wov-build -e
+wov-env-build -q --local
+if [ "$?" != "0" ]; then
+  exit 1
+fi
+
 pushenvargs=( "$@" )
 set ""
-. wov-env
+. wov-env --provider
 . wov-ns-check
 set -- "${pushenvargs[@]}"
 
@@ -18,6 +20,10 @@ DOECHO=1
 DOFORCE=0
 FOLD=$(tput cols)
 DOACTION="commit"
+SKIPGITCHECKS=0
+
+# For dev and prod, check local code and secrets are checked in and pushed.
+doGitChecksOnFormalStages 1
 
 
 # ---------------------------------------------------------------------
@@ -41,6 +47,7 @@ By default, checks all database delta files that exist.
 
 Switches:
   --checksum
+  --skip-git-checks  : ignores unchecked git changes of secrets and code (dev and prod stages will override this). Does not skip registry checks.
   -pc|--push-check|--any-push-blockage : checks if the database changes are checked in for pver, and ready to push to archive
   -h : this help
   -q/-v : quiet/verbose
@@ -83,7 +90,7 @@ function doGetDBPVER()
   if [ "$?" != "0" ]; then 
     printf "\n\nERROR: failed to find wovtools logs on database server $1.\n\n"; 
     printf "  NOTE: if the datbaseserver is not inited, run:\n"
-    printf "    'wov-db -D ${1} -I'\n\n"   
+    printf "    'wov-db-cloud -D ${1} -I'\n\n"   
   else
     retval=0
     echo ${DB_PVER}
@@ -102,7 +109,7 @@ function doGetDBLastLogEntry()
   if [ "$?" != "0" ]; then 
     printf "\n\nERROR: failed to find wovtools logs on database server $1.\n\n"; 
     printf "  NOTE: if the datbaseserver is not inited, run:\n"
-    printf "    'wov-db -D ${1} -I'\n\n"   
+    printf "    'wov-db-cloud -D ${1} -I'\n\n"   
   else
     retval=0
     echo ${DB_PVER}
@@ -187,6 +194,7 @@ function doPushCheck()
   local chk_1=
   local chk_2=
   local chk_3=
+  local chk_3a=F
   local chk_4=
   local chk_5=
   local retval=0
@@ -199,13 +207,14 @@ function doPushCheck()
   #   - parent comes from registry entry if exists,
   #     or if nothing checked in yet, then db's pver is parent pver, so hash that
   if [ "$retval" == "0" ]; then
+    if [ $DOECHO -ge 1 ]; then printf "... retrieve db hash.\n"; fi
     DB_HASH=$(doHashDBSchema $1)
     echo "db hash: ${DB_HASH}"
     DB_PVER=$(doGetDBPVER $1)
     if [ "$?" != "0" ] || [ "$DB_PVER" == "" ]; then
       printf "\n\nERROR: could not get database version.\n"
-      printf "  - is it inited? 'wov-db -D $1 --is-inited'\n"
-      printf "  - what version? 'wov-db -D $1 --ver' to get version\n"
+      printf "  - is it inited? 'wov-db-cloud -D $1 --is-inited'\n"
+      printf "  - what version? 'wov-db-cloud -D $1 --ver' to get version\n"
       printf "  - is 'vh' pod up and running?\n"
       retval=2
     elif [ ! -e ${WOV_BASEDIR}/wovtools/db/registry/${1}.json ]; then 
@@ -231,7 +240,19 @@ function doPushCheck()
   # 3 - check git of main
   if [ "$retval" == "0" ]; then
     wov-git-check -q ${WOV_BASEDIR}
-    if [ "$?" == "0" ]; then chk_3=F; else chk_3=T; fi
+    if [ $? -ne 0 ]; then
+      if [ $SKIPGITCHECKS -eq 1 ]; then 
+        if [ $DOECHO -ge 2 ]; then echo "WARNING: ignoring unchecked code in main git repo."; fi
+        chk_3=F
+        chk_3a=T
+      else 
+        chk_3=T 
+      fi
+    else
+      chk_3=F
+    fi
+    # if [ $? -eq 1 ] || [ $SKIPGITCHECKS -eq 1 ]; then chk_3=T; else chk_3=F; fi
+    #if [ "$?" == "0" ]; then chk_3=F; else chk_3=T; fi
   fi
 
   # 4 - are there changes in the registry, for this database and pver
@@ -239,7 +260,7 @@ function doPushCheck()
     if [ -e ${WOV_BASEDIR}/wovtools/db/registry/${1}/${WOV_PVER}.deltas ]; then chk_4=T; else chk_4=F; fi
   fi
 
-  # 5 - check git of registry
+  # 5 - check git of registry NOTE: SKIPGITCHECKS does not impact registry
   if [ "$retval" == "0" ]; then
     wov-git-check -q ${WOV_BASEDIR}/wovtools/db/registry
     if [ "$?" == "0" ]; then chk_5=F; else chk_5=T; fi
@@ -254,7 +275,11 @@ function doPushCheck()
     if [ $DOECHO -ge 2 ]; then
       printf "     1 : ${chk_1} - db schema changes\n"
       printf "     2 : ${chk_2} - delta files exist\n"
-      printf "     3 : ${chk_3} - main git repo changes, try: 'git status'\n"
+      if [ "$chk_3a" == "T" ]; then
+        printf "     3 : T - (ignored) main git repo changes, try: 'git status'\n"
+      else
+        printf "     3 : ${chk_3} - main git repo changes, try: 'git status'\n"
+      fi
       printf "     4 : ${chk_4} - registry delta changes for pver\n"
       printf "     5 : ${chk_5} - registry git changes\n"
     fi
@@ -269,13 +294,13 @@ function doPushCheck()
         retval=0
       elif [ "${chk_1}" == "T" ]; then # 4 is false then
         printf "FAILED: if you have db schema changes, you need to have deltas in registry to account.\n"
-        printf "\n  run: 'wov-db-commit -v --any-push-blockage' for more info.\n"
-        printf "\nTo get current schema of database X: 'wov-db -D X --schema'\n"
+        printf "\n  run: 'wov-push-db -v --any-push-blockage' for more info.\n"
+        printf "\nTo get current schema of database X: 'wov-db-cloud -D X --schema'\n"
   #    elif [ "${chk_4}" == "T" ]; then # 1 is false then
   #      printf "FAILED: if you have deltas in registry, you need to have db schema changes to account.\n"
       fi
     else
-      if [ "${chk_2}" == "T" ] ; then printf "BLOCK: you have ${1}.deltas in wovtools/db to commit. Run 'wov-db-commit' to push deltas into registry.\n"; fi
+      if [ "${chk_2}" == "T" ] ; then printf "BLOCK: you have ${1}.deltas in wovtools/db to commit. Run 'wov-push-db' to push deltas into registry.\n"; fi
       if [ "${chk_3}" == "T" ] ; then printf "BLOCK: project has changes to check into git.\n"; fi
       if [ "${chk_5}" == "T" ] ; then printf "BLOCK: wovtools/db/registry has changes to check into git.\n"; fi
     fi
@@ -295,7 +320,7 @@ function doCommit()
   # - this ensure that the code checked in (i.e. pver) is matched to this 
   #   database using that pver.
   R=$(wov-git-check ${WOV_BASEDIR})
-  if [ "$?" != "0" ]; then
+  if [ "$?" != "0" ] && [ $SKIPGITCHECKS -eq 0 ]; then
     printf "\n\nERROR: check in main git repo, then continue with $1.\n"
     exit 1
   fi
@@ -350,7 +375,7 @@ function doCommitDB()
 #  printf "\nDB_ENTRY '${DB_ENTRY}'\n"
   OLDIFS=$IFS
   IFS='|'
-  # CAW - just commented out dbverarray=( $(wov-db -D ${WOVDB_DBNAME} --ver)  )
+  # CAW - just commented out dbverarray=( $(wov-db-cloud -D ${WOVDB_DBNAME} --ver)  )
   DB_ENTRY=( $(echo "${DB_ENTRY[@]}") )
   IFS=$OLDIFS
 #  printf "\nDB_ENTRY '${DB_ENTRY[*]}'\n"
@@ -372,7 +397,7 @@ function doCommitDB()
     appendfile=${WOV_BASEDIR}/wovtools/db/registry/$1/${WOV_PVER}.deltas
     cat <<EOF >> ${appendfile}
 
-# - wov-db-commit -----------------------------------------------------
+# - wov-push-db -------------------------------------------------------
 # pver:${WOV_PVER} 
 # checksum: ${CHKSUM} 
 # date: $(date +%Y-%m-%dT%H:%M:%S%z)
@@ -451,6 +476,10 @@ while [[ $1 =~ ^- ]]; do
     DOACTION="log"
     shift
 
+  elif [ "$1" == "--skip-git-checks" ]; then
+    SKIPGITCHECKS=1
+    shift
+
   elif [ "$1" == "--checksum" ]; then
     shift
     DOACTION="checksum"
@@ -503,14 +532,13 @@ elif [ "$DOACTION" == "log" ]; then
     DBVER=$(doGetDBPVER $i)
     r=${?}
     if [ "$r" != "0" ]; then retval=1; fi
-    set +x
     echo "$i : ${DBVER} : ${CHKSUM} : ${LLE}"
   done
 
 elif [ "$DOACTION" == "checksum" ]; then
 
   DATABASES=( $(doFindDatabases $*) )
-  echo "DATABASES: ${DATABASES[@]}"
+  # echo "DATABASES: ${DATABASES[@]}"
 
   # check each db
   retval=0

@@ -5,9 +5,13 @@
 # ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
+wov-env-build -q --local
+if [ "$?" != "0" ]; then
+  exit 1
+fi
 pushenvargs=( "$@" )
 set ""
-. wov-env -c
+. wov-env --provider
 . wov-ns-check
 set -- "${pushenvargs[@]}"
 
@@ -29,7 +33,7 @@ function fDisplayOptions()
 
 usage: `basename $0` [options]
 
-Runs, tests or kills a local running service for this project. These commands are run in order.
+Runs, tests or kills a service for this Kubernetes context (ex. a database, helm chart, etc). These commands are run in order.
 
   -s service : Sets the name of the service (look for in wovtools/services/SERVICE)
   -r : run the service if test fails 

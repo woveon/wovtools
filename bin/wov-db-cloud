@@ -2,14 +2,14 @@
 
 THISCMD=$(basename $0)
 
-wov-build -e
 
 # ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
 wovvargs=( "$@" )
 set ""
-. <(wov-env -c --exports)
+. wov-env-build -q --local
+. <(wov-env --provider --exports)
 . wov-ns-check
 set -- "${wovvargs[@]}"
 
@@ -40,7 +40,7 @@ function fDisplayOptions()
 
 usage: `basename $0` [options] 
 
-This manages database:
+Manages database cloud resources:
  - resources : subnets (SN), db subnet group (DBSNG), security group (SG), db instance server (DBIS), db config (DBC), dns entry (DNS)
  - push 
  - deploy

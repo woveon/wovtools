@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 
-wov-build --mod local -e
+wov-env-build -q --local
 
 # ---------------------------------------------------------------------
 # Import Env

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-
 DOECHO=1
-FOLD=140
+FOLD=`tput cols`
 DIDCOMMAND=0
 
 
@@ -11,7 +10,7 @@ DIDCOMMAND=0
 # ---------------------------------------------------------------------
 wovvargs=( "$@" )
 set ""
-. wov-env -c
+. wov-env --provider
 . wov-ns-check
 set -- "${wovvargs[@]}"
 
@@ -27,28 +26,36 @@ function fDisplayOptions()
 
 usage: `basename $0` [options] resource/file
 
-Virtual host for development. This is used for database calls and development.
+Virtual host commands for development in a pod in the cluster. This is used for testing networking, database calls, microservice connections and other development. 
+
+  * The drive /usr/src/app is a persistent volume, so place all your code there and it will persist between vh closings. 
+  * Use wov-vh-pushgit and wov-vh-pulldir to move your development environment into and out of the pod.
+  * The vh pod is created with the instructions in wovtools/vh.
 
 NOTE: see the wiki regarding 'service re-routing' for development: https://github.com/woveon/wovtools/wiki/Developing-a-Microservice#service-re-routing.
 
-NOTE: i really need a better name for vh... thinking 'virtual development, but that acronym is 'vd'...
-
+  Pod Controls
+  --------------------------------------------------------------------- 
   -s/--start : start the virtual host
   -S/--stop  : stop the virtual host
-  -l ... : login (alias for wov-pshell vh), with following commands run on login
+  -l ...     : login (alias for wov-pshell vh), with following commands run at login (stays logged in)
+      ex. wov-vh -l                 # just login and stay logged in
       ex. wov-vh -l "ls ; cd plem"
       ex. wov-vh -l wcd we
 
-# DEPRECATED --config : mount all secrets and configmaps to the vh
+  Routing Controls
+  --------------------------------------------------------------------- 
+  --route-service [service{:TARGETPORT}] : patches the service to point to vh
+  --unroute-service [service]            : puts service back to deplpoyment
+  --route-list                           : show current route setup
 
-  --route-service [service{:TARGETPORT}] - patches the service to point to vh
-  --unroute-service [service] - puts service back to deplpoyment
-  --route-list - show current route setup
 
-
-  -n|--namespace
+  Utility
+  --------------------------------------------------------------------- 
+  -n|--namespace         : use a different namespace in the cluster
   -h : this help
   -q/-v : quiet/verbose
+
 
 EOF
 #  -h-repos : help with editing remote repos on vh
@@ -222,14 +229,14 @@ function doConfigVol() {
 
 #  local RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
 #
-#  # add all generated ConfigMap (via wov-build-conf)
+#  # add all generated ConfigMap (via wov-push-k8s)
 #  for f in ${RECIPES}; do
 #    printf -v CV   "  - name: configmap-volume\n"
 #    printf -v CV "%s    configMap:\n" "$CV"
 #    printf -v CV "%s      name: ${WOV_PROJECT}${f}\n" "$CV"
 #  done
 #
-#  # add all generated Secrets (via wov-build-conf)
+#  # add all generated Secrets (via wov-push-k8s)
 #  for f in ${RECIPES}; do
 #    printf -v CV "%s  - name: secret-volume\n" "$CV"
 #    printf -v CV "%s    secret:\n" "$CV"

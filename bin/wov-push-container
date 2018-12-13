@@ -4,40 +4,36 @@
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
-if [ ! -z ${WOV_stagemod+x} ]; then
-  printf "\nERROR: Can't have WOV_stagemod set when pushing content.\n\n"
+wov-env-build -q --local
+if [ "$?" != "0" ]; then
   exit 1
 fi
-wov-build -e
 
 pushcontainersargs=( "$@" )
 set ""
-echo "NOTE: see how I load variables through this redirect and source... should do for all"
-. <(wov-env -c --exports)
+. <(wov-env --provider --exports)
 . wov-ns-check
 set -- "${pushcontainersargs[@]}"
+
+
+# For dev and prod, check local code and secrets are checked in and pushed.
+doGitChecksOnFormalStages 1
 
 DOECHO=1
 DOFORCE=0
 DOPUSH=1
 FOLD=$(tput cols)
 BLOCK=0
-SSHKEY=
-RECIPES=( )
 
+# Globals
+RECIPES=( )
+CONTAINERNAME=
+CONTAINER=
+SRCDIR=${WOV_BASEDIR}
+DESTDIR=
+ARCHDIR=
 
 echo "NOTE[$0]: Skipping git checks.... will do on wov-push."
-
-## Check local code is checked in and pushed
-#wov-git-check ${WOV_BASEDIR}
-#R1=$?
-#wov-git-check ${WOV_BASEDIR}/wovtools/secrets
-#R2=$?
-#if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then 
-#  printf "\nERROR: wov-build-containers exiting\n" 1>&2
-#  exit 1;
-#fi
-
 
 
 # If NodeJS project...
@@ -63,7 +59,7 @@ function fDisplayOptions()
 
 usage: `basename $0` [options] {containercode ...}
 
-Runs the recipe scripts and if there is a change, build the containers.
+Pushes the containers by building and pushing to the archive. Runs the recipe scripts and if there is a change, build the containers.
 
 ex. `basename $0` -f ggg hhh  
     -> for project iii,  forces the building of containers iiiggg and iiihhh
@@ -80,7 +76,6 @@ The recipes for containers should:
   - ${DESTDIR}/SECRET/build.docker - all code is in the container
   - ${DESTDIR}/SECRET/run.docker - instructions on how to run container
 
-  --key X : ssh key to add ex. ${HOME}/.ssh/id_rsa
   -p/P : do push, no push
   -h : this help
   -l : list containers
@@ -92,7 +87,7 @@ EOF
 
 
 # ---------------------------------------------------------------------
-# Put contents together in container directory
+# Put contents together in container directory. Also builds Dockerfile.
 #  NOTE: later will decide if we need to build a container, based upon this
 # ---------------------------------------------------------------------
 function doPackContainer
@@ -105,7 +100,7 @@ function doPackContainer
   echo "" > ${DESTDIR}/Dockerfile
 
   echo "  ... pack container using recipe: '$f'"
-  cd ${WOV_BASEDIR} && SRCDIR=${SRCDIR} DESTDIR=${DESTDIR} CONTAINER=${CONTAINER} ${WOV_BASEDIR}/wovtools/containers/$f
+  cd ${WOV_BASEDIR} && SRCDIR=${SRCDIR} DESTDIR=${DESTDIR} CONTAINER=${CONTAINER} DOECHO=${DOECHO} ${WOV_BASEDIR}/wovtools/containers/$f
   if [ "$?" != "0" ]; then
     printf "\n\nERROR: failed building container.\n\n"
     exit 1
@@ -117,7 +112,7 @@ function doPackContainer
     printf "\nERROR: no 'repositories' entry in secrets. If you have no private repos, create a blank entry.\n"
     exit 1
   fi
-  echo "  ... adding keys for private repos"
+  if [ $DOECHO -ge 2 ]; then echo "    ... adding keys for private repos"; fi
   for repo in "${PRIVATEREPOS[@]}"; do
     # for each item in private repo, append to ssh/config and add its key
     # echo "  ... add in repo key ${repo}, update .ssh/config"
@@ -134,7 +129,7 @@ function doPackContainer
     repoKeyFile="${repoKeyFile/#\~/$HOME}"
       # expand tilde to $HOME
     #echo "    ... repoKeyFile ${repoKeyFile}"
-    echo "    ... repo: '${repo}'  url: '${repoURL}'  user: '${repoUser}'  keyfile: '${repoKeyFile}'"
+    if [ $DOECHO -ge 2 ]; then echo "        ... repo: '${repo}'  url: '${repoURL}'  user: '${repoUser}'  keyfile: '${repoKeyFile}'"; fi
     cat <<EOF >> ${DESTDIR}/SECRET/ssh-config
 
 # repo: ${repo}
@@ -155,14 +150,12 @@ EOF
 
   # --------------------------------------------------------------------- 
   # start building Dockerfile for the container
-  echo "**** Should do all variables like this ****"
   _CONTAINERBASE="WOV_${WOV_PROJECT}${CONTAINERNAME}_containerfrom"
   CONTAINERBASE=${!_CONTAINERBASE}
-  #CONTAINERBASE=$(cat ${WOV_SECRETFILE} | jq -r '.'${WOV_PROJECT}'.'${CONTAINERNAME}'.containerfrom')
   if [ "${CONTAINERBASE}" == "null" ]; then
     printf "\nERROR: Docker container for '${repo}' has no known base to build from in secret: '${WOV_PROJECT}.${CONTAINERNAME}.containerfrom'.\n\n"
     printf "   Check: \n"
-    printf "     - secrets are rebuilt (wov-build -e)\n"
+    printf "     - secrets are rebuilt (wov-env-build --local)\n"
     printf "     - secrets contain entry for '${WOV_PROJECT}.${CONTAINERNAME}.containerfrom'. ('wov-ed -c secrets/current.json')\n"
     printf "     - secret file containing that entry is included in this stage (see wovtools/confing.json secrets.${WOV_STAGE})\n\n"
     exit 1
@@ -296,29 +289,17 @@ EOF
   cat <<EOF >> ${DESTDIR}/Dockerfile
 # --------------------------------------------------------------------- 
 EOF
-
 }
 
 
 # ---------------------------------------------------------------------
 # Pack all into Docker container and archive last build.
 # ---------------------------------------------------------------------
-function doBuildContainer
+function doDockerizeContainer
 {
   echo "  ... creating container '${CONTAINER}'"
-#  if [ "${SSHKEY}" != "" ]; then
-#    echo "      ... adding ssh key to build: '${SSHKEY}'"
-#    cp ${SSHKEY} ${DESTDIR}/$(basename ${SSHKEY})
-#    SS="--build-arg SSH_KEY=$(basename ${SSHKEY})"
-#  fi
 
-#  docker build ${SS} -f ${DESTDIR}/Dockerfile -t ${WOV_PROJECT}/${CONTAINER}:latest ${DESTDIR} || exit 1
   docker build -f ${DESTDIR}/Dockerfile -t ${WOV_PROJECT}/${CONTAINER}:latest ${DESTDIR} || exit 1
-
-#  if [ "${SSHKEY}" != "" ]; then
-#    echo "      ... removing key from dest: '${DESTDIR}/$(basename ${SSHKEY})'"
-#    rm ${DESTDIR}/$(basename ${SSHKEY})
-#  fi
 
   echo "    ... archiving build of container '${CONTAINER}'"
   mkdir -p ${ARCHDIR}
@@ -327,6 +308,7 @@ function doBuildContainer
 
 
 # ---------------------------------------------------------------------
+# List the container recipes we have.
 # ---------------------------------------------------------------------
 function doList()
 {
@@ -334,6 +316,123 @@ function doList()
   RETVAL=$?
   if [ $RETVAL -eq 0 ]; then echo $C; else echo "No containers"; fi
 }
+
+
+# --------------------------------------------------------------------- 
+# Push the container: pack, dockerize, push
+# --------------------------------------------------------------------- 
+function doPushContainer()
+{
+  CONTAINERNAME=$f
+  CONTAINER=${WOV_PROJECT}${CONTAINERNAME}
+  SRCDIR=${WOV_BASEDIR}
+  DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${CONTAINERNAME}
+  ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${CONTAINERNAME}
+  if [[ $DOECHO -ge 2 ]]; then 
+    echo "CONTAINERNAME=${CONTAINERNAME}"
+    echo "CONTAINER=${CONTAINER}"
+    echo "SRCDIR=${SRCDIR}"
+    echo "DESTDIR=${DESTDIR} # more like a 'content' dir as this is all copied in here"
+    echo "ARCHDIR=${ARCHDIR} # location of archive of DESTDIR"
+  fi
+
+  if [[ ! -e "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
+    echo "ERROR: recipe for container ${f} does not exist (${WOV_BASEDIR}/wovtools/containers/$f).";
+    exit 1
+  elif [[ ! -x "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
+    echo "ERROR: recipe for container ${f} not executable (${WOV_BASEDIR}/wovtools/containers/$f).";
+    exit 1
+  else
+
+    # Copy in and generate all files in DESTDIR
+    doPackContainer ${f}
+
+    # Just packed container, do we need to build it? Do diffs against archive, then compare remote container
+    NEEDSBUILD=0
+    diff -q -r ${DESTDIR} ${ARCHDIR} > /dev/null
+    NEEDSBUILD=$?
+    if [ "$NEEDSBUILD" != "0" ]; then 
+      if [ $DOECHO -ge 2 ]; then 
+        echo "  ... packed container differs so will build."
+      fi
+    else
+      if [ $DOECHO -ge 2 ]; then echo "  ... check push container status"; fi
+      wov-push-container-check -q ${f}
+      NEEDSBUILD=$?
+      if [ "$NEEDSBUILD" != "0" ]; then 
+        if [ $DOECHO -ge 2 ]; then echo "  ... pushed containers differ so will build."; fi
+      fi
+    fi
+
+    # Exit with error on failing
+    if [ "${NEEDSBUILD}" ==  "4" ]; then exit ${NEEDSBUILD}; fi
+    if [ "${NEEDSBUILD}" ==  "3" ]; then exit ${NEEDSBUILD}; fi
+    if [ "${NEEDSBUILD}" ==  "2" ]; then exit ${NEEDSBUILD}; fi
+
+    # Dockerize
+    if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then doDockerizeContainer ${f};
+    else
+      if [ $DOECHO -ge 1 ]; then echo "  ... container build not needed"; fi
+    fi
+
+    # Do we push the container?
+    if [ "$DOPUSH" == "0" ]; then
+      if [ $DOECHO -ge 1 ]; then printf "  ... skipping container push\n"; fi
+
+    else
+      # Tag and Push
+      if [ "${NEEDSBUILD}" == "1" ] || [ "${NEEDSBUILD}" == "5" ] || [ "${DOFORCE}" == "1" ]; then
+        if [ $DOECHO -ge 1 ]; then echo "  ... container push needed"; fi
+        if [ $DOECHO -ge 2 ]; then echo "    ... tag repo"; fi
+        docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
+
+        if [ $DOECHO -ge 2 ]; then echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"; fi
+
+        # If just built, dump log, since it will have to push a lot of data
+        R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty )
+        RR=$?
+        if [[ $R == 'name unknown'* ]]; then
+          printf "\n\n    ...${R}.\n"
+          exit 1
+        fi
+        if [[ $R == *'Your Authorization Token has expired.'* ]]; then
+          echo "    ... auto-login to AWS attempt"
+          AWSAUTHCMD=$(aws ecr get-login --no-include-email)
+          eval ${AWSAUTHCMD}
+          if [ "$?" != "0" ]; then
+            echo "      ... FAILED auto-login to AWS attempt"
+            exit 1
+          else
+            echo "      ... SUCCESS auto-login to AWS attempt"
+            echo "    ... re-push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+            R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1  | tee /dev/tty)
+            if [ "$?" != "0" ]; then
+              printf "\n\n  ...still errors: ${R}.\n"
+              exit 1
+            fi
+          fi
+        fi
+
+      else
+        if [ $DOECHO -ge 1 ]; then echo "  ... container push not needed"; fi
+      fi
+
+      echo "  ... tagging as dev container and pushing"
+      docker tag ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_dev
+      if [ "$?" != "0" ]; then printf "\n\nERROR: failed tagging as _dev.\n\n"; exit 1; fi
+
+      if [ $DOECHO -ge 2 ]; then 
+        docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_dev
+        if [ "$?" != "0" ]; then printf "\n\nERROR: failed pushing _dev.\n\n"; exit 1; fi
+      else
+        docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_dev > /dev/null
+        if [ "$?" != "0" ]; then printf "\n\nERROR: failed pushing _dev.\n\n"; exit 1; fi
+      fi
+      echo "  ... done '${CONTAINER}'."
+    fi
+  fi
+}
+
 
 # ---------------------------------------------------------------------
 # Handle Params
@@ -355,11 +454,6 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-P" ]; then
     shift
     DOPUSH=0
-
-  elif [ "$1" == "--key" ]; then
-    shift
-    SSHKEY=$1
-    shift
 
   elif [ "$1" == "-f" ]; then
     shift
@@ -384,11 +478,9 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
-
-
-# Find the recipes
+# Find the recipes and push them
 if [ "${BLOCK}" == "0" ]; then
- 
+
   RECIPES=( "$@" )
   if [ "${#RECIPES[@]}" == "0" ]; then
     RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
@@ -397,146 +489,17 @@ if [ "${BLOCK}" == "0" ]; then
 
   # Build containers if needed
   for f in ${RECIPES}; do
-
-    if [ $DOECHO -ge 1 ]; then printf "\n%-${FOLD}s\n" "-" | tr ' ' '-' ; echo "... build container '${f}'."; fi
-
-    CONTAINERNAME=$f
-    CONTAINER=${WOV_PROJECT}${CONTAINERNAME}
-    SRCDIR=${WOV_BASEDIR}
-    DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${CONTAINERNAME}
-    ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${CONTAINERNAME}
-    # echo "CONTAINERNAME=${CONTAINERNAME}"
-    # echo "CONTAINER=${CONTAINER}"
-    # echo "SRCDIR=${SRCDIR}"
-    # echo "DESTDIR=${DESTDIR} # more like a 'content' dir as this is all copied in here"
-    # echo "ARCHDIR=${ARCHDIR} # location of archive of DESTDIR"
-
-
-#    echo "    ... DESTDIR=${DESTDIR}"
-#    echo "    ... CONTAINER=${CONTAINER}"
-    if [[ ! -e "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
-      echo "ERROR: recipe for container ${f} does not exist (${WOV_BASEDIR}/wovtools/containers/$f).";
-      exit 1
-    elif [[ ! -x "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
-      echo "ERROR: recipe for container ${f} not executable (${WOV_BASEDIR}/wovtools/containers/$f).";
-      exit 1
-    else
-
-      doPackContainer ${f}
-
-      # Just packed container, do we need to build it? Do diffs against archive, then compare remote container
-      NEEDSBUILD=0
-      diff -q -r ${DESTDIR} ${ARCHDIR} > /dev/null
-      NEEDSBUILD=$?
-      if [ "$NEEDSBUILD" != "0" ]; then 
-        echo "  ... packed container differs so will build.";
-      else
-        echo "  ... check push container status"
-        wov-pushcontainer-check -q ${f}
-        NEEDSBUILD=$?
-        if [ "$NEEDSBUILD" != "0" ]; then 
-          echo "  ... pushed containers differ so will build.";
-        fi
-      fi
-        #echo "NEEDSBUILD: ${NEEDSBUILD}"
-        # printf "\n\n\n\nNEEDSBUILD: $NEEDSBUILD\n\n\n"
-        #    echo "NEEDSBUILDOUT: $NEEDSBUILDOUT"
-        #    if [ ${NEEDSBUILD} == 1 ] || [ $DOFORCE == 1 ]; then
-        #      echo "    ... forcing container build."
-        #
-        #    elif [ "$(docker images -q ${CONTAINER})" == "" ]; then 
-        #      docker images -q ${CONTAINER}
-        #      echo "    ... no existing container, building"
-        #      NEEDSBUILD=1
-        #
-        #    elif [ ! -e ${ARCHDIR} ]; then 
-        #      echo "    ... no ${ARCHDIR}, building"
-        #      NEEDSBUILD=1; 
-        #
-        #    elif [ "$(diff -rq --exclude='.dirstamp' --exclude='.DS_Store' ${DESTDIR} ${ARCHDIR} &> /dev/null ; echo $?)" != "0" ]; then 
-        #      echo "    ... diffs when comparing ${DESTDIR} to ${ARCHDIR}, building"
-        #      NEEDSBUILD=1; 
-        #    fi
-        #
-      if [ "${NEEDSBUILD}" ==  "4" ]; then exit  ${NEEDSBUILD}; fi
-      if [ "${NEEDSBUILD}" ==  "3" ]; then exit  ${NEEDSBUILD}; fi
-      if [ "${NEEDSBUILD}" ==  "2" ]; then exit  ${NEEDSBUILD}; fi
-
-      # Build
-      JUSTBUILT=0
-      if [ "${NEEDSBUILD}" == "1" ] || [ "${DOFORCE}" == "1" ]; then
-        JUSTBUILT=1
-
-        doBuildContainer ${f}
-
-      else
-        echo "  ... container build not needed"
-      fi
-
-
-      # Do we push the container?
-      if [ "$DOPUSH" == "0" ]; then
-        printf "  ... skipping container push\n"
-      else
-
-        # echo "needsbuild '${NEEDSBUILD}'"
-
-        # Tag and Push
-        if [ "${NEEDSBUILD}" == "1" ] || [ "${NEEDSBUILD}" == "5" ] || [ "${DOFORCE}" == "1" ]; then
-          echo "  ... tag repo"
-          docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
-
-          echo "  ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-
-          # If just built, dump log, since it will have to push a lot of data
-  #        if [ "${JUSTBUILT}" == "1" ]; then
-            R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty )
-            RR=$?
-  #        else
-#          R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 )
-#          RR=$?
-#        fi
-          # echo "R: ${R} RR=${RR}"
-          if [[ $R == 'name unknown'* ]]; then
-            printf "\n\n  ...${R}.\n"
-            exit 1
-          fi
-          if [[ $R == *'Your Authorization Token has expired.'* ]]; then
-            echo "    ... auto-login to AWS attempt"
-            AWSAUTHCMD=$(aws ecr get-login --no-include-email)
-            eval ${AWSAUTHCMD}
-            if [ "$?" != "0" ]; then
-              echo "      ... FAILED auto-login to AWS attempt"
-              exit 1
-            else
-              echo "      ... SUCCESS auto-login to AWS attempt"
-              echo "    ... re-push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-              R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1  | tee /dev/tty)
-              if [ "$?" != "0" ]; then
-                printf "\n\n  ...still errors: ${R}.\n"
-                exit 1
-              fi
-            fi
-          fi
-
-        else
-          echo "  ... container push not needed"
-        fi
-
-        echo "  ... tagging as dev container and pushing"
-        docker tag ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_dev
-        docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_dev
-        echo "  ... done '${CONTAINER}'."
-      fi
-    fi
-
-
+    if [ $DOECHO -ge 1 ]; then printf "\n%-${FOLD}s\n" "-" | tr ' ' '-' ; echo "... push container '${f}'."; fi
+    doPushContainer $@
   done
 
-  printf "\nCompleted Building:\n"
-  for f in ${RECIPES}; do
-    echo "  ... built: ${WOV_PROJECT}/${WOV_PROJECT}${f}"
-  done
-  printf "    run locally: 'docker run CONTAINER'\n"
-  printf "     open shell: 'docker run --rm -it CONTAINER bash'\n"
+  if [[ $DOECHO -ge 1 ]]; then
+    printf "\nCompleted Building:\n"
+    for f in ${RECIPES}; do
+      echo "  ... built: ${WOV_PROJECT}/${WOV_PROJECT}${f}"
+    done
+    printf "    run locally: 'docker run CONTAINER'\n"
+    printf "     open shell: 'docker run --rm -it CONTAINER bash'\n"
+  fi
 fi
+

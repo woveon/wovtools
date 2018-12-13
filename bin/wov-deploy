@@ -4,15 +4,14 @@
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
-if [ ! -z ${WOV_stagemod+x} ]; then
-  printf "\nERROR: Can't have WOV_stagemod set when deploying content.\n\n"
-  exit 1
-fi
+wov-env-build -q --local
+if [ "$?" != "0" ]; then exit 1; fi
 deployenvargs=( "$@" )
 set ""
 . wov-env
 . wov-ns-check
 set -- "${deployenvargs[@]}"
+
 
 DOECHO=1
 DOFORCE=0
@@ -165,7 +164,7 @@ function doCheckContainersExist()
       fi
     done
 
-    if [ "${#imgissues}" != "0" ]; then echo "" ; echo "  run: 'wov-build-containers ${imgissues[*]}'"; echo ""; fi
+    if [ "${#imgissues}" != "0" ]; then echo "" ; echo "  run: 'wov-push-container ${imgissues[*]}'"; echo ""; fi
   fi
 }
 
@@ -230,7 +229,7 @@ function fDisplayOptions()
 
 usage: `basename $0` [options] {files ...}
 
-Deploys a running kubernetes project from an archive.
+Deploys and updates a running kubernetes project from an archive.
 
 files : all by default, or type them here and do individual only
 
@@ -302,7 +301,7 @@ function doDeployDev()
   {
     wov-mod -q --off ALL
     if [ "$?" != "0" ]; then exit 1; fi
-    wov-build-conf -q --skip-push --nogitchecks $*
+    wov-push-k8s -q --skip-push --nogitchecks $*
     if [ "$?" != "0" ]; then exit 1; fi
   }
 
@@ -323,7 +322,7 @@ function doDeployDev()
     chmod 600 ${VHseFILE}
 
     # create individual files (or maybe just one compound)
-    wov-build-conf -q --skip-push --allow-stagemods --nogitchecks --conf-ext "vh" $*
+    wov-push-k8s -q --skip-push --allow-stagemods --nogitchecks --conf-ext "vh" $*
     if [ "$?" != "0" ]; then exit 1; fi
 
     # merge all cm files into one, so can be loaded as one file in vh

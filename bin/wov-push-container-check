@@ -8,25 +8,13 @@ LASTCHECKFORREMOTEIMAGE=-1
 # ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
-if [ ! -z ${WOV_stagemod+x} ]; then
-  printf "\nERROR: Can't have WOV_stagemod set when pushing content.\n\n"
-  exit 1
-fi
 pushargs=( "$@" )
 set ""
 . wov-env
 . wov-ns-check
 set -- "${pushargs[@]}"
 
-echo "NOTE[$0]: Skipping git checks.... will do on wov-push."
-
-
-## Check local code is checked in and pushed
-#wov-git-check ${WOV_BASEDIR}
-#R1=$?
-#wov-git-check ${WOV_BASEDIR}/wovtools/secrets
-#R2=$?
-#if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then exit 4; fi
+# echo "NOTE[$0]: Skipping git checks.... will do on wov-push."
 
 
 # ---------------------------------------------------------------------
@@ -40,7 +28,7 @@ usage: `basename $0` [options] container
 
 Checks if the current container needs to be built and pushed. 
 
-Note: For build, this compares container code in cache vs. last container build (i.e. NOT actual Docker container content). So, 'wov-build-containers -P' to build container but don't push, if you want to rebuild the cache.
+Note: For build, this compares container code in cache vs. last container build (i.e. NOT actual Docker container content). So, 'wov-push-container -P' to build container but don't push, if you want to rebuild the cache.
 
 This checks, in order:
   * does the container exist
@@ -53,12 +41,13 @@ This checks, in order:
   -f : force
 
 exit values:
-  0 - no build needed
+  0 - no build needed : ... repo found, tagged image exists, shas match.
   1 - needs build
-  2 - general error
-  3 - no repo errro
-  4 - wov-git-check error
-  5 - no build, remote repo push needed
+  2 - general error   : ... some error or other.
+  3 - no repo errro   : ... can't connect to repo. Repo not found.
+  5 - no build, remote repo push needed : ... no reason to build, just push
+
+#  4 - wov-git-check error
 
 EOF
 }

@@ -6,15 +6,7 @@ FOLD=$(tput cols)
 BLOCK=0
 SKIPDBCHECKS=0
 
-# ---------------------------------------------------------------------
-# Build right before to update any files
-# ---------------------------------------------------------------------
-if [ ! -z ${WOV_stagemod+x} ]; then
-  printf "\nERROR: Can't have WOV_stagemod set when pushing content.\n\n"
-  exit 1
-fi
-
-wov-build -e
+wov-env-build -q --local 
 if [ "$?" != "0" ]; then
   exit 1
 fi
@@ -28,11 +20,6 @@ set ""
 . wov-ns-check
 set -- "${pushargs[@]}"
 
-
-#if [ "$WOV_DEVMODE" != "remote" ]; then
-#  printf "\nERROR: Can not push when is devmode '${WOV_DEVMODE}'. Run 'wov-env --remote'.\n\n"
-#  exit 1
-#fi
 
 printf "\n"
 figlet wov-push
@@ -51,14 +38,13 @@ if [[ "$ONSTAGEMODS" != "" ]]; then
   exit 1
 fi
 
-
 # Check local code is checked in and pushed
 wov-git-check ${WOV_BASEDIR}
 R1=$?
 wov-git-check ${WOV_BASEDIR}/wovtools/secrets
 R2=$?
 if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then 
-  printf "\nERROR: wov-push exiting\n" 1>&2
+  printf "\nERROR: wov-push exiting.\n" 1>&2
   exit 1
 fi
 
@@ -74,11 +60,9 @@ function fDisplayOptions()
 
 usage: `basename $0` [options]
 
-Macro command that pushes containers, then env. It uses:
-   wov-build-containers
-   wov-build-conf
+Formal push of a version into the archive. This is a macro command that pushes containers, Kubernetes and database changes at once.
 
-  --skip-db-checks : skip the checks for database inconsistencies
+  --skip-db-checks : skip the checks for database inconsistencies (DB checks are slow)
 
   -h : this help
   -q/-v : quiet/verbose
@@ -122,7 +106,7 @@ done
 
 if [ "$SKIPDBCHECKS" != "1" ]; then
   echo "  ... check for database changes that could block the push"
-  wov-db-commit -v --any-push-blockage
+  wov-push-db -v --any-push-blockage
   R3=$?
   if [ "$R3" != 0 ]; then exit 1; fi
 else
@@ -130,19 +114,19 @@ else
 fi
 
 
-echo "  ... wov-build-containers ${METAARGS}"
-wov-build-containers ${METAARGS}
+echo "  ... wov-push-container ${METAARGS}"
+wov-push-container ${METAARGS}
 if [ "$?" != "0" ]; then
   exit 1
 fi
-echo "  ... wov-build-conf ${METAARGS}"
-wov-build-conf ${METAARGS}
+echo "  ... wov-push-k8s ${METAARGS}"
+wov-push-k8s ${METAARGS}
 if [ "$?" != "0" ]; then
   exit 1
 fi
 
-echo "  ... wov-db-commit ${METAARGS}"
-wov-db-commit ${METAARGS}
+echo "  ... wov-push-db ${METAARGS}"
+wov-push-db ${METAARGS}
 if [ "$?" != "0" ]; then
   exit 1
 fi

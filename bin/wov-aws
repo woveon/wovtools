@@ -5,7 +5,7 @@
 # ---------------------------------------------------------------------
 wovawsvargs=( "$@" )
 set ""
-. <(wov-env -c --exports)
+. <(wov-env --provider --exports)
 . wov-ns-check
 set -- "${wovawsvargs[@]}"
 DOECHO=1

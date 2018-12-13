@@ -2,17 +2,20 @@
 
 DOECHO=1
 DOFORCE=0
-FOLD=80
+FOLD=`tput cols`
 
 
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
+#wov-env-build -q --local
+#if [ "$?" != "0" ]; then
+#  exit 1
+#fi
 pushenvargs=( "$@" )
 set ""
-. wov-env
+. wov-env #--provider
 . wov-ns-check
-. wov-push-env
 set -- "${pushenvargs[@]}"
 
 
@@ -29,8 +32,12 @@ usage: `basename $0` [options]
 
 Shows information of a running project.
 
-  --pver :
-  --sver :
+  --pver        : project version of deployment
+  --sver        : secrets version of deployment
+  --deployed    : unix epoc time of when first deployed
+  --deployed-hr : human readable time of when first deployed
+  --meta        : full meta data of deployment
+
   -h : this help
   -q/-v : quiet/verbose
 
@@ -60,9 +67,13 @@ while [[ $1 =~ ^- ]]; do
     shift
     kubectl get namespace ${WOV_NS} -o json | jq -r '.metadata.labels.WOV_DEPLOYED'
 
-  elif [ "$1" == "--deployed-hr" ]; then
+  elif [ "$1" == "--deployed-hr" ]; then  # human readable
     shift
     date -j -r $(kubectl get namespace ${WOV_NS} -o json | jq -r '.metadata.labels.WOV_DEPLOYED')
+
+  elif [ "$1" == "--meta" ]; then
+    shift
+    kubectl get namespace ${WOV_NS} -o json | jq -r '.metadata.labels'
 
   elif [ "$1" == "-v" ]; then
     shift

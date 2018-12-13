@@ -1,14 +1,21 @@
 
 
-BINS-GLOBAL=wovg-dir
-BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service wov-ed wov-ls wov-vh wov-pwait \
-	        wov-pshell wov-cmd wov-kui wov-git-check wov-vh-pulldir wov-db wov-db-commit wov-db-connect wov-db-connect2 wov-cd \
-					wov-portforward wov-envg wov-project wov-vh-pushgit wov-bastion wov-bastion-connection
-BINS=wov-env wov-ns-check wov-stage wov-build wov-compile  \
-		 wov-pushcode-check wov-pushcontainer-check wov-pushenv-check wov-build-containers wov-build-conf wov-push-secrets wov-push \
-		 wov-deploy wov-deploy-info wov-hbs wov-db-deploy  wov-deploy-dev \
-		 wov-users wov-cl wov-mod  wov-env-build  wov_stage-select \
-		 $(BINS-UTIL) $(BINS-GLOBAL) wov-aws wov
+BINS-ENV=wov-env-build wov-env wov-env-aws
+BINS-CLI=wov-aws wov-cd wov-bastion wov-bastion-connection wov-cmd wov-ed wov-ls wov-ns wov-db-connect wov-db-cloud wov-p wov-plog
+BINS-VH=wov-vh wov-vh-pushgit wov-vh-pulldir
+BINS-PUSH=wov-push-container wov-push-container-check wov-push-k8s wov-push-db wov-push
+BINS-DEPLOY=wov-deploy-service wov-deploy-info wov-deploy
+
+#BINS-GLOBAL=wovg-dir
+##BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service wov-ed wov-ls wov-vh wov-pwait \
+#	        wov-pshell wov-cmd wov-kui wov-git-check wov-vh-pulldir wov-db wov-db-commit wov-db-connect wov-db-connect2 wov-cd \
+#					wov-portforward wov-envg wov-project wov-vh-pushgit wov-bastion wov-bastion-connection 
+#BINS=wov-env wov-ns-check wov-stage wov-build wov-compile  \
+#		 wov-pushcode-check wov-pushcontainer-check wov-pushenv-check wov-build-containers wov-build-conf wov-push-secrets wov-push \
+#		 wov-deploy wov-deploy-info wov-hbs wov-db-deploy  wov-deploy-dev \
+#		 wov-users wov-cl wov-mod  wov-env-build  wov_stage-select \
+#		 $(BINS-UTIL) $(BINS-GLOBAL) wov-aws wov
+BINS=${BINS-ENV} ${BINS-CLI} ${BINS-VH} ${BINS-PUSH}
 
 .PHONY: vh
 

@@ -5,7 +5,7 @@
 # ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
-wov-build -i -e
+wov-env-build -q --local
 pushenvargs=( "$@" )
 set ""
 . <(wov-env --exports)
@@ -30,7 +30,7 @@ function fDisplayOptions()
 
 usage: `basename $0` [databaseserver] {options}
 
-Connect to a database via vh (virtual host) pod in Kubernetes. Takes information from Woveon environment variables. If no commands are given (-c), then opens a shell.
+Connect to a database via SSL tunnelling through the bastion host and has db utilities. Takes information from Woveon environment variables. If no commands are given (-c), then opens a shell.
 
 databaseserver - the name of a database server in the project. assumes conf/[database].[cs]k8s files.
 

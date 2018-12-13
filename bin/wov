@@ -27,56 +27,76 @@ function fDisplayCommands()
 
   cat <<EOF | fold -w ${FOLD} -s
 
-CONFIG and OPS:
-wov-cd        - Changes directory to the *project* directory. These projects are defined in the wovtools file, found in your HOME directory.
-wov-env       - Export the context as variables for scripts or export specific variables. 
-wov-bastion   - Lookup information about the bastion host
+
+ENVIRONMENT:
+wov-env-build  - Build a CLUSTER configuration.
+wov-env        - Export a CLUSTER configuration as variables for scripts. 
+
+
+COMMANDLINE (CLI):
+wov-aws        - Help
+wov-cd         - Changes directory to the *project* directory. These projects are defined in the wovtools file, found in your HOME directory.
+wov-bastion    - Lookup information about the bastion host
 wov-bastion-connection - Manages an ssh connection to a bastion host for the Kubernetes cluster.
-wov-cmd       - Runs a command found in the cmds directory.
-wov-ed        - Opens an editor to edit the project's WovTools src or compiled resource file.
+wov-cmd        - Runs a command found in the cmds directory.
+wov-ed         - Opens an editor to edit the project's WovTools src or compiled resource file.
+wov-ls         - Lists information of the current file space.
+wov-ns         - Display namespace information
+wov-db-connect - Connect to a database via SSL tunnelling through the bastion host and has db utilities.
+wov-db-cloud   - Manages database cloud resources.
+wov-p          - Takes a k8s pod stem and returns the name of the matching pod in a namespace (--ith n, to match *nth* pod).
+wov-plog       - Connects to a running pod (via podstem) and logs its data, with a -f to follow it.
+
+
+VIRTUAL HOST DEV:
+wov-vh         - Virtual host commands for development in a pod in the cluster.
+wov-vh-pushgit - This script pushes the project's git repo to vh in a safe manner.
+wov-vh-pulldir - Pulls from the vh as vh:ARG1 which is the working dir on pod, to local directory.
+
+
+PUSH to ARCHIVE: BUILD and PUSH
+wov-push-container - Pushes the container(s) by building and pushing to the archive.
+wov-push-k8s       - Pushes the Kubernetes files to the archive. (was wov-build-conf or wov-arch-conf)
+wov-push-db        - (previous wov-db-commit) This moves database changes for the current checked in code (pver) into the db registry for versioning.
+wov-push           - Formal push of a version into the archive.
+
+
+TODO FIXME FIX
+here, make it so push is done by deploy. so each push archives that exact version.... figure out how that fits with development deploys
+then remove wov-push all together... make sure wov-push-k8s stores cluster info in the path
+
+
+CLUSTER DEV:
+wov-deploy-service - Runs, tests or kills a service for this Kubernetes context (ex. a database, helm chart, etc).
+wov-deploy-info    - Shows information of a running project
+wov-deploy         - Deploys and updates a running kubernetes project from an archive.
+
+
+INTERNAL:
 wov-git-check - Checks that the git archives on path(s) are committed and pushed to origin.
-wov-ls        - Lists information of the current file space.
-wov-ns        - Display namespace information
+wov-push-container-check - Checks if the arg1 container needs to be built and pushed.
 wov-ns-check  - Ensures that the Kubernets namespace and git branch align
-
-DEVLOPMENT:
-wov-build
-wov-build-conf
-wov-build-containers
 wov-compile
-wov-push
-wov-pushcontainer-check
+wov-pwait     - Waits for a pod (full name) to enter the running state, by continuous polling. 
+wov-pshell
 
-DATABASE:
-wov-db
-wov-db-connect
-wov-db-commit
-wov-db-deploy
 
-VIRTUALCLUSTER:
-wov-vh
-wov-vh-pulldir
-wov-vh-pushgit
+CLOUD: (tailors WovTools to a Cloud provider)
+wov-env-aws   -
 
-CLUSTER:
-wov-cl
-wov-mod
-wov-p
-wov-plog
-wov-pwait
-wov-deploy
-wov-deploy-info
-wov-service
 
+UNDER DEVELOPMENT:
+wov-deploy-cl           - (UNDER DEV) Builds a cluster.
+wov-db-deploy -
+wov-init      - under dev
 
 
 IGNORE: (will be deleted or under development)
+wov-mod
 wov-envg
 wov-hbs
-wov-init - under dev
 wov-portforward
 wov-project
-wov-pshell
 wov-stage
 wov-users
 wov_stage-select

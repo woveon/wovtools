@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+DOFORCE=0
+FOLD=`tput cols`
+
+CONFEXT=
+  # added to conf dir names (ex. "-vh" for vh specific)
+
+
+
+# --------------------------------------------------------------------- 
+# Import Env 
+# --------------------------------------------------------------------- 
+if [ ! -z ${WOV_stagemod+x} ]; then
+  printf "\nERROR: Can't have WOV_stagemod set when pushing content.\n\n"
+  exit 1
+fi
+pushenvargs=( "$@" )
+set ""
+. wov-env --provider
+. wov-ns-check
+set -- "${pushenvargs[@]}"
+
+
+
+# ---------------------------------------------------------------------
+# Push cluster ($1) to Archive
+# ---------------------------------------------------------------------
+function doPushClusterToArchive() 
+{
+  local CLUSTER="$1"
+  local CLUSTERDIR="${WOV_CACHEDIR}/clusters/${CLUSTER}"
+  local ARCHPATH="`getRelativeArchivePath ${CLUSTER}`"
+
+
+  if [ $DOECHO -ge 1 ]; then echo "  ... building cluster: '${CLUSTER}'"; fi
+  wov-env-build -q --cluster ${CLUSTER}
+
+  if [ $DOECHO -ge 1 ]; then echo "  ... pushing to archive: '${WOV_ARCHIVEENV}/${ARCHPATH}'"; fi
+  if [ $DOECHO -ge 2 ]; then echo "$(cd ${CLUSTERDIR} ; ls -d * */* )"; fi
+  A1=$(cd ${CLUSTERDIR} ; aws s3 sync cm  ${WOV_ARCHIVEENV}/${ARCHPATH}/cm  --delete)
+  if [ "${A1}" != "" ]; then printf "$A1\n"; fi
+  A2=$(cd ${CLUSTERDIR} ; aws s3 sync se  ${WOV_ARCHIVEENV}/${ARCHPATH}/se  --delete)
+  if [ "${A2}" != "" ]; then printf "$A2\n"; fi
+  A3=$(cd ${CLUSTERDIR} ; aws s3 sync k8s ${WOV_ARCHIVEENV}/${ARCHPATH}/k8s --delete)
+  if [ "${A3}" != "" ]; then printf "$A3\n"; fi
+
+  if [ $DOECHO -ge 1 ]; then echo "  ... success"; fi
+}
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options] cluster ...
+
+Pushes the Kubernetes files to the archive. Makes sure they are built and then pushes the conf and k8s to the Archive, from which we can deploy. This works with pushing secrets and containers into the Archive (which is actually several storage mediums).
+
+  cluster ...   : the cluster to send
+
+  --conf-ext    : extension to the default conf file (ex. foo/conf/cm/apisocket -> foo/conf/cm/apisocket-vh with --conf-ext '-vh')
+  --nogitchecks : turns off the checks for changes to local code
+
+  -f : force push
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "--nogitchecks" ]; then
+    shift
+    NOGITCHECK=1
+
+  elif [ "$1" == "--conf-ext" ]; then
+    shift
+    CONFEXT=$1
+    shift
+
+  elif [ "$1" == "-f" ]; then
+    shift
+    DOFORCE=1
+
+  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+    fDisplayOptions
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+# For dev and prod, check local code and secrets are checked in and pushed.
+doGitChecksOnFormalStages 1
+
+CLUSTERS=( $* )
+if [ "${#CLUSTERS}" == "0" ]; then
+  CLUSTERS=( "${WOV_CLUSTER}" )
+fi
+
+# ---------------------------------------------------------------------
+# For each named cluster, push to archive
+# ---------------------------------------------------------------------
+for cluster in "${CLUSTERS[@]}"; do
+  echo "cluster $cluster"
+  doPushClusterToArchive ${cluster}
+done
+
+
+
+
+

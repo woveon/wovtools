@@ -7,7 +7,7 @@ function DisplayOptions
 
 usage : `basename $0` [-n|--namespace] [-i|--ith] podstem
 
-Takes a stem and returns the name of the matching pod in a namespace (--ith n, to match *nth* pod).
+Takes a k8s pod stem and returns the name of the matching pod in a namespace (--ith n, to match *nth* pod).
 
    -h|--help : this output
    -n|--namespace X : get in the namespace of X

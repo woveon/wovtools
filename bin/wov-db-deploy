@@ -55,7 +55,7 @@ function doGenDBDeltas()
   # get 
   OLDIFS=$IFS
   IFS='|'
-  dbverarray=( $(wov-db -D ${WOVDB_DBNAME} --ver)  )
+  dbverarray=( $(wov-db-cloud -D ${WOVDB_DBNAME} --ver)  )
   IFS=$OLDIFS
 
   DB_TARGET=$1 # target
@@ -103,7 +103,7 @@ printf " version: ${WOV_STAGE}_${WOV_PVER}_${WOV_SVER}\n"
 
 #figlet WARNING
 echo "WARNING: SKIPPING db commit checks for dev purposes, for acutal roll, check first"
-#if [ "$(wov-db-commit -pc)" != "0" ]; then
+#if [ "$(wov-push-db -pc)" != "0" ]; then
 #  echo "ERROR: need to commit current db settings before deploy"
 #  exit 1
 #fi
