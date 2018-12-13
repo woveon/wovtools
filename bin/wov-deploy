@@ -22,7 +22,7 @@ CONFONLY=0
 DEPLOYTYPE=
 BUILDVH=1
 
-DEPLOYDIR=
+#DEPLOYDIR=
 DEPLOYCONF_EXT=
 
 # Cache the current values
@@ -51,10 +51,16 @@ function doAddLabels()
 
 # --------------------------------------------------------------------- 
 # Reads the files and creates ConfigMap and Secrets
-#  $1 = directory extention (ex. 'vh' so reads not conf/cm/X, but conf/cm/Xvh)
+#  XXX $1 = directory extention (ex. 'vh' so reads not conf/cm/X, but conf/cm/Xvh)
+#  $1 = deploy directory source (ex. ${WOV_CACHEDIR}/clusters/${WOV_CLUSTER}, or pulled from archive)
+#  $* = recipes
 # --------------------------------------------------------------------- 
 function doDeployConf()
 {
+  local DEPLOYSRC=$1
+  shift
+
+  # New microservice for each container
   RECIPES=( "$@" )
   if [ "${#RECIPES[@]}" == "0" ]; then
     RECIPES=( $(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null) )
@@ -63,41 +69,42 @@ function doDeployConf()
   echo "RECIPES: ${RECIPES[@]}"
 
   # Files for Configmap file
-  CMDIR=${WOV_BASEDIR}/wovtools/cache/conf/cm
+  CMDIR=${DEPLOYSRC}/cm
+  #CMDIR=${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/cm
 
   # Files for Secrets file
-  SEDIR=${WOV_BASEDIR}/wovtools/cache/conf/se
+  SEDIR=${DEPLOYSRC}/se
+  #SEDIR=${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/se
 
-  # Extention to ConfigMap/Secrets entry name (ex. "vh" or "" for nothing)
-  FILEEXT=${DEPLOYCONF_EXT}
 
-  # --------------------------------------------------------------------- 
   # Create ConfigMap PLUGIN
   # --------------------------------------------------------------------- 
-
-  # Read files from directory (note the appended FILEEXT)
-  #CMFILES=( $(cd ${CMDIR} && ls 2> /dev/null) )
   for f in "${RECIPES[@]}"; do
 
-    local MSROOT=${WOV_PROJECT}${f}${FILEEXT}
-    local CMFILE="${CMDIR}/${MSROOT}"          # full path to file
+    local MSNAME=${WOV_PROJECT}${f}
+    local CMFILE="${CMDIR}/${MSNAME}"          # full path to file
 
     # delete existing configmap
-    kubectl delete configmap ${MSROOT} 2> /dev/null
+    kubectl delete configmap ${MSNAME} 2> /dev/null
 
     # if no configmap file, continue on
-    if [ ! -e "${CMFILE}" ]; then continue; fi
+    if [ ! -e "${CMFILE}" ]; then 
+      printf "\n\nERROR: no configmap for ${MSNAME}.\n\n"
+      exit 1
+      # continue; 
+    fi
 
+    echo "CMFILE: ${CMFILE}"
     # Convert X=Y into ConfigMap commands in DATA
     DATA=()
     while read l; do
-      #echo ":$l"
+      # echo ":$l"
       d=$(echo $l | awk 'NF { print }' | awk -F'=' '!/^($$|[[:blank:]]*#)/ { print "--from-literal=" $0 }' )
       if [ "$d" != "" ]; then DATA+=("$d"); fi
     done <${CMFILE}
 
     #echo "DATA: ${DATA[@]}"
-    kubectl create configmap ${MSROOT} "${DATA[@]}"
+    kubectl create configmap ${MSNAME} "${DATA[@]}"
     if [ "$?" != "0" ]; then
       printf "\nERROR: failed creating ConfigMap $f from '${CMFILE}'.\n"
       exit 1
@@ -107,16 +114,13 @@ function doDeployConf()
 
   # Create Secret PLUGIN
   # --------------------------------------------------------------------- 
-
-  # Read files from directory (note the appended FILEEXT)
-  #SEFILES=( $(cd ${SEDIR} && ls 2> /dev/null) )
   for f in "${RECIPES[@]}"; do
 
-    local MSROOT=${WOV_PROJECT}${f}${FILEEXT}
-    local SEFILE="${SEDIR}/${MSROOT}"          # full path to file
+    local MSNAME=${WOV_PROJECT}${f}${FILEEXT}
+    local SEFILE="${SEDIR}/${MSNAME}"          # full path to file
 
     # delete existing secret
-    kubectl delete secret ${MSROOT} 2> /dev/null
+    kubectl delete secret ${MSNAME} 2> /dev/null
 
     # if no secret file, continue on
     if [ ! -e "${SEFILE}" ]; then continue; fi
@@ -129,15 +133,15 @@ function doDeployConf()
       if [ "$d" != "" ]; then DATA+=("$d"); fi
     done <${SEFILE}
 
-    kubectl create secret generic ${MSROOT} "${DATA[@]}"
+    # Create and label secret
+    kubectl create secret generic ${MSNAME} "${DATA[@]}"
     if [ "$?" != "0" ]; then
-      printf "\nERROR: failed creating Secret $MSROOT from '${SEFILE}'.\n"
+      printf "\nERROR: failed creating Secret $MSNAME from '${SEFILE}'.\n"
       exit 1
     fi
-    kubectl label  secret ${MSROOT} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
-    if [ "$?" != "0" ]; then
-      printf "\nWARNING: failed labeling ${MSROOT}. CONTINUING...\n"
-    fi
+    kubectl label secret ${MSNAME} --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+    if [ "$?" != "0" ]; then printf "\nWARNING: failed labeling ${MSNAME}. CONTINUING...\n"; fi
+
   done
 
 }
@@ -170,13 +174,20 @@ function doCheckContainersExist()
 
 
 # --------------------------------------------------------------------- 
+#  $1 - source directory
+#  $* - specific k8s files to deploy. if none, deploy all in directory.
 # --------------------------------------------------------------------- 
 function doDeployK8s()
 {
-  # --------------------------------------------------------------------- 
+  local DEPLOYSRC=$1
+  shift
+
+  # Files for Configmap file
+  K8SDIR=${DEPLOYSRC}/k8s
+
   # Deploy the k8s files
   if [ $DOECHO -ge 1 ]; then echo "... deploying Kubernetes"; fi
-  if [ $DOECHO -ge 2 ]; then echo "  ... from ${DEPLOYDIR}/k8s"; fi
+  if [ $DOECHO -ge 2 ]; then echo "  ... from ${K8SDIR}/k8s"; fi
 
   # If $# is not empty, then this is called with recipes, so convert those to files
   if [ "$#" != "0" ]; then
@@ -186,37 +197,23 @@ function doDeployK8s()
       FILES+=( "${WOV_PROJECT}$r" )
     done
   else
-    FILES=( $(cd ${DEPLOYDIR}/k8s/ && ls *.yaml | sed -e 's/\(.*\)\..*/\1/') )
+    echo "k8sdir ${K8SDIR}"
+    FILES=( $(cd ${K8SDIR} && ls *.yaml | sed -e 's/\(.*\)\..*/\1/') )
   fi
 
   # printf "K8S FILES: ${FILES[*]}\n"
 
   for f in "${FILES[@]}"; do
-    if [ ! -e ${DEPLOYDIR}/k8s/$f.yaml ]; then
+    if [ ! -e ${K8SDIR}/$f.yaml ]; then
       printf "ERROR: unknown k8s file '$f.yaml'.\n"
 
     # NOTE: using ^ and $ for exact match of string
-    elif [ "$(jq '.nodeploy[] | test("'"^${f}$"'")' ${WOV_BASEDIR}/wovtools/config.json)" == "true" ]; then
-      printf "...skipping '$f': as it is on the nodeploy list in wovtools/config.json\n"
+    elif [ "$(jq '.nodeploy[] | test("'"^${f}$"'")' ${WOV_FILE_SECRETSMERGED})" == "true" ]; then
+      printf "...skipping '$f': as it is on the nodeploy list.\n"
     else
-      kubectl apply -f ${DEPLOYDIR}/k8s/$f.yaml
+      kubectl apply -f ${K8SDIR}/$f.yaml
     fi
   done
-}
-
-
-# --------------------------------------------------------------------- 
-# --------------------------------------------------------------------- 
-function doCleanUp()
-{
-  # --------------------------------------------------------------------- 
-  # Cleanup
-  if [ ${DORETAIN} == 1 ]; then
-    echo "... skipping cleanup"
-  else
-    rm -Rf ${DEPLOYDIR}
-  fi
-
 }
 
 
@@ -229,9 +226,9 @@ function fDisplayOptions()
 
 usage: `basename $0` [options] {files ...}
 
-Deploys and updates a running kubernetes project from an archive.
+Deploys and updates a running kubernetes project, either from a specific and versioned push, or into a personal dev stage during development.
 
-files : all by default, or type them here and do individual only
+files   : all by default, or type them here and do individual only
 
  Deploy Types (one required):
   --dev   : Push current development environment to cluster. 
@@ -280,115 +277,40 @@ fi
 # ---------------------------------------------------------------------
 function doDeployDev()
 {
-  if [ ${WOV_STAGE} == 'prod' ]; then
-    printf "\n\n\nERROR: deploying straight into production is not allowed. Do a 'wov-push' and then a 'wov-deploy --stage'.\n\n"
+
+  if [ ${WOV_STAGE} == 'prod' ] || [ ${WOV_STAGE} == 'dev' ]; then
+    printf "\n\n\nERROR: deploying straight into stage ${WOV_STAGE} is not allowed. Do a 'wov-push' and then a 'wov-deploy --stage'.\n\n"
     exit 1
   fi
 
-  # Clear them out
-  echo "... removing old conf"
-  rm ${WOV_BASEDIR}/wovtools/cache/conf/cm/* 2> /dev/null || true
-  rm ${WOV_BASEDIR}/wovtools/cache/conf/se/* 2> /dev/null || true
-
-
-  # Move to side current secrets, so can put back later
-  #local CURWOVMOD=$(wov-mod --get-on)
-  mv ${WOV_BASEDIR}/wovtools/cache/secrets/current.json ${WOV_BASEDIR}/wovtools/cache/secrets/current.json.$$
-  touch ${WOV_BASEDIR}/wovtools/cache/secrets/current.json
-
-  # Build standard conf files
-  echo "... build conf files"
-  {
-    wov-mod -q --off ALL
+  # Ensure the cluster's environment (and vh if needed) is up to date
+  if [ $DOECHO -ge 1 ]; then printf "  ... build for cluster '${WOV_CLUSTER}'.\n"; fi
+  wov-env-build -q --cluster ${WOV_CLUSTER}
+  if [ "$?" != "0" ]; then exit 1; fi
+  if [ "$BUILDVH" == "1" ]; then 
+    if [ $DOECHO -ge 1 ]; then printf "  ... build for cluster 'vh'.\n"; fi
+    wov-env-build -q --cluster vh
     if [ "$?" != "0" ]; then exit 1; fi
-    wov-push-k8s -q --skip-push --nogitchecks $*
-    if [ "$?" != "0" ]; then exit 1; fi
-  }
-
-  # Build vh config files
-  echo "... build 'vh' conf files"
-  if [ "$BUILDVH" == "1" ]; then
-    wov-mod -q --on vh
-    if [ "$?" != "0" ]; then
-      echo "ERROR: no entry for vh. set that up in wovtools/config.json."
-    fi
-
-    # create the blank compoound files ( ex. {WOV_PROJECT}vh )
-    VHcmFILE="${WOV_BASEDIR}/wovtools/cache/conf/cm/${WOV_PROJECT}vh"
-    echo -n "" > ${VHcmFILE}
-    chmod 600 ${VHcmFILE}
-    VHseFILE="${WOV_BASEDIR}/wovtools/cache/conf/se/${WOV_PROJECT}vh"
-    echo -n "" > ${VHseFILE}
-    chmod 600 ${VHseFILE}
-
-    # create individual files (or maybe just one compound)
-    wov-push-k8s -q --skip-push --allow-stagemods --nogitchecks --conf-ext "vh" $*
-    if [ "$?" != "0" ]; then exit 1; fi
-
-    # merge all cm files into one, so can be loaded as one file in vh
-    VHcmFILES=$(cd ${WOV_BASEDIR}/wovtools/cache/conf/cm ; find * -maxdepth 0 -type f | \grep 'vh$')
-    for f in ${VHcmFILES}; do
-      if [ "$f" == "${WOV_PROJECT}vh" ]; then continue; fi   # skip compound file
-      echo "  ... append file ${f} into ${VHcmFILE}"
-      cat ${WOV_BASEDIR}/wovtools/cache/conf/cm/${f} >> ${VHcmFILE}
-    done
-
-    # sort and uniq the file to remove duplicates
-    rm ${VHcmFILE}.1 >& /dev/null || true
-    touch ${VHcmFILE}.1
-    chmod 600 ${VHcmFILE}.1
-    sort ${VHcmFILE} | uniq >> ${VHcmFILE}.1
-    rm ${VHcmFILE}
-    mv ${VHcmFILE}.1 ${VHcmFILE}
-
-    # merge all those into one, so can be loaded as one file in vh
-    VHseFILES=$(cd ${WOV_BASEDIR}/wovtools/cache/conf/se ; find * -maxdepth 0 -type f | \grep 'vh$')
-    for f in ${VHseFILES}; do
-      if [ "$f" == "${WOV_PROJECT}vh" ]; then continue; fi   # skip compound file
-      echo "  ... append file ${f} into ${VHseFILE}"
-      cat ${WOV_BASEDIR}/wovtools/cache/conf/se/${f} >> ${VHseFILE}
-    done
-
-    # sort and uniq the file to remove duplicates
-    rm ${VHseFILE}.1 >& /dev/null || true
-    touch ${VHseFILE}.1
-    chmod 600 ${VHseFILE}.1
-    sort ${VHseFILE} | uniq >> ${VHseFILE}.1
-    rm ${VHseFILE}
-    mv ${VHseFILE}.1 ${VHseFILE}
-
   fi
 
-  # Return wov-mod status
-  echo "... return env to previous state"
-  #wov-mod -q --off ALL ${CURWOVMODS}
-  mv ${WOV_BASEDIR}/wovtools/cache/secrets/current.json.$$ ${WOV_BASEDIR}/wovtools/cache/secrets/current.json
 
-  DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache
+  # Deploy to cluster, the relevant K8s "stuff"
+  doDeployConf ${WOV_CACHEDIR}/clusters/${WOV_CLUSTER} $*
+  if [ "$BUILDVH" == "1" ]; then doDeployConf ${WOV_CACHEDIR}/clusters/vh $*; fi
+  if [ "${CONFONLY}" == "0" ]; then
 
-  # Depploy to cluster, the relevant K8s "stuff"
-  if [ "${CONFONLY}" == "1" ]; then
-    doDeployConf $*
-    if [ "$BUILDVH" == "1" ]; then
-      DEPLOYCONF_EXT=vh
-      doDeployConf $*
-      DEPLOYCONF_EXT=
-    fi
-  else
+    # Add metadata
     doAddLabels
-    doDeployConf $*
-    if [ "$BUILDVH" == "1" ]; then
-      DEPLOYCONF_EXT=vh
-      doDeployConf $*
-      DEPLOYCONF_EXT=
-    fi
-    doDeployK8s $*
-    # doCleanUp // no cleanup in devdeploy
+
+    # Update the cluster to current environments
+    doDeployK8s ${WOV_CACHEDIR}/clusters/${WOV_CLUSTER} $*
+
+    # Point to development containers and make sure they are available
+    doPatchDeployments $*
+    doCheckContainersExist $*
   fi
+  set +x
 
-  doPatchDeployments $*
-
-  doCheckContainersExist $*
 }
 
 function join_by { local IFS="$1"; shift; echo "$*"; }
@@ -456,7 +378,21 @@ function doDeployStage()
   fi
   printf "\n"
 
-  # printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
+
+  # Ensure the cluster's environment (and vh if needed) is up to date
+  if [ $DOECHO -ge 1 ]; then printf "  ... build for cluster '${WOV_CLUSTER}'.\n"; fi
+  wov-env-build -q --cluster ${WOV_CLUSTER}
+  if [ "$?" != "0" ]; then exit 1; fi
+  if [ "$BUILDVH" == "1" ]; then 
+    if [ $DOECHO -ge 1 ]; then printf "  ... build for cluster 'vh'.\n"; fi
+    wov-env-build -q --cluster vh; 
+    if [ "$?" != "0" ]; then exit 1; fi 
+  fi
+
+
+  # Deploy to cluster, the relevant K8s "stuff"
+  doDeployConf ${WOV_CACHEDIR}/clusters/${WOV_CLUSTER} $*
+  if [ "$BUILDVH" == "1" ]; then doDeployConf ${WOV_CACHEDIR}/clusters/vh $*; fi
 
 
   # If deploying the latest PVER, check that all code is pushed to archive
@@ -471,59 +407,30 @@ function doDeployStage()
 
   # If deploying the latest SVER, check that all env is pushed to archive
   if [ "${WOV_CUR_SVER}" == "${WOV_SVER}" ]; then
-    #  deployenvargs=( "$@" )
-    #  set ""
-    #  . wov-push-env -q
-    #  set -- "${deployenvargs[@]}"
-    wov-push-env -q
+    echo "  ... pushing k8s to be sure"
+    wov-push-k8s -q
+    if [ "$?" != "0" ]; then exit 1; fi
   fi
 
-  # printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
-
-  ARCHBASE=${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}
-
-  printf "  ... ARCHBASE : ${ARCHBASE}"
-
+  # Pull environment from the Archive
   # --------------------------------------------------------------------- 
-  # Make directory to put files
-  DEPLOYDIR=${WOV_BASEDIR}/wovtools/cache/.deployments/${WOV_PVER}_${WOV_STAGE}_${WOV_SVER}.$$
-  mkdir -p ${DEPLOYDIR}/conf/cm
-  mkdir -p ${DEPLOYDIR}/conf/se
-  mkdir -p ${DEPLOYDIR}/k8s
-  chmod -R 700 ${DEPLOYDIR}
-
-
-  # printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
-
-  # --------------------------------------------------------------------- 
-  # Pull env files
-  aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/conf ${DEPLOYDIR}/conf  --delete
-  aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE}/k8s ${DEPLOYDIR}/k8s  --delete
-
-  # printf " check : pver : ${WOV_PVER}   sver: ${WOV_SVER}\n"
-#  local CMFILE=${DEPLOYDIR}/conf/cm
-#  local SEFILE=${DEPLOYDIR}/conf/se
-
-#  if [ ! -f "$CMFILE" ]; then 
-#    printf "\nERROR: K8s ConfigMap file does not exist at : '${CMFILE}'.\n"
-#    exit 1
-#  fi
-#  if [ ! -f "$SEFILE" ]; then 
-#    printf "\nERROR: K8s Secret file does not exist at : '${SEFILE}'.\n"
-#    exit 1
-#  fi
+  local ARCHBASE="$(getRelativeArchivePath) ${WOV_CLUSTER}"
+  local DEPLOYSRC=${WOV_CACHDIR}/.deployments/${ARCHBASE}.$$
+  mkdir -p ${DEPLOYSRC}
+  chmod 700 ${DEPLOYSRC}
+  echo "DEBUG PRINTONLY : aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE} ${DEPLOYSRC}  --delete"
+  # aws s3 sync ${WOV_ARCHIVEENV}/${ARCHBASE} ${DEPLOYSRC}  --delete
 
   if [ "${DRYRUN}" == "0" ]; then 
     if [ "${CONFONLY}" == "1" ]; then
-      doDeployConf $*
+      doDeployConf ${DEPLOYSRC} $*
     else
       doAddLabels
-      doDeployConf $*
-      doDeployK8s $*
-      doCleanUp
+      doDeployConf ${DEPLOYSRC} $*
+      doDeployK8s  ${DEPLOYSRC} $*
+      rm -Rf ${DEPLOYSRC}
     fi
   fi
-
 }
 
 
@@ -604,8 +511,8 @@ while [[ $1 =~ ^- ]]; do
   fi
 done
 
-if [ "$#*" != "0" ]; then
-  printf " microservice recipes: $*\n"
+if [ "$#" != "0" ]; then
+  printf " microservice recipes: ( $* )\n"
 else
   printf " microservice recipes: ALL\n"
 fi
@@ -614,7 +521,7 @@ if [ "${DEPLOYTYPE}" == "" ]; then
   echo ""
   echo "***ERROR deploy needs to specify incremental or full"
   echo "  --dev   [...] : just deploy current dev environment (non-production)"
-  echo "  --stage [...] :  deploy versioned system"
+  echo "  --stage [...] : deploy versioned system"
   echo "  --patch [...] : patch deployments to point to the STAGE_dev container (--dev does for its own deployments)"
   echo ""
 
@@ -622,9 +529,12 @@ elif [ "${DEPLOYTYPE}" == "dev" ]; then
   doDeployDev $*
 
 elif [ "${DEPLOYTYPE}" == "patch" ]; then
+  # Ensure the cluster's environment is up to date and send 
+  wov-env-build --cluster ${WOV_CLUSTER}
   doPatchDeployments $*
 
 elif [ "${DEPLOYTYPE}" == "stage" ]; then
   doDeployStage $*
+
 fi
 

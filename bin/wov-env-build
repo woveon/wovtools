@@ -100,8 +100,10 @@ function retreiveLocalContextCluster()
 # --------------------------------------------------------------------- 
 function fBuildSecrets()
 {
-  # local MV=cp
+  # if verbose, keep intermediate files for debugging
   local MV=mv
+  if [ "$DOECHO" == "2" ]; then MV=cp; fi
+
   local CLUSTER=$1
   if [ "$CLUSTER" == "" ]; then printf "\n\nERROR: no CLUSTER defined for building secret.\n\n"; exit 1; fi
 
@@ -127,13 +129,13 @@ function fBuildSecrets()
 
 
   # ---------------------------------------------------------------------
-  # Build secret file
+  # Build temp secret file
   # ---------------------------------------------------------------------
-  echo "" > ${SECRETFILE}
-  chmod 600 ${SECRETFILE}
+  echo "" > ${SECRETFILE}_
+  chmod 600 ${SECRETFILE}_
 
   # start with abbreviated versions of "basic config"
-  cat >> ${SECRETFILE} <<EOF
+  cat >> ${SECRETFILE}_ <<EOF
 {
   "CONTEXT"  : "${WOV_CONTEXT}",
   "CLUSTER"  : "${WOV_CLUSTER}",
@@ -180,8 +182,8 @@ EOF
     if [ "$DOECHO" == "2" ]; then echo "  ... adding secret file $sf"; fi
     echo "" > ${SECRETFILE}.2
     chmod 600 ${SECRETFILE}.2
-    jq -s ".[0] * .[1]" ${SECRETFILE} ${WOV_BASEDIR}/wovtools/secrets/$sf >> ${SECRETFILE}.2
-    ${MV} ${SECRETFILE}.2 ${SECRETFILE}
+    jq -s ".[0] * .[1]" ${SECRETFILE}_ ${WOV_BASEDIR}/wovtools/secrets/$sf >> ${SECRETFILE}.2
+    ${MV} ${SECRETFILE}.2 ${SECRETFILE}_
   done
 
 
@@ -200,8 +202,8 @@ EOF
   echo "" > ${SECRETFILE}.3
   chmod 600 ${SECRETFILE}.3
   if [[ $DOECHO -ge 1 ]]; then   echo "  ... using cluster     : ${WOV_CLUSTER}"; fi
-  wov_stage-select ${SECRETFILE} CLUSTER${WOV_CLUSTER} >> ${SECRETFILE}.3
-  ${MV} ${SECRETFILE}.3  ${SECRETFILE}
+  wov_stage-select ${SECRETFILE}_ CLUSTER${WOV_CLUSTER} >> ${SECRETFILE}.3
+  ${MV} ${SECRETFILE}.3  ${SECRETFILE}_
 
 
   # STEP 4: STAGE Select
@@ -210,8 +212,8 @@ EOF
   echo "" > ${SECRETFILE}.4
   chmod 600 ${SECRETFILE}.4
   if [[ $DOECHO -ge 1 ]]; then   echo "  ... using stage       : ${WOV_STAGE}"; fi
-  wov_stage-select ${SECRETFILE} STAGE${WOV_STAGE} >> ${SECRETFILE}.4
-  ${MV} ${SECRETFILE}.4  ${SECRETFILE}
+  wov_stage-select ${SECRETFILE}_ STAGE${WOV_STAGE} >> ${SECRETFILE}.4
+  ${MV} ${SECRETFILE}.4  ${SECRETFILE}_
 
 
   # STEP 5: Secrets Mods for a cluster (from wovtools/config.json|local.json), which applies modifications for a cluster to MERGED_RAW data
@@ -237,12 +239,22 @@ EOF
       # rewrite routes in SECRETFILE, remove original graft, then move back to SECREFILE for next mod
       echo "" > ${SECRETFILE}.5
       chmod 600 ${SECRETFILE}.5
-      jq '.'"${rtto}"' += .'"${rtfrom}"'' ${SECRETFILE} >> ${SECRETFILE}.5
+      jq '.'"${rtto}"' += .'"${rtfrom}"'' ${SECRETFILE}_ >> ${SECRETFILE}.5
       # TODO: remove original graft
 
       # mv file
-      ${MV} ${SECRETFILE}.5 ${SECRETFILE}
+      ${MV} ${SECRETFILE}.5 ${SECRETFILE}_
     done
+
+
+    # use SECRETFILE if no SECRETFILE or differs from SECRETFILE_. otherwise just delete.
+    if [ ! -e ${SECRETFILE} ]; then mv ${SECRETFILE}_ ${SECRETFILE};
+    else 
+      diff ${SECRETFILE}_ ${SECRETFILE} > /dev/null
+      if [ "$?" != "0" ]; then mv ${SECRETFILE}_ ${SECRETFILE}; 
+      else rm ${SECRETFILE}_; fi
+    fi
+
   else
     if [ "$DOECHO" == "2" ]; then echo "  ... no secretsmods entry for cluster: ${CLUSTER}"; fi
   fi
@@ -395,6 +407,8 @@ fBuildClusterDir()
     local dowecompile=${DOFORCE}
     if [ "$2" == "1" ]; then dowecompile=1;                                  # secrets changed?
     elif [ ! -e "${CMFILE1}" ] && [ ! -e "${CMFILE2}" ] ; then dowecompile=1; # no CMFILE file
+    elif [ -e "${CMFILE1}" ] && [ ${CLUSTER_DIR}/secrets.json -nt "${CMFILE1}" ]; then dowecompile=1; # existing CMFILE1 and old
+    elif [ -e "${CMFILE2}" ] && [ ${CLUSTER_DIR}/secrets.json -nt "${CMFILE2}" ]; then dowecompile=1; # existing CMFILE2 and old
     fi
 
     # Compile K8s ConfigMap file
@@ -403,13 +417,13 @@ fBuildClusterDir()
       rm -f ${CMFILE} || true
       touch ${CMFILE}
       chmod 600 ${CMFILE}
-      wov-env --cm ${MICROSERVICE} >> ${CMFILE} 2>&1
+      wov-env --cluster ${CLUSTER} --cm ${MICROSERVICE} >> ${CMFILE} 2>&1
       if [ "$?" != "0" ]; then
         rm ${CMFILE}
         CMFILE="${CMFILE2}"
         if [ "$hasbuiltbasecm" == "0" ]; then
           if [[ $DOECHO -ge 2 ]]; then echo "  ... using config for ${WOV_PROJECT}, instead of ${MICROSERVICE}"; fi
-          wov-env --cm ${WOV_PROJECT} >> ${CMFILE}
+          wov-env --cluster ${CLUSTER} --cm ${WOV_PROJECT} >> ${CMFILE}
           if [ "$?" != "0" ]; then exit 1; fi
           hasbuiltbasecm=1
           if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${CMFILE}."; fi
@@ -437,12 +451,12 @@ fBuildClusterDir()
       rm -f ${SEFILE} || true
       touch ${SEFILE}
       chmod 600 ${SEFILE}
-      wov-env --se ${MICROSERVICE} >> ${SEFILE} 2>&1
+      wov-env --cluster ${CLUSTER} --se ${MICROSERVICE} >> ${SEFILE} 2>&1
       if [ "$?" != "0" ]; then
         rm ${SEFILE}
         SEFILE="${SEFILE2}"
         if [ "$hasbuiltbasese" == "0" ]; then
-          wov-env --se ${WOV_PROJECT} >> ${SEFILE}
+          wov-env --cluster ${CLUSTER} --se ${WOV_PROJECT} >> ${SEFILE}
           if [ "$?" != "0" ]; then exit 1; fi
           hasbuiltbasese=1
           if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${SEFILE}."; fi

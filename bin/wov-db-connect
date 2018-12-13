@@ -91,7 +91,6 @@ if [ "${WOV_PROJECTTYPE}" == "pl" ]; then
   DB_PASSWORD=WOV_we_db_password
   DB_HOST=WOV_we_db_url
   DB_PORT=WOV_we_db_port
-  set -x
   DATABASESERVER=${WOV_PROJECT}db
 fi
 
@@ -102,7 +101,6 @@ DB_USERNAME=${!DB_USERNAME}
 DB_PASSWORD=${!DB_PASSWORD}
 DB_HOST=${!DB_HOST}
 DB_PORT=${!DB_PORT}
-set +x
 
 
 # NOTE: using bastion so this overrides cluster settings
@@ -213,12 +211,10 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #      PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
 #    fi
 
-    set -x
     PGPASSWORD=${DB_PASSWORD} pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
     if [ "$?" != "0" ]; then
       printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
     fi
-    set +x
 
   elif [ "${DB_OP}" == "command" ]; then
     # Log into pod 'vh', run psql
@@ -262,9 +258,7 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #    else
 #      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
 #    fi
-set -x
     PGPASSWORD=${DB_PASSWORD} psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
-set +x
     if [ "$?" != "0" ]; then
       printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
     fi
@@ -286,18 +280,15 @@ db.getCollectionNames().forEach(function(collname) {
 })
 EOF)
 
-set -x
     kubectl exec -it $(wov-p ${DATABASESERVER}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE} --eval \"${DB_COMMAND}\""
 #    if [ "${DB_HOST}" != "localhost" ]; then
 #      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
 #    else
 #      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
 #    fi
-set +x
 
 
   elif [ "${DB_OP}" == "command" ]; then
-    set -x
     kubectl exec -it $(wov-p ${DATABASESERVER}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE} --eval \"${DB_COMMAND}\""
 #    if [ "${DB_HOST}" != "localhost" ]; then
 #      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
@@ -315,7 +306,6 @@ set +x
     fi
   elif [ "${DB_OP}" == "" ]; then
     doDatabaseConnectMessage
-set -x
     
     kubectl exec -it $(wov-p ${DATABASESERVER}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE}"
 #    if [ "${DB_HOST}" != "localhost" ]; then
@@ -323,7 +313,6 @@ set -x
 #    else
 #      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}
 #    fi
-set +x
 
   fi
 

@@ -63,7 +63,6 @@ function doVolumeCheck()
 
 function doVolumeCreate()
 {
-  set -x
   local CL_ZONES_ARRAY=($CL_ZONES)
   local VOLNAME=$1
   local VOLSIZE=$2
@@ -72,7 +71,6 @@ function doVolumeCreate()
     --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=${VOLNAME}}]" | jq ".VolumeId" -r`
   RET=$?
   echo "Create: $RES"
-  set +x
   return $RET
 }
 

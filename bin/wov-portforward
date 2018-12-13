@@ -121,6 +121,5 @@ for s in $*; do
   else
     echo "  ...error finding ports on service: '$s'"
   fi
-  set +x
 
 done

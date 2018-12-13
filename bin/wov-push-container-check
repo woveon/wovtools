@@ -195,7 +195,6 @@ function fGetRepoLabel()
 #  R=$(echo "${RR}" | grep ${WOV_KSTAGE}_${WOV_PVER})
 #  R_sha=$(echo "${R}" | awk '{print $3}')
 #  Local_sha=$(docker inspect ${WOV_PROJECT}/${WOV_PROJECT}${CONTAINER} | jq -r '.[0].Id')
-#  set -x
 #  echo "Rsha ${R_sha}    Lsha ${Local_sha}" 1>&2
 #  if [ "${R_sha}" == "${Local_sha}" ]; then
 #    retval=1
@@ -203,7 +202,6 @@ function fGetRepoLabel()
 #    echo "remote repo out of date" 1>&2
 #    retval=0
 #  fi
-#  set +x
 #  echo "$retval"
 #}
 

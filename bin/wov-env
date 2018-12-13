@@ -169,6 +169,21 @@ function getRelativeArchivePath()
 
 
 # --------------------------------------------------------------------- 
+# $1 - cluster name
+# $2 - append directory
+# NOTE: NOT USED
+# --------------------------------------------------------------------- 
+function getClusterConfigPath()
+{
+  local CLUSTER=$1
+  local APPENDPATH=$2
+  local RETVAL="${WOV_BASEDIR}/wovtools/cache/clusters/${CLUSTER}"
+  if [ "$APPENDPATH" != "" ]; then RETVAL="${RETVAL}/${APPENDPATH}"; fi
+  echo $RETVAL
+}
+
+
+# --------------------------------------------------------------------- 
 # Calls wov-env-build to build the secretfile if it does not exist.
 # --------------------------------------------------------------------- 
 function fBuildSecret
@@ -388,7 +403,7 @@ function fConfGeneration()
 
 #  R+=( WOV_STAGE=${WOV_STAGE} WOV_ME=${WOV_ME} )
 
-  echo "R: ${R[*]}"
+  # echo "R: ${R[*]}"
 
   local SEP=' '
   if [ "$3" == "1" ]; then SEP='\n'; fi

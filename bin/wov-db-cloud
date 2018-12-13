@@ -511,14 +511,12 @@ function doDryRun()
 
 function doGetSchemaDB()
 {
-  set -x
   HOSTADDR=$(resName DNS ${WOVDB_DBNAME})
   kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${WOV_apidb_password} pg_dump \
       -s \
       -h ${HOSTADDR}  \
       -U ${WOV_apidb_username} \
       -d ${WOV_apidb_database}"
-  set +x
 }
 
 
