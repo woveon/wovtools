@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 
-
 # ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
@@ -258,10 +257,12 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #    else
 #      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
 #    fi
+  set -x
     PGPASSWORD=${DB_PASSWORD} psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
     if [ "$?" != "0" ]; then
       printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
     fi
+  set +x
   fi
 
 elif [ "${DB_TYPE}" == "mongo" ]; then

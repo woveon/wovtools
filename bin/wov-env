@@ -106,7 +106,20 @@ if [ ${WOV_FILE_SECRETS_RAW} -nt ${WOV_FILE_SECRETSMERGED} ] || [ ${WOV_FILE_SEC
   echo "... merged file out of date, creating: ${WOV_FILE_SECRETSMERGED}"
   echo "" > ${WOV_FILE_SECRETSMERGED}
   chmod 600 ${WOV_FILE_SECRETSMERGED}
-  jq -s ".[0] * .[1]" ${WOV_FILE_SECRETS_RAW} ${WOV_FILE_SECRETSLOCAL_RAW} >> ${WOV_FILE_SECRETSMERGED}
+  jq -s ".[0] * .[1]" ${WOV_FILE_SECRETS_RAW} ${WOV_FILE_SECRETSLOCAL_RAW} >> ${WOV_FILE_SECRETSMERGED} 2> /dev/null
+  if [ "$?" != "0" ]; then 
+    F1=$(cat ${WOV_FILE_SECRETS_RAW} | jq type 2>&1)
+    F1a=$?
+    if [ "$F1a" != "0" ]; then
+      printf "\n\nERROR: ${WOV_FILE_SECRETS_RAW} is not properly formatted.\n${F1}\n\n"
+    fi
+    F2=$(cat ${WOV_FILE_SECRETSLOCAL_RAW} | jq type 2>&1)
+    F2a=$?
+    if [ "$F2a" != "0" ]; then
+      printf "\n\nERROR: ${WOV_FILE_SECRETSLOCAL_RAW} is not properly formatted.\n${F2}\n\n"
+    fi
+    exit 1; 
+  fi
 fi
 
 
