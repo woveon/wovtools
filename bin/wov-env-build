@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-FOLD=$(tput cols)
+FOLD=`tput cols`
 DOECHO=1
 HAS_SECRET=0
 HAS_CLEAN=0
@@ -49,6 +49,11 @@ set ""
 . wov-env
 set -- "${buildargs[@]}"
 
+
+wov-ns-check
+if [ "$?" != "0" ]; then
+  exit 1
+fi
 
 # --------------------------------------------------------------------- 
 # vars - NOTE: moved to wov-env
