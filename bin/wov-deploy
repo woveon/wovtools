@@ -59,42 +59,45 @@ function doAddLabels()
 function doDeployConf()
 {
   local DEPLOYSRC=$1
-  shift
-
-  local CONFEXT=$1
+  local CONFEXT=$2
   if [ "$CONFEXT" == "null" ]; then CONFEXT=""; fi
   shift
-
-  # New microservice for each container
-  RECIPES=( "$@" )
-  if [ "${#RECIPES[@]}" == "0" ]; then
-    RECIPES=( $(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null) )
-#    RECIPES+=( "" )
-  fi
-  # echo "RECIPES: ${#RECIPES[@]} : ${RECIPES[@]}"
+  shift
 
   # Files for Configmap file
   CMDIR=${DEPLOYSRC}/cm
-  #CMDIR=${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/cm
 
   # Files for Secrets file
   SEDIR=${DEPLOYSRC}/se
-  #SEDIR=${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/se
 
+  # New microservice for each container if you give them on the command line, or just read the directory
+  RECIPES=( "$@" )
+  if [ "${#RECIPES[@]}" == "0" ]; then
+  #  RECIPES=( $(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null) )
+    RECIPESCM=( $(cd ${CMDIR} && find * -maxdepth 0 -type f 2> /dev/null) )
+    RECIPESSE=( $(cd ${SEDIR} && find * -maxdepth 0 -type f 2> /dev/null) )
+  else
+    RECIPESCM=$RECIPES
+    RECIPESSE=$RECIPES
+  fi
+  # echo "RECIPES: ${#RECIPES[@]} : ${RECIPES[@]}"
+  echo "RECIPESCM: ${#RECIPESCM[@]} : ${RECIPESCM[@]}"
+  echo "RECIPESSE: ${#RECIPESSE[@]} : ${RECIPESSE[@]}"
 
   # Create ConfigMap PLUGIN
   # --------------------------------------------------------------------- 
-  for f in "${RECIPES[@]}"; do
+  for f in "${RECIPESCM[@]}"; do
 
-    local MSNAME=${WOV_PROJECT}${f}
+    #local MSNAME=${WOV_PROJECT}${f}
+    local MSNAME=${f}
     local CMFILE="${CMDIR}/${MSNAME}"          # full path to file
 
     # delete existing configmap
     kubectl delete configmap "${MSNAME}${CONFEXT}" 2>&1 > /dev/null
 
-    # if no configmap file, continue on
+    # if no configmap file, error out
     if [ ! -e "${CMFILE}" ]; then 
-      printf "\n\nERROR: no configmap '${MSNAME}${CONFEXT}', file ${CMFILE}.\n\n"
+      printf "\n\nERROR: no configmap '${MSNAME}${CONFEXT}', file ${CMFILE}. (RECIPES: '${RECIPES[@]}')\n\n"
       exit 1
       # continue; 
     fi
@@ -119,9 +122,10 @@ function doDeployConf()
 
   # Create Secret PLUGIN
   # --------------------------------------------------------------------- 
-  for f in "${RECIPES[@]}"; do
+  for f in "${RECIPESSE[@]}"; do
 
-    local MSNAME=${WOV_PROJECT}${f}${FILEEXT}
+    #local MSNAME=${WOV_PROJECT}${f}${FILEEXT}
+    local MSNAME=${f}${FILEEXT}
     local SEFILE="${SEDIR}/${MSNAME}"          # full path to file
 
     # delete existing secret
@@ -237,7 +241,7 @@ Deploys and updates a running kubernetes project, either from a specific and ver
 files   : all by default, or type them here and do individual only
 
  Deploy Types (one required):
-  --dev   : Push current development environment to cluster. 
+  --dev   : Push current development environment to current development cluster (NOT PRODUCTION). 
   --stage : Proper call to roll a version to a stage in the cluster
 
  Deploy Options:
@@ -534,7 +538,7 @@ fi
 if [ "${DEPLOYTYPE}" == "" ]; then
   echo ""
   echo "***ERROR deploy needs to specify incremental or full"
-  echo "  --dev   [...] : just deploy current dev environment (non-production)"
+  echo "  --dev   [...] : just deploy to the current development environment target (non-production)"
   echo "  --stage [...] : deploy versioned system"
   echo "  --patch [...] : patch deployments to point to the STAGE_dev container (--dev does for its own deployments)"
   echo ""

@@ -11,6 +11,7 @@ fi
 
 pushcontainersargs=( "$@" )
 set ""
+. wov-env --provider
 . <(wov-env --provider --exports)
 . wov-ns-check
 set -- "${pushcontainersargs[@]}"

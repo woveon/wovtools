@@ -19,7 +19,7 @@ BINS=${BINS-ENV} ${BINS-CLI} ${BINS-VH} ${BINS-PUSH}
 
 .PHONY: vh
 
-APPLESCRIPT=wov-context.app
+APPLESCRIPT=wov-context
 
 install : 
 
@@ -34,16 +34,18 @@ install : preinstall /usr/local/etc/bash_completion.d/wovtools
 		ln -f -s $(CURDIR)/bin/$$b /usr/local/bin/$$b; \
 		done
 	@echo "  ... install applescript to Terminal script directory, via ln"
+	@mkdir -p "$(HOME)/Library/Scripts/Applications/Terminal"
 	@for b in $(APPLESCRIPT); do \
 		echo "    ... install $$b"; \
-		if [ ! -e $(CURDIR)/bin/$$b ]; then echo "ERROR: can not find $$b... did you compile it as an app?"; fi; \
-		ln -f -s $(CURDIR)/bin/$$b $(HOME)/Library/Scripts/Applications/Terminal/$$b; \
+		osacompile -o "bin/$$b.app" "bin/$$b.scpt"; \
+		if [ ! -e $(CURDIR)/bin/$$b.app ]; then echo "ERROR: can not find $$b.app... did you compile it as an app?"; fi; \
+		ln -f -s $(CURDIR)/bin/$$b.app $(HOME)/Library/Scripts/Applications/Terminal/$$b.app; \
 	done
 	@echo "  ... install node modules."
 	@npm install -g argparse handlebars ssh-config dotenv minimist
 	@echo
 	@echo "NOTE!!!"
-	@echo "... for wcd to work, add this to your .bash_profile"
+	@echo "... for wcd to work, add this to your ~/.bash_profile"
 	@echo "function wcd() {"
 	@echo '  . wov-cd $$*'
 	@echo "}"

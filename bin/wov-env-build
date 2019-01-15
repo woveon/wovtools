@@ -274,7 +274,13 @@ EOF
     if [ "$DOECHO" == "2" ]; then echo "  ... updating local context"; fi
     mkdir -p     "${WOV_CACHEDIR}/clusters/local"
     chmod -R 700 "${WOV_CACHEDIR}/clusters/local"
-    cp "${WOV_CACHEDIR}/clusters/${LOCALCONTEXT}/secrets.json" "${WOV_CACHEDIR}/clusters/local/secrets.json" 
+    if [ "${LOCALCONTEXT}" != "local" ]; then
+      cp "${WOV_CACHEDIR}/clusters/${LOCALCONTEXT}/secrets.json" "${WOV_CACHEDIR}/clusters/local/secrets.json" 2> /dev/null
+      if [ "$?" != "0" ]; then
+        echo "ERROR: failed copy of secrets to cache dir 'clusters/local/secrets.json'." 1>&2
+        exit 1
+      fi
+    fi
   fi
 
   # Is secret different from last run?
