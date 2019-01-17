@@ -1,0 +1,28 @@
+#!/usr/bin/env node
+
+const CryptoJS      = require('crypto-js'); // library with convenient syntax
+
+// NOTE: code from woveon-service
+
+/**
+ * Encrypt data with AES, using a salted key.
+ * @param {*} _saltedkey -
+ * @param {*} _secret - Thing to encrypt. UTF8, bytes, etc. JSON.stringify don't care.
+ * @return {object} - call toString() on the object to get the string
+ */
+function encrypt(_saltedkey, _secret) {
+  let retval = null;
+  try {
+    let result = CryptoJS.AES.encrypt(JSON.stringify(_secret), _saltedkey);
+    retval = result.toString();
+  }
+  catch (e) { console.log(e); throw new Error('Failed to encrypt.'); }
+  return retval;
+}
+
+
+// console.log('saltedkey: ', process.argv[2]);
+// console.log('secret:    ', process.argv[3]);
+let r = encrypt(process.argv[2], process.argv[3]);
+
+console.log(r);

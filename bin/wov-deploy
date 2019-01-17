@@ -81,8 +81,8 @@ function doDeployConf()
     RECIPESSE=$RECIPES
   fi
   # echo "RECIPES: ${#RECIPES[@]} : ${RECIPES[@]}"
-  echo "RECIPESCM: ${#RECIPESCM[@]} : ${RECIPESCM[@]}"
-  echo "RECIPESSE: ${#RECIPESSE[@]} : ${RECIPESSE[@]}"
+  # echo "RECIPESCM: ${#RECIPESCM[@]} : ${RECIPESCM[@]}"
+  # echo "RECIPESSE: ${#RECIPESSE[@]} : ${RECIPESSE[@]}"
 
   # Create ConfigMap PLUGIN
   # --------------------------------------------------------------------- 

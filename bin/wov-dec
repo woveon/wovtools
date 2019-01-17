@@ -1,0 +1,24 @@
+#!/usr/bin/env node
+
+const CryptoJS      = require('crypto-js'); // library with convenient syntax
+
+
+// NOTE: decrupt function for woveon-service
+
+/**
+ * Decrypt data with AES, using a salted key.
+ * @param {*} _saltedkey -
+ * @param {*} _secret - Content string to encrypt
+ * @return {string} - _secret decrypted to UTF8 string
+ */
+function decrypt(_saltedkey, _secret) {
+  let decryptedBytes = CryptoJS.AES.decrypt(_secret, _saltedkey);
+  let plaintext = decryptedBytes.toString(CryptoJS.enc.Utf8);
+  return JSON.parse(plaintext);
+}
+
+// console.log('saltedkey: ', process.argv[2]);
+// console.log('secret:    ', process.argv[3]);
+let r = decrypt(process.argv[2], process.argv[3]);
+
+console.log(r);

@@ -19,6 +19,7 @@ DB_COMMAND=
 DB_OP=
 DB_FILE=
 
+DB_HEADEROPTIONS=
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
@@ -82,8 +83,11 @@ DB_PASSWORD=WOV_${DATABASESERVER}_password
 DB_HOST=WOV_${DATABASESERVER}_host
 DB_PORT=WOV_${DATABASESERVER}_port
 
-# Plugins use a mongodb
-if [ "${WOV_PROJECTTYPE}" == "pl" ]; then
+DB_HEADEROPTIONS=-t
+
+# if in Plugin, default to the mongodb
+if [ "$DATABASESERVER" == "" ] && [ "${WOV_PROJECTTYPE}" == "pl" ]; then
+  echo "...defaulting to plugin mongodb."
   DB_TYPE=WOV_we_db_type
   DB_DATABASE=WOV_we_db_collection
   DB_USERNAME=WOV_we_db_user
@@ -155,6 +159,14 @@ while [[ $1 =~ ^- ]]; do
     DB_OP="file"
     DB_FILE="$1"
     shift
+
+  elif [ "$1" == "--headers" ]; then
+    shift
+    DB_HEADEROPTIONS=
+
+  elif [ "$1" == "--noheaders" ]; then
+    shift
+    DB_HEADEROPTIONS=-t
 
   elif [ "$1" == "-c" ]; then
     shift
@@ -228,7 +240,8 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #      PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\"
 #    fi
 
-    PGPASSWORD=${DB_PASSWORD} psql --tuples-only -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"
+    PGPASSWORD=${DB_PASSWORD} psql ${DB_HEADEROPTIONS} -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"
+    #PGPASSWORD=${DB_PASSWORD} psql --tuples-only -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"
     if [ "$?" != "0" ]; then
       printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
     fi

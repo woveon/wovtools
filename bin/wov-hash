@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+
+//
+// This generates a salt and does a one-way hash on it, so incoming passwords are just compared to the hash... passwords are not maintained in this way.
+
+const bcrypt = require('bcryptjs');
+const SALT_WORK_FACTOR = 10;
+
+// cryptPassword
+// From backend/src/core/models/User.js
+
+let cryptPassword = (_pw) => {
+  // const user = this;
+
+  return new Promise(
+    (resolve, reject) => bcrypt.genSalt(SALT_WORK_FACTOR,
+      (error, salt) => {
+        // console.log(`salt : '${salt}'`);
+        // console.log(`pw : '${_pw}'`);
+        if (error) { return reject(error); }
+        return bcrypt.hash(_pw, salt, (err, hash) => {
+          // console.log(`hash : '${hash}'`);
+          if (err) { return reject(err); }
+          return resolve(hash);
+        });
+      }));
+};
+
+cryptPassword(process.argv[2])
+  .then( (hash) => { console.log(hash); });
