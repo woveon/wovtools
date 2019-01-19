@@ -85,9 +85,9 @@ DB_PORT=WOV_${DATABASESERVER}_port
 
 DB_HEADEROPTIONS=-t
 
-# if in Plugin, default to the mongodb
-if [ "$DATABASESERVER" == "" ] && [ "${WOV_PROJECTTYPE}" == "pl" ]; then
-  echo "...defaulting to plugin mongodb."
+# if in Plugin and using default database, default to the mongodb
+if [[ ( "$DATABASESERVER" == "" ) || ( "$DATABASESERVER" == "${WOV_PROJECT}db" ) ]] && [[ "${WOV_PROJECTTYPE}" == "pl" ]]; then
+  # echo "...defaulting to plugin mongodb."
   DB_TYPE=WOV_we_db_type
   DB_DATABASE=WOV_we_db_collection
   DB_USERNAME=WOV_we_db_user
