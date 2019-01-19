@@ -442,6 +442,13 @@ fBuildClusterDir()
       else
         if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${CMFILE}."; fi
       fi
+
+      # sort and uniq to remove duplicates
+      touch ${CMFILE}.1
+      chmod 600 ${CMFILE}.1
+      sort ${CMFILE} | uniq >> ${CMFILE}.1
+      mv ${CMFILE}.1 ${CMFILE}
+
     else
       if [ "${DOECHO}" == "2" ]; then echo "  ... skipped K8s ConfigMap file."; fi
     fi
@@ -475,6 +482,13 @@ fBuildClusterDir()
       else
         if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${SEFILE}."; fi
       fi
+
+      # sort and uniq to remove duplicates
+      touch ${SEFILE}.1
+      chmod 600 ${SEFILE}.1
+      sort ${SEFILE} | uniq >> ${SEFILE}.1
+      mv ${SEFILE}.1 ${SEFILE}
+
     else
       if [ "${DOECHO}" == "2" ]; then echo "  ... skipped K8s Secret file."; fi
     fi
