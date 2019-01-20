@@ -2,5 +2,6 @@
 .DS_Store
 *.swp
 bin/wov-context.app
+bin/wov-gui-*.app
 bin/dev
 tests/WovTools_test_tp1

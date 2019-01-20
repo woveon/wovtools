@@ -20,7 +20,7 @@ BINS=${BINS-ENV} ${BINS-CLI} ${BINS-VH} ${BINS-PUSH}
 
 .PHONY: vh
 
-APPLESCRIPT=wov-context.app
+APPLESCRIPT=wov-context.app wov-gui-cluster.app wov-gui-namespace.app wov-gui-project.app
 
 install : 
 
@@ -37,8 +37,9 @@ install : preinstall /usr/local/etc/bash_completion.d/wovtools
 	@echo "  ... install applescript to Terminal script directory, via ln"
 	@for b in $(APPLESCRIPT); do \
 		echo "    ... install $$b"; \
-		if [ ! -e $(CURDIR)/bin/$$b ]; then echo "ERROR: can not find $$b... did you compile it as an app?"; fi; \
-		ln -f -s $(CURDIR)/bin/$$b $(HOME)/Library/Scripts/Applications/Terminal/$$b; \
+		if [ ! -e $(CURDIR)/bin/$$b ]; then echo "ERROR: can not find $$b... did you compile it as an app? Script Editor > Export > Application, Show startup screen, Run-only "; fi; \
+		rm -Rf $(HOME)/Library/Scripts/Applications/Terminal/$$b; \
+		cp -r $(CURDIR)/bin/$$b $(HOME)/Library/Scripts/Applications/Terminal/$$b; \
 	done
 	@echo "  ... install node modules."
 	@npm install -g argparse handlebars ssh-config dotenv minimist bcryptjs crypto-js
