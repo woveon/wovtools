@@ -5,7 +5,8 @@
 # ---------------------------------------------------------------------
 wovawsvargs=( "$@" )
 set ""
-. <(wov-env --provider --exports)
+. wov-env --provider
+#. <(wov-env --provider --exports)
 . wov-ns-check
 set -- "${wovawsvargs[@]}"
 DOECHO=1
@@ -13,6 +14,29 @@ FOLD=$(tput cols)
 EXIT=1
 
 
+# TODO: fill this function in, and remove from WIAAS
+function doCluster()
+{
+  RANCLUSTER=1
+  fConvertRegionCodeAWS ${WOV_REGION}
+  export CL_REGION="$cRC"
+  export CL_ZONES="c d"
+  export CL_VPC=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${WOV_CLUSTER}-vpc" --query 'Vpcs[0].VpcId' | ${SED} -e 's/^"//' -e 's/"$//')
+}
+
+
+# ---------------------------------------------------------------------
+function fConvertRegionCodeAWS()
+{
+  case $1 in
+    va) cRC='us-east-1' ;;
+    iad) cRC='us-east-1' ;;
+    *)
+      echo
+      echo "***ERROR: unknown AWS region code of '$1'."
+      exit 1
+  esac
+}
 
 
 # ---------------------------------------------------------------------
@@ -29,6 +53,8 @@ usage: `basename $0` [command]
     id
     create
     ensure
+
+  cluster
   
 EOF
 
@@ -63,11 +89,24 @@ function doVolumeCheck()
 
 function doVolumeCreate()
 {
+
+  doCluster 
+
   local CL_ZONES_ARRAY=($CL_ZONES)
   local VOLNAME=$1
   local VOLSIZE=$2
+  local AVAILZONE="${CL_REGION}${CL_ZONES_ARRAY[0]}"
+  local ISBAD=0
+
+  if [ "${VOLNAME}" == "" ]; then printf "\n\nERROR: No VOLNAME. Pass a volume name as param 1.\n\n"; ISBAD=1; fi
+  if [ "${VOLSIZE}" == "" ]; then printf "\n\nERROR: No VOLSIZE. Pass a volume size in MB as param 2.\n\n"; ISBAD=1; fi
+  if [ "${CL_REGION}" == "" ]; then printf "\n\nERROR: No CL_REGION.\n\n"; ISBAD=1; fi
+  if [ "${CL_ZONES_ARRAY[0]}" == "" ]; then printf "\n\nERROR: No CL_ZONES_ARRAY[0].\n\n"; ISBAD=1; fi
+  if [ "${AVAILZONE}" == "" ]; then printf "\n\nERROR: No Availability Zone '${AVAILZONE}'. CL_REGION and/or CL_ZONES_ARRAY are not set.\n\n"; ISBAD=1; fi
+  if [ "${ISBAD}" == "1" ]; then exit 1; fi
+
   local RES=`aws ec2 create-volume --size ${VOLSIZE} --region ${CL_REGION} \
-    --availability-zone ${CL_REGION}${CL_ZONES_ARRAY[0]} --volume-type gp2 \
+    --availability-zone ${AVAILZONE} --volume-type gp2 \
     --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=${VOLNAME}}]" | jq ".VolumeId" -r`
   RET=$?
   echo "Create: $RES"
@@ -81,7 +120,7 @@ function doVolumeEnsure()
 
   local VOLID=`doVolumeID ${VOLNAME}`
   local VOLCHECK=$?
-  if [ "${VOLCHECK}" != "0" ]; then 
+  if [ "${VOLID}" == "null" ] || [ "${VOLCHECK}" != "0" ]; then 
     VOLID=`doVolumeCreate ${VOLNAME} ${VOLSIZE}`
     if [ ${DOECHO} -ge 2 ]; then echo "volume ${VOLNAME} created as ${VOLID}"; fi
   else 
@@ -138,6 +177,10 @@ elif [ "${COMMAND}" == "volume-create" ]; then
   EXIT=$?
 elif [ "${COMMAND}" == "volume-ensure" ]; then
   doVolumeEnsure   $*
+  EXIT=$?
+
+elif [ "${COMMAND}" == "cluster" ]; then
+  doCluster
   EXIT=$?
 
 else
