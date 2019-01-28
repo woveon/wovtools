@@ -16,7 +16,7 @@ BINS-DEPLOY=wov-deploy-service wov-deploy-info wov-deploy
 #		 wov-deploy wov-deploy-info wov-hbs wov-db-deploy  wov-deploy-dev \
 #		 wov-users wov-cl wov-mod  wov-env-build  wov_stage-select \
 #		 $(BINS-UTIL) $(BINS-GLOBAL) wov-aws wov
-BINS=${BINS-ENV} ${BINS-CLI} ${BINS-VH} ${BINS-PUSH}
+BINS=${BINS-ENV} ${BINS-CLI} ${BINS-VH} ${BINS-PUSH} ${BINS-DEPLOY}
 
 .PHONY: vh
 
