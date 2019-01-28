@@ -52,7 +52,17 @@ set -- "${buildargs[@]}"
 
 wov-ns-check
 if [ "$?" != "0" ]; then
-  exit 1
+  if [ "${WOV_KPROJECT}" != "${WOV_WPROJECT}" ]; then
+    printf "ERROR: WOV_KPROJECT/WOV_WPROJECT differences need to be fixed.\n\n"
+    exit 1
+  elif [ "${WOV_KSTAGE}" != "${WOV_GSTAGE}" ]; then
+    printf "WARNING: WOV_KSTAGE/WOV_GSTAGE differ. Assuming Kubernetes ${WOV_KSTAGE} and continuing (Allows building when git branches differ).\n\n"
+  else
+    printf "ERROR: Unknown namespace differences. Needs to be fixed.\n\n"
+    printf "WOV_PROJECT/KPROJECT/WPROJECT: '${WOV_PROJECT}' '${WOV_KPROJECT}' '${WOV_WPROJECT}'\n"
+    printf "WOV_STAGE/KSTAGE/GSTAGE      : '${WOV_STAGE}' '${WOV_KSTAGE}' '${WOV_GSTAGE}'\n"
+    exit 1
+  fi
 fi
 
 # --------------------------------------------------------------------- 

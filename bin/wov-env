@@ -6,6 +6,7 @@ DOALL=1
 SED=`which gsed`
 HAS_SECRET=0
 PROVIDERVARS=()
+RANCLUSTER=0
 
 
 function fWovEnvDisplayOptions()
@@ -50,6 +51,7 @@ Command Options:
   -c/--cluster X  : set the cluster to X (required for --cm/--se)
   --cm X          : only config used by plugin, (sep lines)
   --se X          : only secrets used by plugin, (sep lines)
+  --CC            : cluster configuration
 
 Example Usage:
   `basename $0`    : sets all environment variables
@@ -71,7 +73,7 @@ if [ "$1" == "--vh-label" ]; then echo "0.1"; exit 0; fi
 # --------------------------------------------------------------------- 
 # Start
 # --------------------------------------------------------------------- 
-WOV_VERSION=0
+WOV_VERSION=1
 export WOV_VERSION
 export WOV_BASEDIR="$(git rev-parse --show-toplevel)"
 if [ "$WOV_BASEDIR" == "" ]; then
@@ -260,7 +262,8 @@ export WOV_ARCHIVEENV="${ALLVARS[6]}"
 
 # Unifying
 # --------------------------------------------------------------------- 
-export WOV_STAGE="$WOV_GSTAGE"        # GSTAGE has priority since it can represent <initials>-local, for local namespaces.
+# export WOV_STAGE="$WOV_GSTAGE"        # GSTAGE has priority since it can represent <initials>-local, for local namespaces.
+export WOV_STAGE="$WOV_KSTAGE"        # CHANGED: KSTAGE has priority since git repo might differ but want to build for current stage.
 export WOV_PROJECT="${WOV_WPROJECT}"  
 
 
@@ -424,7 +427,10 @@ function fConfGeneration()
   for f in "${R[@]}"; do
     printf "$f$SEP"
   done
-
+  if [[ "${R[@]}" =~ "[WARN"  ]]; then
+    printf "\n***ERROR(wov-env): warning message in generation of environment variables. Stopping.\n\n"
+    exit 1
+  fi
 }
 
 
@@ -501,6 +507,11 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--cluster" ]; then
     shift
     CLUSTER=$1
+    shift
+
+  elif [ "$1" == "--CC" ]; then
+    shift
+    doCluster
     shift
 
   elif [ "$1" == "--cm" ]; then
