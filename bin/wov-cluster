@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+FOLD=$(tput cols)
+CLUSTER=
+ECHOMODE=0
+DOALL=1
+COMMAND=
+TIMESTAMP=`date +%Y-%m-%dT%H:%M:%S%z`
+
+echo ""
+echo ""
+figlet NOTE
+echo "Never finished this script as much has to be done by hand. But it should give you a start. Also, see this page:"
+echo "   https://github.com/woveon/woveon_iaas/wiki/Starting-A-Cluster"
+echo ""
+echo ""
+
+LOGCMD=( "$*" )
+#if [ "$?" != "0" ]; then exit 1; fi
+
+clusterenvargs=( "$@" )
+set ""
+. wov-env
+set -- "${clusterenvargs[@]}"
+
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0 CLUSTER command` [options]
+
+Creates clusters and manages them.
+
+  create - generates a cluster
+
+here
+EOF
+}
+
+
+if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fDisplayOptions; exit 0; fi
+CLUSTER=$1
+shift
+COMMAND=$1
+shift
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  else
+    echo
+    printf "\n\n***ERROR: unknown option '$1'.\n\n"
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+# Ensure directories
+mkdir -p ${WOV_BASEDIR}/log
+mkdir -p ${WOV_BASEDIR}/managed
+chmod -R 700 ${WOV_BASEDIR}/managed
+
+# Ensure a CLUSTER is set
+if [ "$CLUSTER" == "" ]; then 
+  printf "\n\nERROR: No cluster set.\n\n"
+  printf "ERROR: No cluster set.\n\n" >> ${LOGFILE}
+  exit 1
+fi
+
+if [ -e "${WOV_BASEDIR}/managed/$CLUSTER" ]; then
+  printf "\n\nERROR: existing manged cluster of that name.\n\n"
+  printf "ERROR: existing manged cluster of that name.\n\n" >> ${LOGFILE}
+  exit 1
+fi
+
+# Log command to CLUSTER directory
+LOGFILE="${WOV_BASEDIR}/log/${CLUSTER}.log"
+printf "\n\n---------------------------------------------------------------------\n" >> ${LOGFILE}
+echo "${TIMESTAMP}> ${LOGCMD}" >> ${LOGFILE}
+
+
+# Run the commands
+if [ "$COMMAND" == "create" ]; then
+
+
+  echo "... Genereate the config set for : ${CLUSTER}"
+  wov-env-build -g ${CLUSTER} -f -s ${CLUSTER}
+  if [ "$?" != "0" ]; then
+    printf "\n\nERROR: failed building cluster config.\n\n"
+    printf "ERROR: failed building cluster config.\n\n" >> ${LOGFILE}
+    exit 1
+  fi
+
+  # echo, then load the config after building above
+  wov-env -g ${CLUSTER} -c ${CLUSTER} --envs
+  WOV_cluster_vpc_cidr=`wov-env -g ${CLUSTER} -c ${CLUSTER} --var WOV_cluster_vpc_cidr`
+  WOV_cluster_location_region=`wov-env -g ${CLUSTER} -c ${CLUSTER} --var WOV_cluster_location_region`
+  KOPS_STATE_STORE="s3://kops-${WOV_CLTYPE}-${WOV_PROVIDER}.woveon.com"
+  WOV_cluster_dns=`wov-env -g ${CLUSTER} -c ${CLUSTER} --var WOV_cluster_dns`
+  MASTERNODECOUNT=`wov-env -g ${CLUSTER} -c ${CLUSTER} --var WOV_cluster_master_count`
+  MASTERNODEZONES=`wov-env -g ${CLUSTER} -c ${CLUSTER} --var WOV_cluster_master_zones`
+  MASTERNODESIZE=`wov-env -g ${CLUSTER} -c ${CLUSTER} --var WOV_cluster_master_size`
+  NODECOUNT=`wov-env -g ${CLUSTER} -c ${CLUSTER} --var WOV_cluster_nodes_count`
+  NODEZONES=`wov-env -g ${CLUSTER} -c ${CLUSTER} --var WOV_cluster_nodes_zones`
+  NODESIZE=`wov-env -g ${CLUSTER} -c ${CLUSTER} --var WOV_cluster_nodes_size`
+
+  # ensure kops s3 bucket for ClusterType-Provider ex. kops-wov-aws
+  aws s3api create-bucket --bucket kops-${WOV_CLTYPE}-${WOV_PROVIDER}.woveon.com --region ${WOV_cluster_location_region}
+  if [ "$?" != "0" ]; then
+    printf "ERROR: failed creating 3d bucket.\n\n" | tee -a ${LOGFILE}
+    exit 1
+  fi
+
+  # configure bucket
+  aws s3api put-bucket-versioning --bucket kops-${WOV_CLTYPE}-${WOV_PROVIDER}.woveon.com --region ${WOV_cluster_location_region} --versioning-configuration Status=Enabled
+  if [ "$?" != "0" ]; then
+    printf "ERROR: failed configuring s3 bucket.\n\n" | tee -a ${LOGFILE}
+    exit 1
+  fi
+
+
+  # --------------------------------------------------------------------- 
+  # Check for VPC and create if it does not exist
+  # --------------------------------------------------------------------- 
+  VPCID=`aws ec2 describe-vpcs --filters "Name=tag-key, Values=Name, Name=tag-value, Values=${CLUSTER}" | jq -r ".Vpcs[].VpcId"`
+  if [ "$VPCID" == "" ]; then
+    VPCID=`aws ec2 create-vpc --cidr-block ${WOV_cluster_vpc_cidr} | jq -r ".Vpc.VpcId"`
+    if [ "$?" != "0" ]; then
+      printf "ERROR: failed creating vpc.\n\n" | tee -a ${LOGFILE}
+      exit 1
+    fi
+    echo "VPCID: ${VPCID}"
+    if [ "$VPCID" == "" ]; then
+      printf "ERROR: no VPCID returned.\n\n" | tee -a ${LOGFILE}
+      exit 1
+    fi
+    aws ec2 create-tags --resources ${VPCID} --tags "Key=Name,Value=${CLUSTER}"
+  fi
+
+  # wait for it to be available
+  aws ec2 wait vpc-available --vpc-ids ${VPCID}
+  if [ "$?" != "0" ]; then
+    printf "ERROR: failed waiting for vpc.\n\n" | tee -a ${LOGFILE}
+    exit 1
+  fi
+  echo "... vpc available"
+
+
+  # --------------------------------------------------------------------- 
+  # Check for key
+  # --------------------------------------------------------------------- 
+  #KEY_PRIVATE="~/.ssh/wov/${CLUSTER}.pem"
+  KEY_PUBLIC=~/.ssh/wov/${CLUSTER}_pub
+  KEYEXISTS=`aws ec2 describe-key-pairs | jq '.KeyPairs[] | select(.KeyName=="'"${CLUSTER}"'")'`
+  if [ "$?" != "0" ] || [ "${KEYEXISTS}" == "" ]; then
+    printf "ERROR: failed to find key '${CLUSTER}' in aws key pairs.\n\n" | tee -a ${LOGFILE}
+    echo "Generate the key and import it into AWS key pairs : EC2 > Key Pairs"
+    echo "openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out ~/.ssh/wov/${CLUSTER}.pem"
+    echo "openssl rsa -in ~/.ssh/wov/${CLUSTER}.pem -outform PEM -pubout -out ~/.ssh/wov/${CLUSTER}_pub.pem"
+    echo "ssh-keygen -f ${CLUSTER}_pub.pem -i -mPKCS8 > ${CLUSTER}_pub"
+    exit 1
+  fi
+  if [ ! -f "${KEY_PUBLIC}" ]; then
+    printf "ERROR: failed to find key locally at: '${KEY_PUBLIC}'.\n\n" | tee -a ${LOGFILE}
+    exit 1
+  fi
+
+
+  # --------------------------------------------------------------------- 
+  # Create cluster with kops
+  echo "ECHO: kops create cluster \
+    --ssh-public-key ${KEY_PUBLIC} \
+    --vpc ${VPCID} \
+    --cloud ${WOV_PROVIDER} \
+    --name=${CLUSTER}.${WOV_cluster_dns} \
+    --master-count=\"${MASTERNODECOUNT}\" \
+    --master-zones=\"${MASTERNODEZONES}\" \
+    --zones=\"${NODEZONES}\" \
+    --node-count ${NODECOUNT} \
+    --dns-zone=\"${WOV_cluster_dns}\" \
+    --node-size=\"${NODESIZE}\" \
+    --master-size=\"${MASTERNODESIZE}\" \
+    --networking weave \
+    --topology private "
+
+
+  echo "... ok, more here for setting up the rest"
+  exit 0
+
+
+
+  if [ "$TEMPLATEVERSION" == "" ]; then
+    printf "\n\nERROR: No --template-version specified.\n\n"
+    printf "ERROR: No --template-version specified.\n\n" >> ${LOGFILE}
+    exit 1
+  fi
+
+  TEMPLATEFILE="${WOV_BASEDIR}/templates/cluster-template_v${TEMPLATEVERSION}.yaml"
+  if [ ! -e "${TEMPLATEFILE}" ]; then
+    printf "\n\nERROR: No template file ${TEMPLATEFILE}.\n\n"
+    printf "ERROR: No template file ${TEMPLATEFILE}.\n\n" >> ${LOGFILE}
+    exit 1
+  fi
+
+
+  mkdir -p ${WOV_BASEDIR}/managed/${CLUSTER}
+  if [ "$?" != "0" ]; then
+    printf "\n\nERROR: failed making directory managed/${CLUSTER}.\n\n"
+    printf "ERROR: failed making directory managed/${CLUSTER}.\n\n" >> ${LOGFILE}
+    exit 1
+  fi
+
+  echo "...compile cluster template"
+  wov-compile ${WOV_BASEDIR}/wovtools/cache/clusters/${CLUSTER}/secrets.json ${TEMPLATEFILE}  > ${WOV_BASEDIR}/managed/${CLUSTER}/cluster.yaml
+  if [ "$?" != "0" ]; then
+    printf "\n\nERROR: failed compiling template.\n\n"
+    printf "ERROR: failed compiling template.\n\n" >> ${LOGFILE}
+    exit 1
+  fi
+
+else
+  printf "\n\nERROR: Unknown COMMAND '${COMMAND}'.\n\n"
+  exit 1
+fi
+
+
+
+#- context:
+#    cluster: wov-aws-va-rabbit
+#    namespace: api-cw
+#    user: admin-wov-aws-va-rabbit
+#  name: wov-aws-va-rabbit-api-cw
+
+# - name: admin-wov-aws-va-rabbit
+#  user:
+#    client-certificate: /Users/cwingrav/code/woveon/src/secrets/secrets_clusters/wov-aws-va-rabbit/credentials/admin.pem
+#    client-key: /Users/cwingrav/code/woveon/src/secrets/secrets_clusters/wov-aws-va-rabbit/credentials/admin-key.pem
