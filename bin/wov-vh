@@ -3,6 +3,8 @@
 DOECHO=1
 FOLD=`tput cols`
 DIDCOMMAND=0
+CVcm=
+CVse=
 
 
 # ---------------------------------------------------------------------
@@ -80,25 +82,26 @@ function doStart()
 #
   echo "  ... Volume: ${VOLNAME}, VolumeId: $volid"
 
-  echo "  ... ensure Configmap and Secrets in AWS: '${WOV_PROJECT}vh'"
-  kubectl get cm      ${WOV_PROJECT}vh &> /dev/null
-  CHECKCM=$?
-  kubectl get secrets ${WOV_PROJECT}vh &> /dev/null
-  CHECKSE=$?
-  if [ "${CHECKCM}" != "0" ]; then echo "FAILED: no Configmap of ${WOV_PROJECT}vh."; fi
-  if [ "${CHECKSE}" != "0" ]; then echo "FAILED: no Secret    of ${WOV_PROJECT}vh."; fi
-  if [ "${CHECKCM}" != "0" ] || [ "${CHECKCM}" != "0" ]; then
-    echo
-    echo "run 'wov-deploy --dev --conf-only' to generate these"
-    echo 
-    exit 1
-  fi
+  # NOTE: removed this since vh has own config - per microservice
+#  echo "  ... ensure Configmap and Secrets in AWS: '${WOV_PROJECT}vh'"
+#  kubectl get cm      ${WOV_PROJECT}vh &> /dev/null
+#  CHECKCM=$?
+#  kubectl get secrets ${WOV_PROJECT}vh &> /dev/null
+#  CHECKSE=$?
+#  if [ "${CHECKCM}" != "0" ]; then echo "FAILED: no Configmap of ${WOV_PROJECT}vh."; fi
+#  if [ "${CHECKSE}" != "0" ]; then echo "FAILED: no Secret    of ${WOV_PROJECT}vh."; fi
+#  if [ "${CHECKCM}" != "0" ] || [ "${CHECKCM}" != "0" ]; then
+#    echo
+#    echo "run 'wov-deploy --dev --conf-only' to generate these"
+#    echo 
+#    exit 1
+#  fi
 
 
   # Wait a sec to make sure it is ready
   sleep 1
 #  CF=$(doConfig)
-  CV=$(doConfigVol)
+  doConfigVol
   echo "  ... creating a microservice development pod (vh) in ${WOV_NS}."
   cat <<EOF > ${WOV_BASEDIR}/wovtools/cache/.deployments/vh.$$.yaml
 apiVersion: v1
@@ -136,8 +139,21 @@ spec:
     awsElasticBlockStore:
       volumeID: ${volid}
       fsType: ext4
-${CV}
+  - name: configmap-volume
+    projected:
+      sources:
+${CVcm}
+  - name: secret-volume
+    projected:
+      sources:
+${CVse}
 EOF
+
+
+#  echo "${WOV_BASEDIR}/wovtools/cache/.deployments/vh.$$.yaml"
+#  cat "${WOV_BASEDIR}/wovtools/cache/.deployments/vh.$$.yaml"
+#  echo "...not starting"
+#  exit 1
 
   RR=$(kubectl get pod vh 2> /dev/null)
   if [ "$?" == "0" ]; then
@@ -219,31 +235,31 @@ function doConfig() {
 # can load immediately, instead of requiring a redeploy of the Pod.
 # ---------------------------------------------------------------------
 function doConfigVol() {
-  local CV=""
-  printf -v CV   "  - name: configmap-volume\n"
-  printf -v CV "%s    configMap:\n" "$CV"
-  printf -v CV "%s      name: ${WOV_PROJECT}vh\n" "$CV"
-  printf -v CV "%s  - name: secret-volume\n" "$CV"
-  printf -v CV "%s    secret:\n" "$CV"
-  printf -v CV "%s      secretName: ${WOV_PROJECT}vh\n" "$CV"
 
-#  local RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
-#
-#  # add all generated ConfigMap (via wov-push-k8s)
-#  for f in ${RECIPES}; do
-#    printf -v CV   "  - name: configmap-volume\n"
-#    printf -v CV "%s    configMap:\n" "$CV"
-#    printf -v CV "%s      name: ${WOV_PROJECT}${f}\n" "$CV"
-#  done
-#
-#  # add all generated Secrets (via wov-push-k8s)
-#  for f in ${RECIPES}; do
-#    printf -v CV "%s  - name: secret-volume\n" "$CV"
-#    printf -v CV "%s    secret:\n" "$CV"
-#    printf -v CV "%s      secretName: ${WOV_PROJECT}${f}\n" "$CV"
-#  done
+#  printf -v CV   "  - name: configmap-volume\n"
+#  printf -v CV "%s    configMap:\n" "$CV"
+#  printf -v CV "%s      name: ${WOV_PROJECT}vh\n" "$CV"
+#  printf -v CV "%s  - name: secret-volume\n" "$CV"
+#  printf -v CV "%s    secret:\n" "$CV"
+#  printf -v CV "%s      secretName: ${WOV_PROJECT}vh\n" "$CV"
 
-  printf "$CV"
+  local RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+
+  # add all generated ConfigMap (via wov-push-k8s)
+  for f in ${RECIPES}; do
+#    printf -v CVcm "%s  - name: configmap-volume-${f}\n" "$CVcm"
+#    printf -v CVcm "%s    configMap:\n" "$CVcm"
+#    printf -v CVcm "%s      name: ${WOV_PROJECT}${f}vh\n" "$CVcm"
+    printf -v CVcm "%s      - configMap:\n" "$CVcm"
+    printf -v CVcm "%s          name: ${WOV_PROJECT}${f}vh\n" "$CVcm"
+  done
+
+  # add all generated Secrets (via wov-push-k8s)
+  for f in ${RECIPES}; do
+#    printf -v CV "%s  - name: secret-volume-${f}\n" "$CV"
+    printf -v CVse "%s      - secret:\n" "$CVse"
+    printf -v CVse "%s          name: ${WOV_PROJECT}${f}vh\n" "$CVse"
+  done
 }
 
 # ---------------------------------------------------------------------
