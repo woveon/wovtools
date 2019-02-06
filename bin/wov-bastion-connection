@@ -9,6 +9,7 @@ set -- "${argsbastcon[@]}"
 
 DOECHO=1
 FOLD=$(tput cols)
+CL=$(wov-env --var WOV_CLUSTER)
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
@@ -26,6 +27,8 @@ When an ssh connection is open, it allows the ssh tunnel to internal AWS resourc
   -q/--quiet      : quiet
   -v/--verbose    : verbose
   -h/--help       : this help
+
+  --check         : check if configured properly
   -c/--connect    : connect (has to remain open)
   -d/--disconnect : disconnect
 
@@ -37,7 +40,6 @@ EOF
 # ---------------------------------------------------------------------
 function doDisconnect()
 {
-  CL=$(wov-env --var WOV_CLUSTER)
   PP=$(ps | \grep "[s]sh ${CL}-bastion" | awk '{print $1}')
   if [[ "$PP" == "" ]]; then
     printf "\nWARNING: no existing connections to disconnect. Continuing...\n\n"
@@ -51,10 +53,40 @@ function doDisconnect()
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
+function doConfigCheck()
+{
+  local entries=`\grep "^[Hh][Oo][Ss][Tt]\s[a-zA-Z\-]*-bastion" ~/.ssh/config`
+  local bentry=`\grep -i "^HOST\s*${CL}-bastion" ~/.ssh/config`
+
+  if [ ! -f ~/.ssh/config ]; then
+    printf "ERROR: No ~/.ssh/config file. Create enties for bastion here as 'HOST ${CL}-bastion'."
+    return 1
+  fi
+
+  printf "Config Check:\n"
+  printf "Found entries for bastions (i.e. '^Host CLUSTER-bastion'): \n${entries}\n"
+  printf "Looking for host: ${CL}-bastion\n"
+
+  if [ "$bentry" != "" ]; then
+    printf "... success\n"
+  else
+    printf "... failed\n"
+    return 1
+    printf "WARNING: no HOST entry for your current cluster bastion: ${CL}-bastion\n"
+  fi
+}
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
 function doConnect()
 {
-  CL=$(wov-env --var WOV_CLUSTER)
   ssh "${CL}-bastion"
+  if [ "$?" != "0" ]; then
+    printf "\nERRROR: wov-bastion-connection failed... let me check a few things...\n\n";
+    doConfigCheck
+    exit 1
+  fi
 }
 
 
@@ -76,6 +108,10 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == '-d' ] || [ "$1" == '--disconnect' ]; then
     shift
     doDisconnect
+
+  elif [ "$1" == "--check" ]; then
+    shift
+    doConfigCheck
 
   elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
     fDisplayOptions
