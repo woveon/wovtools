@@ -7,6 +7,7 @@ SED=`which gsed`
 HAS_SECRET=0
 PROVIDERVARS=()
 RANCLUSTER=0
+#GLOBALCOMMAND=
 
 
 function fWovEnvDisplayOptions()
@@ -36,6 +37,7 @@ Command Options:
   --vh-label    : vh label in DockerHub repo
  
   Basic Environment Configuration:
+  -g/--global X : target output for another context (not from Kubernetes)  NOTE: must be 1st param
   -e            : echo the output with newlines
   -E            : echo the output on one line (bash executable)
   -p/--provider : run cluster config as well (WAS -c/--cluster) FIXME|TODO
@@ -62,6 +64,7 @@ Example Usage:
 EOF
 }
 if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fWovEnvDisplayOptions; exit 0; fi
+if [ "$1" == '-g' ] || [ "$1" == '--global' ]; then shift; GLOBALCOMMAND=$1; shift; fi
 
 
 # --------------------------------------------------------------------- 
@@ -207,7 +210,11 @@ function fBuildSecret
 
 # vars from Kubernetes
 # --------------------------------------------------------------------- 
-export WOV_CONTEXT="$(kubectl config current-context)"
+if [ "$GLOBALCOMMAND" != "" ]; then 
+  export WOV_CONTEXT=$GLOBALCOMMAND; 
+else
+  export WOV_CONTEXT="$(kubectl config current-context)"
+fi
 OLDIFS=$IFS
 IFS='-'
 array=( $WOV_CONTEXT )
@@ -419,7 +426,12 @@ function fConfGeneration()
 
 #  R+=( WOV_STAGE=${WOV_STAGE} WOV_ME=${WOV_ME} )
 
-  # echo "R: ${R[*]}"
+#  echo "R: ${R[*]}"
+  if [[ "${R[@]}" =~ "[WARN"  ]]; then
+    echo "${R[*]}"
+    printf "\n***ERROR(wov-env): warning message in generation of environment variables. Stopping.\n\n"
+    exit 2
+  fi
 
   local SEP=' '
   if [ "$3" == "1" ]; then SEP='\n'; fi
@@ -427,10 +439,10 @@ function fConfGeneration()
   for f in "${R[@]}"; do
     printf "$f$SEP"
   done
-  if [[ "${R[@]}" =~ "[WARN"  ]]; then
-    printf "\n***ERROR(wov-env): warning message in generation of environment variables. Stopping.\n\n"
-    exit 1
-  fi
+  #if [[ "${R[@]}" =~ "[WARN"  ]]; then
+  #  printf "\n***ERROR(wov-env): warning message in generation of environment variables. Stopping.\n\n"
+  #  exit 2
+  #fi
 }
 
 

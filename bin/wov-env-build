@@ -8,9 +8,11 @@ HAS_BUILDENV=0
 #DONSIGNORE=0
 DOFORCE=0
 LOCALCONTEXT=
+GLOBALCOMMAND=
 
 CONFEXT=
   # see wov-push-k8s
+
 
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
@@ -29,6 +31,8 @@ Builds WovTool configurations for secrets (-s) and clusters (-c) (K8s, ConfigMap
   --clean        : cleans the cache
   -f/--force     : force build of secrets and cluster
 
+  -g/--global X  : global rules; ignore project and namespaces (TODO FIX: redundant with secrets and cluster X)
+
   -s/--secrets X : build secrets for cluster X
   -c/--cluster X : build the secret and Kubernetes files for cluster X
   --local        : build local secrets
@@ -40,6 +44,14 @@ EOF
 if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fWovEnvBuildDisplayOptions; exit 0; fi
 
 
+if [ "$1" == '--global' ] || [ "$1" == '-g' ]; then 
+  shift; 
+  export GLOBALCOMMAND="$1";
+#  export WOV_PROJECT="global";
+#  export WOV_STAGE="global";
+  shift; 
+fi
+
 
 # --------------------------------------------------------------------- 
 # Import Env 
@@ -49,7 +61,23 @@ set ""
 . wov-env
 set -- "${buildargs[@]}"
 
+# --------------------------------------------------------------------- 
+# Global checks
+#if [ "$1" == '--global' ] || [ "$1" == '-g' ]; then 
+#  GLOBALCOMMAND=1; 
+#  shift; 
+#  export WOV_PROJECT="global"
+#  export WOV_STAGE="global"
+#fi
+#echo "WOV_PROJECT ${WOV_PROJECT} ${WOV_STAGE}"
+if [ "$GLOBALCOMMAND" != "" ]; then
+  export WOV_PROJECT="global"
+  export WOV_STAGE="global"
+fi
 
+# --------------------------------------------------------------------- 
+# Namespace checks
+if [ "$GLOBALCOMMAND" == "" ]; then
 wov-ns-check
 if [ "$?" != "0" ]; then
   if [ "${WOV_KPROJECT}" != "${WOV_WPROJECT}" ]; then
@@ -63,6 +91,7 @@ if [ "$?" != "0" ]; then
     printf "WOV_STAGE/KSTAGE/GSTAGE      : '${WOV_STAGE}' '${WOV_KSTAGE}' '${WOV_GSTAGE}'\n"
     exit 1
   fi
+fi
 fi
 
 # --------------------------------------------------------------------- 
@@ -143,6 +172,7 @@ function fBuildSecrets()
   fi
 
 
+
   # ---------------------------------------------------------------------
   # Build temp secret file
   # ---------------------------------------------------------------------
@@ -216,8 +246,8 @@ EOF
   # - concat child attributes into parent that are prefixed by CLUSTERx, where x is your CLUSTER
   echo "" > ${SECRETFILE}.3
   chmod 600 ${SECRETFILE}.3
-  if [[ $DOECHO -ge 1 ]]; then   echo "  ... using cluster     : ${WOV_CLUSTER}"; fi
-  wov_stage-select ${SECRETFILE}_ CLUSTER${WOV_CLUSTER} >> ${SECRETFILE}.3
+  if [[ $DOECHO -ge 1 ]]; then   echo "  ... using cluster     : ${CLUSTER}"; fi
+  wov_stage-select ${SECRETFILE}_ CLUSTER${CLUSTER} >> ${SECRETFILE}.3
   ${MV} ${SECRETFILE}.3  ${SECRETFILE}_
 
 
@@ -272,7 +302,10 @@ EOF
 
   else
     if [ "$DOECHO" == "2" ]; then echo "  ... no secretsmods entry for cluster: ${CLUSTER}"; fi
+    ${MV} ${SECRETFILE}_  ${SECRETFILE}
   fi
+
+
 
   # mark as secret being updated
   HAS_SECRET=1
@@ -401,7 +434,7 @@ fBuildClusterDir()
   if [ "${#RECIPES[@]}" == "0" ]; then
     RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
   fi
-  # echo "Container Recipes: ${RECIPES}"
+  #echo "Container Recipes: ${RECIPES}"
 
   # ensure directories
   mkdir -p  "${CLUSTER_DIR}/cm"
@@ -439,13 +472,25 @@ fBuildClusterDir()
       touch ${CMFILE}
       chmod 600 ${CMFILE}
       wov-env --cluster ${CLUSTER} --cm ${MICROSERVICE} >> ${CMFILE} 2>&1
-      if [ "$?" != "0" ]; then
+      local a=$?
+      if [ "$a" == "2" ]; then
+        printf "ERROR: failed generating configmap in cluster: '${CLUSTER}' for microservice: '${MICROSERVICE}'.\n" >&2
+        cat ${CMFILE}
+        exit 1
+      fi
+      if [ "$a" != "0" ]; then
         rm ${CMFILE}
         CMFILE="${CMFILE2}"
         if [ "$hasbuiltbasecm" == "0" ]; then
           if [[ $DOECHO -ge 2 ]]; then echo "  ... using config for ${WOV_PROJECT}, instead of ${MICROSERVICE}"; fi
           wov-env --cluster ${CLUSTER} --cm ${WOV_PROJECT} >> ${CMFILE}
-          if [ "$?" != "0" ]; then exit 1; fi
+          local a=$?
+          if [ "$a" == "2" ]; then
+            printf "ERROR: failed generating configmap in cluster: '${CLUSTER}' for project: '${WOV_PROJECT}'.\n" >&2
+            cat ${CMFILE}
+            exit 1
+          fi
+          if [ "$a" != "0" ]; then exit 1; fi
           hasbuiltbasecm=1
           if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${CMFILE}."; fi
         fi
@@ -480,11 +525,23 @@ fBuildClusterDir()
       touch ${SEFILE}
       chmod 600 ${SEFILE}
       wov-env --cluster ${CLUSTER} --se ${MICROSERVICE} >> ${SEFILE} 2>&1
-      if [ "$?" != "0" ]; then
+      local a=$?
+      if [ "$a" == "2" ]; then
+        printf "ERROR: failed generating configmap in cluster: '${CLUSTER}' for microservice: '${MICROSERVICE}'.\n" >&2
+        cat ${SEFILE}
+        exit 1
+      fi
+      if [ "$a" != "0" ]; then
         rm ${SEFILE}
         SEFILE="${SEFILE2}"
         if [ "$hasbuiltbasese" == "0" ]; then
           wov-env --cluster ${CLUSTER} --se ${WOV_PROJECT} >> ${SEFILE}
+          local a=$?
+          if [ "$a" == "2" ]; then
+            printf "ERROR: failed generating configmap in cluster: '${CLUSTER}' for project: '${WOV_PROJECT}'.\n" >&2
+            cat ${SEFILE}
+            exit 1
+          fi
           if [ "$?" != "0" ]; then exit 1; fi
           hasbuiltbasese=1
           if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${SEFILE}."; fi
@@ -539,6 +596,10 @@ while [[ $1 =~ ^- ]]; do
     shift
     fBuildSecrets $1
     shift
+
+  elif [ "$1" == "-g" ] || [ "$1" == "--global" ]; then
+    printf "\n\nERROR: '$1' needs to be first param in args array. Retype your command.\n\n"
+    exit 1
 
   elif [ "$1" == "-c" ] || [ "$1" == "--cluster" ]; then
     shift

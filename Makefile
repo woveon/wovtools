@@ -1,6 +1,6 @@
 
 
-BINS-ENV=wov-env-build wov-env wov-env-aws
+BINS-ENV=wov-env-build wov-env wov-env-aws wov-cluster wov-kops
 BINS-CLI=wov-aws wov-cd wov-bastion wov-bastion-connection wov-cmd wov-ed wov-ls wov-ns wov-db-connect wov-db-cloud wov-p wov-plog \
 	       wov-hash wov-enc wov-dec
 BINS-VH=wov-vh wov-vh-pushgit wov-vh-pulldir
@@ -48,6 +48,9 @@ install : preinstall /usr/local/etc/bash_completion.d/wovtools
 	@echo "... for wcd to work, add this to your .bash_profile"
 	@echo "function wcd() {"
 	@echo '  . wov-cd $$*'
+	@echo "}"
+	@echo "function wkops() {"
+	@echo '  . wov-kops'
 	@echo "}"
 
 #	echo "    ... install wovmsdev, pointing to wovpshell"
