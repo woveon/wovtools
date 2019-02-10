@@ -71,9 +71,11 @@ function doTest()
 function doRun()
 {
   if [ ${DOECHO} -ge 2 ]; then echo "...run"; fi
+
   ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}
+  local a=$?
   DIDRUN=1
-  RETVAL=$?
+  RETVAL=$a
 }
 
 function doKill()

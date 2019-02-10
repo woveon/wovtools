@@ -29,9 +29,9 @@ DEPLOYCONF_EXT=
 WOV_CUR_PVER=${WOV_PVER}
 WOV_CUR_SVER=${WOV_SVER}
 
-RECIPES=
-RECIPESCM=
-RECIPESSE=
+RECIPES=()
+RECIPESCM=()
+RECIPESSE=()
 
 
 
@@ -53,6 +53,7 @@ function doAddLabels()
 }
 
 
+# Converts recipes into microservice names
 #  $1 - directory with cm/se k8s files
 #  $@ - named recipes, otherwise all from directory are used
 function doBuildRecipes()
@@ -70,12 +71,16 @@ function doBuildRecipes()
     RECIPESCM=( $(cd ${CMDIR} && find * -maxdepth 0 -type f 2> /dev/null) )
     RECIPESSE=( $(cd ${SEDIR} && find * -maxdepth 0 -type f 2> /dev/null) )
   else
-    RECIPESCM=$RECIPES
-    RECIPESSE=$RECIPES
+    for f in "${RECIPES[@]}"; do
+      RECIPESCM+=( "${WOV_PROJECT}${f}" )
+      RECIPESSE+=( "${WOV_PROJECT}${f}" )
+    done
+    # RECIPESCM=$RECIPES
+    # RECIPESSE=$RECIPES
   fi
-  #echo "RECIPES: ${#RECIPES[@]} : ${RECIPES[@]}"
-  #echo "RECIPESCM: ${#RECIPESCM[@]} : ${RECIPESCM[@]}"
-  #echo "RECIPESSE: ${#RECIPESSE[@]} : ${RECIPESSE[@]}"
+  # echo "RECIPES: ${#RECIPES[@]} : ${RECIPES[@]}"
+  # echo "RECIPESCM: ${#RECIPESCM[@]} : ${RECIPESCM[@]}"
+  # echo "RECIPESSE: ${#RECIPESSE[@]} : ${RECIPESSE[@]}"
 
 }
 
@@ -97,12 +102,11 @@ function doDeployConf()
 
   doBuildRecipes ${DEPLOYSRC} $@
 
-
   # Create ConfigMap PLUGIN
   # --------------------------------------------------------------------- 
   for f in "${RECIPESCM[@]}"; do
 
-    #local MSNAME=${WOV_PROJECT}${f}
+    # local MSNAME=${WOV_PROJECT}${f}
     local MSNAME=${f}
     local CMFILE="${CMDIR}/${MSNAME}"          # full path to file
     # echo "CMFILE1: ${CMFILE}"
@@ -180,21 +184,35 @@ function doDeployConf()
 # If dev deploy, then might not have an image to use. test if aws image exists
 # NOTE: only for AWS ECR... other Docker registries will be problematic...
 #  $1 - recipe directory
-#  $* - named containers
+#  $* - named containers (will check if 'deployment' or not to be safe)
 # --------------------------------------------------------------------- 
 function doCheckContainersExist()
 {
   local imageissues=()
 
-  if [ $DOECHO -ge 2 ]; then echo "... testing container images exist"; fi
+  if [ $DOECHO -ge 1 ]; then echo "... testing container images exist"; fi
 
   #local rdir=${WOV_CACHEDIR}/clusters/${WOV_CLUSTER}
   local rdir="$1"
+  shift
 
   local containers=()
-  for f in $( ls ${rdir}/*.yaml ); do
+
+  # Build files to check for containers, from arguments or all directory files
+  local k8sfiles=()
+  if [ "$#" == "0" ]; then
+    k8sfiles=( $(cd ${rdir} && ls *.yaml) )
+  else
+    for f in ${*}; do
+      k8sfiles+=( "${WOV_PROJECT}${f}.yaml" )
+    done
+  fi
+  # echo "k8sfiles:  ${k8sfiles[@]}"
+
+  for f in ${k8sfiles[@]}; do
     # local k=`yaml get $f kind`
-    local k=`grep -i 'kind' $f | sed 's/.*://g' | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]'`
+    # echo "  - file : ${f}"
+    local k=`grep -i 'kind' $rdir/$f | sed 's/.*://g' | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]'`
     if [ "$k" == "deployment" ]; then
       local kk=`basename $f`
       kk="${kk%.*}"
@@ -362,7 +380,7 @@ function doDeployDev()
 
     # Point to development containers and make sure they are available
     doPatchDeployments $*
-    doCheckContainersExist ${WOV_CACHEDIR}/clusters/${WOV_CLUSTER}/k8s
+    doCheckContainersExist ${WOV_CACHEDIR}/clusters/${WOV_CLUSTER}/k8s $*
   fi
 
 }
@@ -522,7 +540,7 @@ function doDeployStage()
   aws s3 sync --quiet  ${WOV_ARCHIVEENV}/${ARCHBASE} ${DEPLOYSRC}  --delete
 
   # Check Containers exist before deploying
-  doCheckContainersExist ${DEPLOYSRC}/k8s
+  doCheckContainersExist ${DEPLOYSRC}/k8s $*
 
   if [ "${DRYRUN}" == "0" ]; then 
     if [ "${CONFONLY}" == "1" ]; then
@@ -578,7 +596,7 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == "--check-containers" ]; then
     shift
-    doCheckContainersExist ${WOV_CACHEDIR}/clusters/${WOV_CLUSTER}/k8s
+    doCheckContainersExist ${WOV_CACHEDIR}/clusters/${WOV_CLUSTER}/k8s $*
     exit 0
 
 
