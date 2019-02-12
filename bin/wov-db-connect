@@ -280,6 +280,7 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 
 elif [ "${DB_TYPE}" == "mongo" ]; then
 
+
   if [ "${DB_OP}" == "schema" ]; then
     # NOTE: mongo has no schema, so taking from first returned object
     DB_COMMAND=$(cat <<EOF
@@ -321,6 +322,7 @@ EOF)
   elif [ "${DB_OP}" == "" ]; then
     doDatabaseConnectMessage
     
+    echo "entering pod ${DATABASESERVER}-${WOV_STAGE}"
     kubectl exec -it $(wov-p ${DATABASESERVER}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE}"
 #    if [ "${DB_HOST}" != "localhost" ]; then
 #      kubectl exec  -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"

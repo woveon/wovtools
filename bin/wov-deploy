@@ -308,6 +308,7 @@ files   : all by default, or type them here and do individual only
   -f : force push
   --vh : build vh configuration (default)
   --VH : no build VH configuration
+  -l   : list versions
 
  Utility:
   --check-containers : check that these containers exist in the container repository
@@ -322,24 +323,6 @@ EOF
 }
 
 
-# ---------------------------------------------------------------------
-# ---------------------------------------------------------------------
-printf "\n"
-figlet wov-deploy
-printf " version: ${WOV_STAGE}_${WOV_CUR_PVER}_${WOV_CUR_SVER}\n"
-
-
-if [ "${WOV_STAGE}" == "prod" ]; then
-  printf "\n\n**** deploying to production *********************************\n\n"
-  printf "   Are you sure? (yes|NO) "
-  read A
-  if [ "$A" == "yes" ] || [ "$A" == "YES" ]; then
-    printf "  ... ok, continuing.\n"
-  else
-    printf "\n  ... stopping.\n"
-    exit 1
-  fi
-fi
 
 
 # ---------------------------------------------------------------------
@@ -557,6 +540,35 @@ function doDeployStage()
 
 
 # ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doListVersions
+{  
+  l=${WOV_CLUSTER}
+  #l=wov-aws-va-dog
+  # echo "TOOD: put back to WOV_CLUSTER and not dog"
+  #local extra=
+  #if [ "${WOV_CUR_PVER}" != "${WOV_PVER}" ]; then
+  #  extra="${WOV_PVER}"
+  #else
+  #  extra="*"
+  #fi
+  #if [ "${WOV_CUR_SVER}" != "${WOV_SVER}" ]; then
+  #  extra="${extra}-${WOV_SVER}"
+  #else
+  #  extra="${extra}-*"
+  #fi
+  #echo "extra ${extra}"
+
+  local vers=( $(aws s3 ls ${WOV_ARCHIVEENV}/${ARCHBASE}${l}/${WOV_PROJECT}/${WOV_STAGE}/ | awk '{print $2}') )
+
+  for f in ${vers[@]}; do
+    echo ${f%/}
+  done
+
+}
+
+
+# ---------------------------------------------------------------------
 # Handle Params
 # ---------------------------------------------------------------------
 while [[ $1 =~ ^- ]]; do
@@ -593,6 +605,11 @@ while [[ $1 =~ ^- ]]; do
     shift
     BUILDVH=0
 
+
+  elif [ "$1" == "-l" ]; then
+    shift
+    doListVersions
+    exit 0
 
   elif [ "$1" == "--check-containers" ]; then
     shift
@@ -636,6 +653,26 @@ while [[ $1 =~ ^- ]]; do
     exit 1
   fi
 done
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+printf "\n"
+figlet wov-deploy
+printf " version: ${WOV_STAGE}_${WOV_CUR_PVER}_${WOV_CUR_SVER}\n"
+
+
+if [ "${WOV_STAGE}" == "prod" ]; then
+  printf "\n\n**** deploying to production *********************************\n\n"
+  printf "   Are you sure? (yes|NO) "
+  read A
+  if [ "$A" == "yes" ] || [ "$A" == "YES" ]; then
+    printf "  ... ok, continuing.\n"
+  else
+    printf "\n  ... stopping.\n"
+    exit 1
+  fi
+fi
 
 if [ "$#" != "0" ]; then
   printf " microservice recipes: ( $* )\n"
