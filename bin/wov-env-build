@@ -135,7 +135,7 @@ function fBuildLocalSecrets()
 # Store the local context cluster (from merged raw file) in $LOCALCONTEXT
 # --------------------------------------------------------------------- 
 function retreiveLocalContextCluster()
-{ if [ "${LOCALCONTEXT}" == "" ]; then LOCALCONTEXT=`jq -r ".localcontext" ${WOV_FILE_SECRETSMERGED}`; fi }
+{ if [ "${LOCALCONTEXT}" == "" ]; then LOCALCONTEXT=`jq -r ".localcontext" ${WOV_CONFIGFILE_MERGED}`; fi }
 
 
 # --------------------------------------------------------------------- 
@@ -161,10 +161,10 @@ function fBuildSecrets()
   if [ "$DOECHO" == "2" ]; then echo "CLUSTER=${CLUSTER}"; fi
   if [ "$DOECHO" == "2" ]; then echo "SECRETFILE=${SECRETFILE}"; fi
 
-  # Read the source secrets files from WOV_FILE_SECRETSMERGED , to 
+  # Read the source secrets files from WOV_CONFIGFILE_MERGED , to 
   # generate the SECRETFILE for the CLUSTER.
   # ---------------------------------------------------------------------
-  local SRCSECRETFILES=( $(jq -r ".secrets.${WOV_STAGE}[] " ${WOV_FILE_SECRETSMERGED} 2> /dev/null) )
+  local SRCSECRETFILES=( $(jq -r ".secrets.${WOV_STAGE}[] " ${WOV_CONFIGFILE_MERGED} 2> /dev/null) )
   if [ "$?" != "0" ] || [ "${#SRCSECRETFILES}" == "0" ]; then
     printf "\n\nERROR: either no entry or no files for stage '${WOV_STAGE}' in config.json file '.secrets'.\n"
     printf "  - You probably just need to create an entry, similar to the other stages.\n\n"
@@ -232,16 +232,6 @@ EOF
   done
 
 
-  # TODO: move this to -s switch, as it is how we find mods that are on
-#  # - get mods that are 'on'
-#  SMODS=$(jq -r '.stagemods[] | select(.status == "on") | .["name"]' ${WOV_FILE_SECRETSMERGED} )
-#  #echo "SMODS: ${SMODS}"
-#  # for each mod
-#  for m in ${SMODS[*]}; do
-    #echo "m: $m"
-#  done
-
-
   # STEP 3: CLUSTER Select
   # - concat child attributes into parent that are prefixed by CLUSTERx, where x is your CLUSTER
   echo "" > ${SECRETFILE}.3
@@ -264,11 +254,11 @@ EOF
   # STEP 5: Secrets Mods for a cluster (from wovtools/config.json|local.json), which applies modifications for a cluster to MERGED_RAW data
   #       : NOTE: also any STAGEME is converted to the WOV_ME variable stage
   # get routes
-  local clusterentry=`jq -r '.secretsmods.'"${CLUSTER}"  ${WOV_FILE_SECRETSMERGED} 2> /dev/null` 
+  local clusterentry=`jq -r '.secretsmods.'"${CLUSTER}"  ${WOV_CONFIGFILE_MERGED} 2> /dev/null` 
   if [ "${clusterentry}" != "null" ]; then
     if [[ $DOECHO -ge 1 ]]; then echo "  ... using secretsmods : ${CLUSTER}"; fi
 
-    local rts=( $(jq -r '.secretsmods.'"${CLUSTER}"' | .routes[] | "\(.[0]) \(.[1])"' ${WOV_FILE_SECRETSMERGED} 2> /dev/null ) )
+    local rts=( $(jq -r '.secretsmods.'"${CLUSTER}"' | .routes[] | "\(.[0]) \(.[1])"' ${WOV_CONFIGFILE_MERGED} 2> /dev/null ) )
     #echo "rts: ${#rts[@]} ${rts[@]}"
 
     # NOTE: doing this in order of entries

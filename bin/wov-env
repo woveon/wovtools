@@ -7,7 +7,6 @@ SED=`which gsed`
 HAS_SECRET=0
 PROVIDERVARS=()
 RANCLUSTER=0
-#GLOBALCOMMAND=
 
 
 function fWovEnvDisplayOptions()
@@ -63,32 +62,10 @@ Example Usage:
 
 EOF
 }
+
 if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fWovEnvDisplayOptions; exit 0; fi
-if [ "$1" == '-g' ] || [ "$1" == '--global' ]; then shift; GLOBALCOMMAND=$1; shift; fi
 
 
-# --------------------------------------------------------------------- 
-# Used to select between vh containers (just exists with 0.1).
-# --------------------------------------------------------------------- 
-if [ "$1" == "--vh-label" ]; then echo "0.1"; exit 0; fi
-
-
-# --------------------------------------------------------------------- 
-# Start
-# --------------------------------------------------------------------- 
-WOV_VERSION=1
-export WOV_VERSION
-export WOV_BASEDIR="$(git rev-parse --show-toplevel)"
-if [ "$WOV_BASEDIR" == "" ]; then
-  echo "ERROR: not in wovtools project (no git)."
-  exit 1
-elif [ ! -e "$WOV_BASEDIR/wovtools" ]; then
-  echo "ERROR: not in wovtools project (no wovtools directory)."
-  exit 1
-elif [ ! -e "${WOV_BASEDIR}/wovtools/config.json" ]; then
-  echo "ERROR: not in wovtools project (no wovtools/config.json file)."
-  exit 1
-fi
 
 # --------------------------------------------------------------------- 
 # Calls wov-env-build to build the secretfile if it does not exist.
@@ -98,7 +75,11 @@ function fBuildSecret
 { 
   if [ ! -f "${WOV_SECRETFILE}" ] || [ "$1" == "force" ]; then 
     echo "buidling"
-    wov-env-build --secrets ${CLUSTER}; 
+    local G=
+    if [ "${GLOBALCOMMAND}" != "" ]; then
+      G="--global ${GLOBALCOMMAND} "
+    fi
+    wov-env-build ${G} --secrets ${CLUSTER}; 
   fi
 }
 
@@ -119,13 +100,13 @@ function doSetCluster
   export WOV_SECRETFILE
 }
 
+
+
 # --------------------------------------------------------------------- 
-# Source files for project configuration : build if needed
+# Load env
 # --------------------------------------------------------------------- 
-export WOV_CACHEDIR="${WOV_BASEDIR}/wovtools/cache"
-export WOV_FILE_SECRETS_RAW="${WOV_BASEDIR}/wovtools/config.json"
-export WOV_FILE_SECRETSLOCAL_RAW="${WOV_BASEDIR}/wovtools/local.json"
-export WOV_FILE_SECRETSMERGED="${WOV_CACHEDIR}/.merged.json"
+# NOTE: this passes arguments
+. wov-env-loader
 doSetCluster "local"
 
 
@@ -135,40 +116,12 @@ doSetCluster "local"
 # if they have changed.
 # ---------------------------------------------------------------------
 mkdir -m 700 -p ${WOV_CACHEDIR}
-set -x
-# if [ ! -f ${WOV_SECRETFILE} ] || [ "${WOV_BASEDIR}/wovtools/secrets" -nt ${WOV_FILE_SECRETSMERGED} ]; then
-if [ "${WOV_BASEDIR}/wovtools/secrets" -nt ${WOV_FILE_SECRETSMERGED} ]; then
-  # make sure there is no loop since wov-env-build calls wov-env
-  touch ${WOV_FILE_SECRETSMERGED}
-
-  # build/rebuild files
+if [ ! -f "${WOV_SECRETFILE}" ] || [ "${WOV_CONFIGFILE_MERGED}" -nt "${WOV_SECRETFILE}" ] || [ "${WOV_BASEDIR}/wovtools/secrets" -nt "${WOV_SECRETFILE}" ]; then
   fBuildSecret force 
+  touch "${WOV_SECRETFILE}"
 
-  # make sure we do the merge next
-  touch ${WOV_FILE_SECRETS_RAW}
+. wov-env-loader
 fi
-exit 1
-
-if [ ${WOV_FILE_SECRETS_RAW} -nt ${WOV_FILE_SECRETSMERGED} ] || [ ${WOV_FILE_SECRETSLOCAL_RAW} -nt ${WOV_FILE_SECRETSMERGED} ]; then
-  echo "... merged file out of date, creating: ${WOV_FILE_SECRETSMERGED}"
-  echo "" > ${WOV_FILE_SECRETSMERGED}
-  chmod 600 ${WOV_FILE_SECRETSMERGED}
-  jq -s ".[0] * .[1]" ${WOV_FILE_SECRETS_RAW} ${WOV_FILE_SECRETSLOCAL_RAW} >> ${WOV_FILE_SECRETSMERGED} 2> /dev/null
-  if [ "$?" != "0" ]; then 
-    F1=$(cat ${WOV_FILE_SECRETS_RAW} | jq type 2>&1)
-    F1a=$?
-    if [ "$F1a" != "0" ]; then
-      printf "\n\nERROR: ${WOV_FILE_SECRETS_RAW} is not properly formatted.\n${F1}\n\n"
-    fi
-    F2=$(cat ${WOV_FILE_SECRETSLOCAL_RAW} | jq type 2>&1)
-    F2a=$?
-    if [ "$F2a" != "0" ]; then
-      printf "\n\nERROR: ${WOV_FILE_SECRETSLOCAL_RAW} is not properly formatted.\n${F2}\n\n"
-    fi
-    exit 1; 
-  fi
-fi
-
 
 
 
@@ -288,85 +241,12 @@ function doK8sBadContext()
 
 
 
-
-
-
-
-# vars from git, if in project directory
-# --------------------------------------------------------------------- 
-export WOV_PVER="$(git rev-list --count $(git rev-parse --abbrev-ref HEAD))"
-export WOV_SVER="$(cd ${WOV_BASEDIR}/wovtools/secrets && git rev-list --count $(git rev-parse --abbrev-ref HEAD))"
-export WOV_USERNAME="$(git config user.name)"
-export WOV_USEREMAIL="$(git config user.email)"
-export WOV_GSTAGE="$(git rev-parse --abbrev-ref HEAD)"
-
-
-# vars from global .wovtools file
-# --------------------------------------------------------------------- 
-export WOV_ME=$(cat ${HOME}/.wovtools | jq -r '.me')
-if [ "${WOV_ME}" == "null" ] ; then
-  printf "\n\nERROR: You need to set 'me' in the wovtools/config.json file.\n"
-  printf "  - This is a unique code in this project, to represent yourself. Try using your initials (assuming they are unique to your team).\n\n"
-  exit 1
-fi
-
-# vars from merged secrets file
-# --------------------------------------------------------------------- 
-# Do one jq call on the project 'merged' file to get vars needed
-ALLVARS=()
-while read f; do
-  ALLVARS+=( "$f" )
-done <<<$(cat ${WOV_FILE_SECRETSMERGED} | jq -r ". | ( .ver, .project.project, .project.type, .project.title, .project.description, .archive.repository, .archive.env  )" )
-WOV_PVERSION=${ALLVARS[0]}
-if [ "${WOV_PVERSION}" != "${WOV_VERSION}" ] && [ "${WOV_PVERSION}" != "initing" ] ; then
-  printf "\n\nERROR: Your project version '${WOV_PVERSION}', does not match to the WovTools version '${WOV_VERSION}'.\n\n"
-  exit 1
-fi
-export WOV_WPROJECT="${ALLVARS[1]}"
-export WOV_PROJECTTYPE="${ALLVARS[2]}"
-export WOV_PROJECTTITLE="${ALLVARS[3]}"
-export WOV_PROJECTDESCRIPTION="${ALLVARS[4]}"
-export WOV_ARCHIVEREPOSITORY="${ALLVARS[5]}"
-export WOV_ARCHIVEENV="${ALLVARS[6]}"
-
 # vars from kops
 # --------------------------------------------------------------------- 
 if [ -z ${KOPS_STATE_STORE+x} ]; then 
   echo "ERROR: KOPS_STATE_STORE is unset. ex. export KOPS_STATE_STORE='s3://kops.woveon.com'"
   exit 1
 fi
-
-
-# vars from Kubernetes
-# --------------------------------------------------------------------- 
-if [ "$GLOBALCOMMAND" != "" ]; then 
-  export WOV_CONTEXT=$GLOBALCOMMAND; 
-else
-  export WOV_CONTEXT="$(kubectl config current-context)"
-fi
-OLDIFS=$IFS
-IFS='-'
-array=( $WOV_CONTEXT )
-IFS=$OLDIFS
-export WOV_KSTAGE="${array[5]}"
-export WOV_KPROJECT="${array[4]}"
-export WOV_NS="${WOV_KPROJECT}-${WOV_KSTAGE}"
-export WOV_FLAVOR="${array[3]}"
-export WOV_REGION="${array[2]}"
-export WOV_PROVIDER="${array[1]}"
-export WOV_CLTYPE="${array[0]}"
-export WOV_CLUSTER="${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}"
-if [ "${#array[@]}" != "6" ]; then
-  doK8sBadContext; 
-fi
-
-
-
-# Unifying
-# --------------------------------------------------------------------- 
-# export WOV_STAGE="$WOV_GSTAGE"        # GSTAGE has priority since it can represent <initials>-local, for local namespaces.
-export WOV_STAGE="$WOV_KSTAGE"        # CHANGED: KSTAGE has priority since git repo might differ but want to build for current stage.
-export WOV_PROJECT="${WOV_WPROJECT}"  
 
 
 # --------------------------------------------------------------------- 
@@ -575,36 +455,6 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--exports" ]; then
 #    doLoadExports
     doPrintVarsEXPORTS
-
-
-
-#  elif [ "$1" == "--env" ]; then
-#    shift
-#    doEnv $1
-
-#  elif [ "$1" == "--cmd" ]; then
-#    shift
-#    doCmd $1
-
-#  elif [ "$1" == "--qcmd" ]; then
-#    shift
-#    doQCmd $1
-
-#  elif [ "$1" == "--sl" ]; then
-#    shift
-#    doStringLiteral $1
-
-#  elif [ "$1" == "--devmode" ]; then
-#    shift
-#    doManageDevmode $1
-
-#  elif [ "$1" == "--local" ]; then
-#    shift
-#    doManageDevmode local
-
-#  elif [ "$1" == "--remote" ]; then
-#    shift
-#    doManageDevmode remote
 
   elif [ "$1" == "--rcAWS" ]; then
     shift

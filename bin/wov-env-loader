@@ -34,9 +34,12 @@ export WOV_GSTAGE="$(git rev-parse --abbrev-ref HEAD)"
 # Source files for project configuration : build if needed
 # --------------------------------------------------------------------- 
 export WOV_CACHEDIR="${WOV_BASEDIR}/wovtools/cache"
-export WOV_FILE_SECRETS_RAW="${WOV_BASEDIR}/wovtools/config.json"
-export WOV_FILE_SECRETSLOCAL_RAW="${WOV_BASEDIR}/wovtools/local.json"
-export WOV_FILE_SECRETSMERGED="${WOV_CACHEDIR}/.merged.json"
+export WOV_CONFIGFILE_RAW="${WOV_BASEDIR}/wovtools/config.json"
+export WOV_CONFIGFILE_LOCALRAW="${WOV_BASEDIR}/wovtools/local.json"
+export WOV_CONFIGFILE_MERGED="${WOV_CACHEDIR}/.merged.json"
+#export WOV_FILE_SECRETS_RAW="${WOV_BASEDIR}/wovtools/config.json"
+#export WOV_FILE_SECRETSLOCAL_RAW="${WOV_BASEDIR}/wovtools/local.json"
+#export WOV_FILE_SECRETSMERGED="${WOV_CACHEDIR}/.merged.json"
 
 
 # --------------------------------------------------------------------- 
@@ -50,24 +53,45 @@ if [ "${WOV_ME}" == "null" ] ; then
 fi
 
 # --------------------------------------------------------------------- 
-# vars from merged secrets file
+# vars from merged files (config.json and local.json)
 # --------------------------------------------------------------------- 
-# Do one jq call on the project 'merged' file to get vars needed
-ALLVARS=()
+
+# --------------------------------------------------------------------- 
+# Merge if out of date
+if [ ${WOV_CONFIGFILE_RAW} -nt ${WOV_CONFIGFILE_MERGED} ] || [ ${WOV_CONFIGFILE_LOCALRAW} -nt ${WOV_CONFIGFILE_MERGED} ]; then
+  echo "... merged file out of date, creating: ${WOV_CONFIGFILE_MERGED}"
+  echo "" > ${WOV_CONFIGFILE_MERGED}
+  chmod 600 ${WOV_CONFIGFILE_MERGED}
+  jq -s ".[0] * .[1]" ${WOV_CONFIGFILE_RAW} ${WOV_CONFIGFILE_LOCALRAW} >> ${WOV_CONFIGFILE_MERGED} 2> /dev/null
+  if [ "$?" != "0" ]; then
+    F1=$(cat ${WOV_CONFIGFILE_RAW} | jq type 2>&1)
+    F1a=$?
+    if [ "$F1a" != "0" ]; then printf "\n\nERROR: ${WOV_CONFIGFILE_RAW} is not properly formatted.\n${F1}\n\n"; fi
+    F2=$(cat ${WOV_CONFIGFILE_LOCALRAW} | jq type 2>&1)
+    F2a=$?
+    if [ "$F2a" != "0" ]; then printf "\n\nERROR: ${WOV_CONFIGFILE_LOCALRAW} is not properly formatted.\n${F2}\n\n"; fi
+    exit 1;
+  fi
+fi
+
+
+# --------------------------------------------------------------------- 
+# Load merged file in one call
+MERGEDVARS=()
 while read f; do
-  ALLVARS+=( "$f" )
-done <<<$(cat ${WOV_FILE_SECRETSMERGED} | jq -r ". | ( .ver, .project.project, .project.type, .project.title, .project.description, .archive.repository, .archive.env  )" )
-WOV_PVERSION=${ALLVARS[0]}
+  MERGEDVARS+=( "$f" )
+done <<<$(cat ${WOV_CONFIGFILE_MERGED} | jq -r ". | ( .ver, .project.project, .project.type, .project.title, .project.description, .archive.repository, .archive.env  )" )
+WOV_PVERSION=${MERGEDVARS[0]}
 if [ "${WOV_PVERSION}" != "${WOV_VERSION}" ] && [ "${WOV_PVERSION}" != "initing" ] ; then
   printf "\n\nERROR: Your project version '${WOV_PVERSION}', does not match to the WovTools version '${WOV_VERSION}'.\n\n"
   exit 1
 fi
-export WOV_WPROJECT="${ALLVARS[1]}"
-export WOV_PROJECTTYPE="${ALLVARS[2]}"
-export WOV_PROJECTTITLE="${ALLVARS[3]}"
-export WOV_PROJECTDESCRIPTION="${ALLVARS[4]}"
-export WOV_ARCHIVEREPOSITORY="${ALLVARS[5]}"
-export WOV_ARCHIVEENV="${ALLVARS[6]}"
+export WOV_WPROJECT="${MERGEDVARS[1]}"
+export WOV_PROJECTTYPE="${MERGEDVARS[2]}"
+export WOV_PROJECTTITLE="${MERGEDVARS[3]}"
+export WOV_PROJECTDESCRIPTION="${MERGEDVARS[4]}"
+export WOV_ARCHIVEREPOSITORY="${MERGEDVARS[5]}"
+export WOV_ARCHIVEENV="${MERGEDVARS[6]}"
 
 
 # vars from Kubernetes
@@ -90,8 +114,12 @@ export WOV_PROVIDER="${array[1]}"
 export WOV_CLTYPE="${array[0]}"
 export WOV_CLUSTER="${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}"
 if [ "${#array[@]}" != "6" ]; then
-  echo "ERROR: bad context '${WOV_CONTEXT}'. Should be CLTYPE-PROVIDER-REGION-FLAVOR-PROJECT-STAGE."
+  # error if no namespace nad not in global context
+  if [ "${GLOBALCOMMAND}" == "" ]; then
+    echo "ERROR: bad context '${WOV_CONTEXT}'. Should be CLTYPE-PROVIDER-REGION-FLAVOR-PROJECT-STAGE."
+  fi
 fi
+
 
 
 # --------------------------------------------------------------------- 
