@@ -71,7 +71,7 @@ if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fWovEnvDisplayOptions; exit 0;
 # Calls wov-env-build to build the secretfile if it does not exist.
 #  if $1 == force, force
 # --------------------------------------------------------------------- 
-function fBuildSecret
+function fBuildClusterSecrets
 { 
   if [ ! -f "${WOV_SECRETFILE}" ] || [ "$1" == "force" ]; then 
     echo "buidling"
@@ -79,7 +79,9 @@ function fBuildSecret
     if [ "${GLOBALCOMMAND}" != "" ]; then
       G="--global ${GLOBALCOMMAND} "
     fi
+    set -x
     wov-env-build ${G} --secrets ${CLUSTER}; 
+    set +x
   fi
 }
 
@@ -98,30 +100,27 @@ function doSetCluster
   mkdir -m 700 -p ${WOV_SECRETFILE_path}
   WOV_SECRETFILE=${WOV_SECRETFILE_path}/secrets.json
   export WOV_SECRETFILE
+
+  # ---------------------------------------------------------------------
+  # Ensure the SECRET_CACHE_DIR exists and is protected and then merge
+  # files config.json and local.json together in SECRETSMERGED_RAW
+  # if they have changed.
+  # ---------------------------------------------------------------------
+  mkdir -m 700 -p ${WOV_CACHEDIR}
+  if [ ! -f "${WOV_SECRETFILE}" ] || 
+     [ "${WOV_CONFIGFILE_MERGED}" -nt "${WOV_SECRETFILE}" ] || 
+     [ "${WOV_BASEDIR}/wovtools/secrets" -nt "${WOV_SECRETFILE}" ]; then
+    fBuildClusterSecrets force 
+    touch "${WOV_SECRETFILE}"
+
+    . wov-env-loader
+fi
 }
 
 
 
-# --------------------------------------------------------------------- 
-# Load env
-# --------------------------------------------------------------------- 
-# NOTE: this passes arguments
-. wov-env-loader
-doSetCluster "local"
 
 
-# ---------------------------------------------------------------------
-# Ensure the SECRET_CACHE_DIR exists and is protected and then merge
-# files config.json and local.json together in SECRETSMERGED_RAW
-# if they have changed.
-# ---------------------------------------------------------------------
-mkdir -m 700 -p ${WOV_CACHEDIR}
-if [ ! -f "${WOV_SECRETFILE}" ] || [ "${WOV_CONFIGFILE_MERGED}" -nt "${WOV_SECRETFILE}" ] || [ "${WOV_BASEDIR}/wovtools/secrets" -nt "${WOV_SECRETFILE}" ]; then
-  fBuildSecret force 
-  touch "${WOV_SECRETFILE}"
-
-. wov-env-loader
-fi
 
 
 
@@ -305,7 +304,7 @@ function doProviderEcho
 # --------------------------------------------------------------------- 
 function doPrintVarX()
 {
-  if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
+  if [ "$HAS_SECRET" == "0" ]; then fBuildClusterSecrets; fi
   R=`doPrintVarsENVS | grep "$1=" | cut -f2 -d"=" | ${SED} -e "s/^'//" -e "s/'$//"`
   if [ "$R" == "" ]; then
     R=${!1}
@@ -315,7 +314,7 @@ function doPrintVarX()
 
 function doPrintVarsENVS()
 {
-  if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
+  if [ "$HAS_SECRET" == "0" ]; then fBuildClusterSecrets; fi
 
   cat ${WOV_SECRETFILE} |
     jq  -r 'walk( if type == "object" then with_entries(select( .key | test("STAGE.+") or test("//*") | not)) else . end) | [leaf_paths as $path | {"key": $path | join("_"), "value": getpath($path)}] | from_entries | keys[] as $k | "WOV_\($k)=" + @sh "\(.[$k])" '
@@ -332,7 +331,7 @@ function doPrintVarsCONF()
 
 function doPrintVarsEXPORTS()
 {
-  if [ "$HAS_SECRET" == "0" ]; then fBuildSecret; fi
+  if [ "$HAS_SECRET" == "0" ]; then fBuildClusterSecrets; fi
 
   cat ${WOV_SECRETFILE} |
     jq  -r 'walk( if type == "object" then with_entries(select( .key | test("STAGE.+") or test("//*") | not)) else . end) | [leaf_paths as $path | {"key": $path | join("_"), "value": getpath($path)}] | from_entries | keys[] as $k | "export WOV_\($k)=" + @sh "\(.[$k])" '
@@ -420,6 +419,14 @@ function fConfGeneration()
   #fi
 }
 
+
+
+# --------------------------------------------------------------------- 
+# Load env
+# --------------------------------------------------------------------- 
+# NOTE: this passes arguments
+. wov-env-loader
+doSetCluster "local"
 
 
 # --------------------------------------------------------------------- 
