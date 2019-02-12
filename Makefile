@@ -1,6 +1,6 @@
 
 
-BINS-ENV=wov-env-build wov-env wov-env-aws wov-cluster wov-kops
+BINS-ENV=wov-env-loader wov-env-build wov-env wov-env-aws wov-cluster wov-kops
 BINS-CLI=wov-aws wov-cd wov-bastion wov-bastion-connection wov-cmd wov-ed wov-ls wov-ns wov-db-connect wov-db-cloud wov-p wov-plog \
 	       wov-hash wov-enc wov-dec
 BINS-VH=wov-vh wov-vh-pushgit wov-vh-pulldir
