@@ -337,6 +337,12 @@ function doPushContainer()
     echo "ARCHDIR=${ARCHDIR} # location of archive of DESTDIR"
   fi
 
+  mkdir -p ${ARCHDIR}
+  if [ "$?" != "0" ]; then
+    printf "\nERROR: Failed to create archive dir for containers: ${ARCHDIR}. Check permissions?\n\n"
+    exit 1
+  fi
+
   if [[ ! -e "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
     echo "ERROR: recipe for container ${f} does not exist (${WOV_BASEDIR}/wovtools/containers/$f).";
     exit 1

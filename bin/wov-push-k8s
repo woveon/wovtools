@@ -34,7 +34,7 @@ function doPushClusterToArchive()
   local ARCHPATH="`getRelativeArchivePath ${CLUSTER}`"
 
 
-  if [ $DOECHO -ge 1 ]; then echo "  ... building cluster: '${CLUSTER}'"; fi
+  if [ $DOECHO -ge 1 ]; then echo "  ... building cluster configuration: '${CLUSTER}'"; fi
   wov-env-build -q --cluster ${CLUSTER}
 
   if [ $DOECHO -ge 1 ]; then echo "  ... pushing to archive: '${WOV_ARCHIVEENV}/${ARCHPATH}'"; fi
