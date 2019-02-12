@@ -12,7 +12,7 @@ RUN apt-get -q update
 WORKDIR /usr/src/app
 
 # Some dev tools
-RUN apt-get -y install vim wget curl bash net-tools git iputils-ping dnsutils make ufw gnupg 
+RUN apt-get -y install vim wget curl bash net-tools git iputils-ping dnsutils make ufw gnupg nfs-common
 
 # Install NodeJS (after install curl above)
 RUN curl -sL https://deb.nodesource.com/setup_10.x | bash -
