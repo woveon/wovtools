@@ -31,7 +31,7 @@ Builds WovTool configurations for secrets (-s) and clusters (-c) (K8s, ConfigMap
   --clean        : cleans the cache
   -f/--force     : force build of secrets and cluster
 
-  -g/--global X  : global rules; ignore project and namespaces (TODO FIX: redundant with secrets and cluster X)
+  -g/--global X  : set global context (ignores K8s context) (TODO FIX: redundant with secrets and cluster X)
 
   -s/--secrets X : build secrets for cluster X
   -c/--cluster X : build the secret and Kubernetes files for cluster X
@@ -58,7 +58,7 @@ fi
 # --------------------------------------------------------------------- 
 buildargs=( "$@" )
 set ""
-. wov-env
+. wov-env-loader
 set -- "${buildargs[@]}"
 
 # --------------------------------------------------------------------- 
@@ -393,46 +393,52 @@ fBuildClusterDir()
   mkdir -p  "${CLUSTER_DIR}/k8s"
   chmod 700 "${CLUSTER_DIR}/k8s"
 
-  # Find k8s files to compile
-  WOVFILES=$(cd ${WOV_BASEDIR}/wovtools/k8s; ls *.wov 2> /dev/null)
-  if [ "${WOVFILES}" == "" ]; then echo "  ... no files found in wovtools/k8s/*.wov."; fi
+  if [ -d ${WOV_BASEDIR}/wovtools/k8s ]; then
 
-  # Compile them if needed
-  for f in ${WOVFILES}; do
+    # Find k8s files to compile
+    WOVFILES=$(cd ${WOV_BASEDIR}/wovtools/k8s; ls *.wov 2> /dev/null)
+    if [ "${WOVFILES}" == "" ]; then echo "  ... no files found in wovtools/k8s/*.wov."; fi
 
-    # file versions 
-    SRC=${WOV_BASEDIR}/wovtools/k8s/${f}
-    DEST=${CLUSTER_DIR}/k8s/${f%.wov}
+    # Compile them if needed
+    for f in ${WOVFILES}; do
 
-    # check if we need to compile
-    # ------------------------
-    local dowecompile=${DOFORCE}
-    if [ "$2" == "1" ]; then dowecompile=1;                         # secrets changed?
-    elif [ ! -e "${DEST}" ]; then dowecompile=1;                     # no dest file
-    elif [ "${SRC}" -nt "${DEST}" ]; then dowecompile=1;             # src has changed after dest
-    # elif [ "${SECRETFILE}" -nt "${DEST}" ]; then dowecompile=1;    # secrets have changed after dest
-    fi
+      # file versions 
+      SRC=${WOV_BASEDIR}/wovtools/k8s/${f}
+      DEST=${CLUSTER_DIR}/k8s/${f%.wov}
 
-    # compile dir if needed
-    if [[ ${dowecompile} -eq 1 ]]; then
-      if [ "$DOECHO" == "2" ] || [ "$DOECHO" == "2" ]; then echo "  ... build ${SRC}"; fi
-      #echo " --- `basename ${DEST}` needs to be built"
-#      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
-      wov-compile ${SECRETFILE} ${SRC} > ${DEST}
-    else
-      if [ "$DOECHO" == "2" ]; then echo "  ... skipping ${SRC}"; fi
-    fi
+      # check if we need to compile
+      # ------------------------
+      local dowecompile=${DOFORCE}
+      if [ "$2" == "1" ]; then dowecompile=1;                         # secrets changed?
+      elif [ ! -e "${DEST}" ]; then dowecompile=1;                     # no dest file
+      elif [ "${SRC}" -nt "${DEST}" ]; then dowecompile=1;             # src has changed after dest
+        # elif [ "${SECRETFILE}" -nt "${DEST}" ]; then dowecompile=1;    # secrets have changed after dest
+      fi
 
-  done
+      # compile dir if needed
+      if [[ ${dowecompile} -eq 1 ]]; then
+        if [ "$DOECHO" == "2" ] || [ "$DOECHO" == "2" ]; then echo "  ... build ${SRC}"; fi
+        #echo " --- `basename ${DEST}` needs to be built"
+        #      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
+        wov-compile ${SECRETFILE} ${SRC} > ${DEST}
+      else
+        if [ "$DOECHO" == "2" ]; then echo "  ... skipping ${SRC}"; fi
+      fi
+
+    done
+  fi
 
 
   # ---------------------------------------------------------------------
   # cm/se : build K8s ConfigMap and Secrets
   # ---------------------------------------------------------------------
   # Each container recipe is for a microservice
+
   local RECIPES=( )   # here, specify 
   if [ "${#RECIPES[@]}" == "0" ]; then
-    RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+    if [ -d ${WOV_BASEDIR}/wovtools/containers ]; then
+      RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+    fi
   fi
   #echo "Container Recipes: ${RECIPES}"
 
