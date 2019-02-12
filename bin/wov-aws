@@ -107,7 +107,7 @@ function doVolumeCreate()
 
   local RES=`aws ec2 create-volume --size ${VOLSIZE} --region ${CL_REGION} \
     --availability-zone ${AVAILZONE} --volume-type gp2 \
-    --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=${VOLNAME}}]" | jq ".VolumeId" -r`
+    --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=${VOLNAME}},{Key=KubernetesCluster,Value=${WOV_CLUSTER}.${WOV_cluster_dns}]" | jq ".VolumeId" -r`
   RET=$?
   echo "Create: $RES"
   return $RET
