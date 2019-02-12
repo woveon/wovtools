@@ -82,8 +82,12 @@ function doConfigCheck()
 function doConnect()
 {
   ssh "${CL}-bastion"
-  if [ "$?" != "0" ]; then
-    printf "\nERRROR: wov-bastion-connection failed... let me check a few things...\n\n";
+  local r=$?
+  if [ "$r" == "255" ]; then
+    echo "\nERROR: check key permissions.\n"
+    exit 1
+  elif [ "$r" != "0" ]; then
+    printf "\nERROR: wov-bastion-connection failed... let me check a few things...\n\n";
     doConfigCheck
     exit 1
   fi
