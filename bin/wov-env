@@ -74,14 +74,11 @@ if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fWovEnvDisplayOptions; exit 0;
 function fBuildClusterSecrets
 { 
   if [ ! -f "${WOV_SECRETFILE}" ] || [ "$1" == "force" ]; then 
-    echo "buidling"
     local G=
     if [ "${GLOBALCOMMAND}" != "" ]; then
       G="--global ${GLOBALCOMMAND} "
     fi
-    set -x
-    wov-env-build ${G} --secrets ${CLUSTER}; 
-    set +x
+    wov-env-build ${G} -q --secrets ${CLUSTER}; 
   fi
 }
 
@@ -107,12 +104,17 @@ function doSetCluster
   # if they have changed.
   # ---------------------------------------------------------------------
   mkdir -m 700 -p ${WOV_CACHEDIR}
+
+  # check files that could impact WOV_SECRETFILE generation
+  #  - changes to kube config
+  #  - newly merged wovtools/config.json|local.json
+  #  - wovtools/secrets directory has changes
   if [ ! -f "${WOV_SECRETFILE}" ] || 
+     [ "${HOME}/.kube/config" -nt "${WOV_SECRETFILE}" ] ||
      [ "${WOV_CONFIGFILE_MERGED}" -nt "${WOV_SECRETFILE}" ] || 
      [ "${WOV_BASEDIR}/wovtools/secrets" -nt "${WOV_SECRETFILE}" ]; then
     fBuildClusterSecrets force 
     touch "${WOV_SECRETFILE}"
-
     . wov-env-loader
 fi
 }
