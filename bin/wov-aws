@@ -22,6 +22,7 @@ function doCluster()
   export CL_REGION="$cRC"
   export CL_ZONES="c d"
   export CL_VPC=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${WOV_CLUSTER}-vpc" --query 'Vpcs[0].VpcId' | ${SED} -e 's/^"//' -e 's/"$//')
+  if [ "$?" != "0" ]; then printf "\n\nERROR: aws error... bastion issue?\n\n"; exit 1; fi
 }
 
 
@@ -107,7 +108,7 @@ function doVolumeCreate()
 
   local RES=`aws ec2 create-volume --size ${VOLSIZE} --region ${CL_REGION} \
     --availability-zone ${AVAILZONE} --volume-type gp2 \
-    --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=${VOLNAME}},{Key=KubernetesCluster,Value=${WOV_CLUSTER}.${WOV_cluster_dns}]" | jq ".VolumeId" -r`
+    --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=${VOLNAME}},{Key=KubernetesCluster,Value=${WOV_CLUSTER}.${WOV_cluster_dns}}]" | jq ".VolumeId" -r`
   RET=$?
   echo "Create: $RES"
   return $RET
