@@ -179,6 +179,7 @@ SEDCMD=''$WARNINGLINE"i$WARNING"
 #node -e 'console.log("9 : ", Date.now())' 1>&2
 # 1st and 2nd passes at once
 #echo "time wov-hbs" 1>&2
+echo "wov-hbs calling ${TEMPLATEFILE}"
 wov-hbs -sf $SCF  < $TEMPLATEFILE  | $SED "$SEDCMD"
 #echo "/time wov-hbs" 1>&2
 

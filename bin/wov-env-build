@@ -27,7 +27,7 @@ Builds WovTool configurations for secrets (-s) and clusters (-c) (K8s, ConfigMap
 
 
   -q             : quiet
-  -v             : verbose
+  -v             : verbose (and leaves intermediate files in cache/cluster )
   --clean        : cleans the cache
   -f/--force     : force build of secrets and cluster
 
@@ -237,7 +237,7 @@ EOF
   echo "" > ${SECRETFILE}.3
   chmod 600 ${SECRETFILE}.3
   if [[ $DOECHO -ge 1 ]]; then   echo "  ... using cluster     : ${CLUSTER}"; fi
-  wov_stage-select ${SECRETFILE}_ CLUSTER${CLUSTER} >> ${SECRETFILE}.3
+  wov_stage-select ${SECRETFILE}_ CLUSTER ${CLUSTER} >> ${SECRETFILE}.3
   ${MV} ${SECRETFILE}.3  ${SECRETFILE}_
 
 
@@ -247,7 +247,7 @@ EOF
   echo "" > ${SECRETFILE}.4
   chmod 600 ${SECRETFILE}.4
   if [[ $DOECHO -ge 1 ]]; then   echo "  ... using stage       : ${WOV_STAGE}"; fi
-  wov_stage-select ${SECRETFILE}_ STAGE${WOV_STAGE} >> ${SECRETFILE}.4
+  wov_stage-select ${SECRETFILE}_ STAGE ${WOV_STAGE} >> ${SECRETFILE}.4
   ${MV} ${SECRETFILE}.4  ${SECRETFILE}_
 
 

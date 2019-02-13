@@ -2,14 +2,17 @@
 
 // This file performs stage-select for the wov-env command. jq was unable to do the correct 'walk' function, so I wrote this.
 
-let doStageSelect = (needle, haystack, found = []) => {
+let doStageSelect = (chaff, needle, haystack, found = []) => {
 
-  //iterate through each property key in the object
+  // iterate through each property key in the object
   Object.keys(haystack).forEach((key) => {
-    // console.log('check key: ', key);
+    // console.error('check key: ', key);
+
+    // ??? Why startsWith???
+
     // dump items in child, here
-    if(key.startsWith(needle)){
-      // console.log('  match key: ', key);
+    if (key.startsWith(needle)) {
+      // console.error('  match key: ', key);
       Object.assign(haystack, haystack[key]);
       found.push(haystack[key]);
     }
@@ -17,20 +20,39 @@ let doStageSelect = (needle, haystack, found = []) => {
 
   // second pass, go into objects, including just added (but not matched)
   Object.keys(haystack).forEach((key) => {
-    if(typeof haystack[key] === 'object' && (!key.startsWith(needle)) && haystack[key] != null ){
-      // console.log('enter object at key: ', key);
-      doStageSelect(needle, haystack[key], found);
+    if (typeof haystack[key] === 'object' && (!key.startsWith(needle)) && haystack[key] != null ) {
+      // console.error('enter object at key: ', key);
+      doStageSelect(chaff, needle, haystack[key], found);
     }
   });
 
-  //return the list of found values to the caller of the function
+  // third pass, remove key (already recursed into, so can remove)
+  Object.keys(haystack).forEach((key) => {
+    if (key.startsWith(needle)) {
+      // console.log('delete needle', key);
+      delete haystack[key];
+    };
+    if (key.startsWith(chaff) && key != chaff) {
+      // console.log('delete chaff', key);
+      delete haystack[key];
+    };
+  });
+
+
+  // return the list of found values to the caller of the function
   return found;
 };
 
-// console.log('argv: ', process.argv[2]);
-//console.log('argv: ', process.argv[3]);
+
+//  data   - JSON read from file
+//  chaff  - ex. CLUSTER
+//  key    - ex. wov-aws-va-frog
+//  needle - ex. CLUSTERwov-aws-va-frog
 let data = require('fs').readFileSync(process.argv[2]);
-let needle= process.argv[3];
+let chaff= process.argv[3];
+let key  = process.argv[4];
+let needle = `${chaff}${key}`;
+
 let d = JSON.parse(data);
-doStageSelect(needle, d); 
+doStageSelect(chaff, needle, d);
 console.log(JSON.stringify(d, null, '  '));
