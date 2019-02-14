@@ -50,10 +50,8 @@ function doTest()
 {
   if [ ${DOECHO} -ge 2 ]; then echo "...test"; fi
   if [ -e ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-test ]; then
-    echo 1
     OUTIS=$(${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-test)
     RETVAL=$?
-    echo 2
   else
     if [ ${DOECHO} -ge 2 ]; then echo "  ...no test script for '${DOSERVICE}'"; fi
     OUTIS=""
