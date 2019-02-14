@@ -259,7 +259,7 @@ EOF
     if [[ $DOECHO -ge 1 ]]; then echo "  ... using secretsmods : ${CLUSTER}"; fi
 
     local rts=( $(jq -r '.secretsmods.'"${CLUSTER}"' | .routes[] | "\(.[0]) \(.[1])"' ${WOV_CONFIGFILE_MERGED} 2> /dev/null ) )
-    #echo "rts: ${#rts[@]} ${rts[@]}"
+    # echo "rts: ${#rts[@]} ${rts[@]}"
 
     # NOTE: doing this in order of entries
     while [[ "${#rts[@]}" != "0" ]]; do
@@ -269,7 +269,7 @@ EOF
       #echo "rt: ${rtfrom} -> ${rtto}"
       # rewrite any ME->STAGE in route
       rtto=$(echo $rtto | sed "s/ME/${WOV_STAGE}/")
-      #echo "rt: ${rtfrom} -> ${rtto}"
+      # echo "rt: ${rtfrom} -> ${rtto}"
 
       # rewrite routes in SECRETFILE, remove original graft, then move back to SECREFILE for next mod
       echo "" > ${SECRETFILE}.5
@@ -283,19 +283,34 @@ EOF
 
 
     # use SECRETFILE if no SECRETFILE or differs from SECRETFILE_. otherwise just delete.
-    if [ ! -e ${SECRETFILE} ]; then mv ${SECRETFILE}_ ${SECRETFILE};
-    else 
-      diff ${SECRETFILE}_ ${SECRETFILE} > /dev/null
-      if [ "$?" != "0" ]; then mv ${SECRETFILE}_ ${SECRETFILE}; 
-      else rm ${SECRETFILE}_; fi
-    fi
+#    if [ ! -f ${SECRETFILE} ]; then mv ${SECRETFILE}_ ${SECRETFILE};
+#    else 
+#      diff ${SECRETFILE}_ ${SECRETFILE} > /dev/null
+#      if [ "$?" != "0" ]; then mv ${SECRETFILE}_ ${SECRETFILE}; 
+#      else rm ${SECRETFILE}_; fi
+#    fi
 
   else
     if [ "$DOECHO" == "2" ]; then echo "  ... no secretsmods entry for cluster: ${CLUSTER}"; fi
-    ${MV} ${SECRETFILE}_  ${SECRETFILE}
+#    ${MV} ${SECRETFILE}_  ${SECRETFILE}
   fi
 
 
+  # STEP 6&7: Clean CLUSTER and STAGE from the raw code. Have to do it after the mods above since those
+  #           can rewrite CLUSTER over STAGE.
+  echo "" > ${SECRETFILE}.6
+  chmod 600 ${SECRETFILE}.6
+  wov_stage-select ${SECRETFILE}_ CLUSTER ${CLUSTER} clean >> ${SECRETFILE}.6
+  ${MV} ${SECRETFILE}.6  ${SECRETFILE}_
+
+  echo "" > ${SECRETFILE}.7
+  chmod 600 ${SECRETFILE}.7
+  wov_stage-select ${SECRETFILE}_ STAGE ${WOV_STAGE} clean >> ${SECRETFILE}.7
+  ${MV} ${SECRETFILE}.7  ${SECRETFILE}_
+
+
+  # FINAL: move it back into place
+  ${MV} ${SECRETFILE}_  ${SECRETFILE}
 
   # mark as secret being updated
   HAS_SECRET=1
