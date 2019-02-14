@@ -116,7 +116,8 @@ export WOV_CLUSTER="${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}"
 if [ "${#array[@]}" != "6" ]; then
   # error if no namespace nad not in global context
   if [ "${GLOBALCOMMAND}" == "" ]; then
-    echo "ERROR: bad context '${WOV_CONTEXT}'. Should be CLTYPE-PROVIDER-REGION-FLAVOR-PROJECT-STAGE."
+    echo "ERROR: bad context '${WOV_CONTEXT}' (from '-g X' switch or kubectl config current-context). Should be CLTYPE-PROVIDER-REGION-FLAVOR-PROJECT-STAGE."
+    exit 1
   fi
 fi
 
