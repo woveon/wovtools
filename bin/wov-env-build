@@ -9,6 +9,8 @@ HAS_BUILDENV=0
 DOFORCE=0
 LOCALCONTEXT=
 GLOBALCOMMAND=
+FORCEDNS=
+  # -- Can force this to be a namespace instead of from git/K8s
 
 CONFEXT=
   # see wov-push-k8s
@@ -26,13 +28,20 @@ usage: `basename $0` [options]
 Builds WovTool configurations for secrets (-s) and clusters (-c) (K8s, ConfigMap and Secrets). By default, clusters are any 'on' secrets mods, the 'localcontext' (in the wovtools/local.json file) and current context from CLUSTER and STAGE settings.
 
 
+  Leading Commands - Must be placed first
+  -g/--global X  : set global context (ignores K8s context) (TODO FIX: redundant with secrets and cluster X)
+  -n/--namespace : override namespace
+  -h/--help      : list this help
+
+
+  Modifying Commands
   -q             : quiet
   -v             : verbose (and leaves intermediate files in cache/cluster )
   --clean        : cleans the cache
   -f/--force     : force build of secrets and cluster
 
-  -g/--global X  : set global context (ignores K8s context) (TODO FIX: redundant with secrets and cluster X)
 
+  Commands
   -s/--secrets X : build secrets for cluster X
   -c/--cluster X : build the secret and Kubernetes files for cluster X
   --local        : build local secrets
@@ -41,16 +50,31 @@ Builds WovTool configurations for secrets (-s) and clusters (-c) (K8s, ConfigMap
 
 EOF
 }
-if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fWovEnvBuildDisplayOptions; exit 0; fi
 
 
-if [ "$1" == '--global' ] || [ "$1" == '-g' ]; then 
-  shift; 
-  export GLOBALCOMMAND="$1";
-#  export WOV_PROJECT="global";
-#  export WOV_STAGE="global";
-  shift; 
-fi
+# --------------------------------------------------------------------- 
+# Leading commands:
+# --------------------------------------------------------------------- 
+
+
+LEADINGCOMMANDS=1
+while [ "$LEADINGCOMMANDS" == "1" ]; do
+  if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fWovEnvBuildDisplayOptions; exit 0; 
+
+  elif [ "$1" == '--global' ] || [ "$1" == '-g' ]; then 
+    shift; 
+    export GLOBALCOMMAND="$1";
+    shift; 
+
+  elif [ "$1" == '--namespace' ] || [ "$1" == '-n' ]; then 
+    shift; 
+    FORCEDNS=$1
+    shift;
+
+  else
+    LEADINGCOMMANDS=0
+  fi
+done
 
 
 # --------------------------------------------------------------------- 
@@ -62,36 +86,45 @@ set ""
 set -- "${buildargs[@]}"
 
 # --------------------------------------------------------------------- 
-# Global checks
-#if [ "$1" == '--global' ] || [ "$1" == '-g' ]; then 
-#  GLOBALCOMMAND=1; 
-#  shift; 
-#  export WOV_PROJECT="global"
-#  export WOV_STAGE="global"
-#fi
-#echo "WOV_PROJECT ${WOV_PROJECT} ${WOV_STAGE}"
+# --------------------------------------------------------------------- 
+
+
+
+
+# --------------------------------------------------------------------- 
+# Namespace - global, forced or normal (from git/K8s)
+# --------------------------------------------------------------------- 
+
+# Global namespace
 if [ "$GLOBALCOMMAND" != "" ]; then
   export WOV_PROJECT="global"
   export WOV_STAGE="global"
-fi
 
-# --------------------------------------------------------------------- 
-# Namespace checks
-if [ "$GLOBALCOMMAND" == "" ]; then
-wov-ns-check
-if [ "$?" != "0" ]; then
-  if [ "${WOV_KPROJECT}" != "${WOV_WPROJECT}" ]; then
-    printf "ERROR: WOV_KPROJECT/WOV_WPROJECT differences need to be fixed.\n\n"
-    exit 1
-  elif [ "${WOV_KSTAGE}" != "${WOV_GSTAGE}" ]; then
-    printf "WARNING: WOV_KSTAGE/WOV_GSTAGE differ. Assuming Kubernetes ${WOV_KSTAGE} and continuing (Allows building when git branches differ).\n\n"
-  else
-    printf "ERROR: Unknown namespace differences. Needs to be fixed.\n\n"
-    printf "WOV_PROJECT/KPROJECT/WPROJECT: '${WOV_PROJECT}' '${WOV_KPROJECT}' '${WOV_WPROJECT}'\n"
-    printf "WOV_STAGE/KSTAGE/GSTAGE      : '${WOV_STAGE}' '${WOV_KSTAGE}' '${WOV_GSTAGE}'\n"
-    exit 1
+# Forced namespace
+elif [ "${FORCEDNS}" != "" ]; then
+  IFS='-' read -r -a array <<< "${FORCEDNS}"
+  echo "array : ${array[@]}"
+  echo "here - shifting namespace to ${FORCEDNS}, from ${WOV_NAMESPACE} ${WOV_NS} ${WOV_STAGE}"
+  export WOV_NS="${array[0]}-${array[1]}"
+  export WOV_PROJECT="${array[0]}"
+  export WOV_STAGE="${array[1]}"
+
+# Namespace from K8s/Git
+else
+  wov-ns-check
+  if [ "$?" != "0" ]; then
+    if [ "${WOV_KPROJECT}" != "${WOV_WPROJECT}" ]; then
+      printf "ERROR: WOV_KPROJECT/WOV_WPROJECT differences need to be fixed.\n\n"
+      exit 1
+    elif [ "${WOV_KSTAGE}" != "${WOV_GSTAGE}" ]; then
+      printf "WARNING: WOV_KSTAGE/WOV_GSTAGE differ. Assuming Kubernetes ${WOV_KSTAGE} and continuing (Allows building when git branches differ).\n\n"
+    else
+      printf "ERROR: Unknown namespace differences. Needs to be fixed.\n\n"
+      printf "WOV_PROJECT/KPROJECT/WPROJECT: '${WOV_PROJECT}' '${WOV_KPROJECT}' '${WOV_WPROJECT}'\n"
+      printf "WOV_STAGE/KSTAGE/GSTAGE      : '${WOV_STAGE}' '${WOV_KSTAGE}' '${WOV_GSTAGE}'\n"
+      exit 1
+    fi
   fi
-fi
 fi
 
 # --------------------------------------------------------------------- 
@@ -167,7 +200,7 @@ function fBuildSecrets()
   local SRCSECRETFILES=( $(jq -r ".secrets.${WOV_STAGE}[] " ${WOV_CONFIGFILE_MERGED} 2> /dev/null) )
   if [ "$?" != "0" ] || [ "${#SRCSECRETFILES}" == "0" ]; then
     printf "\n\nERROR: either no entry or no files for stage '${WOV_STAGE}' in config.json file '.secrets'.\n"
-    printf "  - You probably just need to create an entry, similar to the other stages.\n\n"
+    printf "  - You probably just need to create an entry in wovtools/config|local.json, similar to the other stages.\n\n"
     exit 1
   fi
 
@@ -445,7 +478,7 @@ fBuildClusterDir()
       RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
     fi
   fi
-  #echo "Container Recipes: ${RECIPES}"
+  # echo "Container Recipes: ${RECIPES}"
 
   # ensure directories
   mkdir -p  "${CLUSTER_DIR}/cm"
@@ -464,7 +497,8 @@ fBuildClusterDir()
     local MICROSERVICE=${WOV_PROJECT}${CONTAINERNAME}
     if [ $DOECHO -ge 2 ]; then echo "... build ConfigMap and Secret for '${MICROSERVICE}${CONFEXT}'."; fi
 
-    # Create CM file to read in
+    # Create CM file to dump into and clear out
+    # NOTE: if builing to CMFILE2, then all recipes would build that and only need to build once... TODO / OPTIMIZATION
     local CMFILE1=${CLUSTER_DIR}/cm/${MICROSERVICE}${CONFEXT}
     local CMFILE2=${CLUSTER_DIR}/cm/${WOV_PROJECT}${CONFEXT}
 
@@ -492,6 +526,7 @@ fBuildClusterDir()
       if [ "$a" != "0" ]; then
         rm ${CMFILE}
         CMFILE="${CMFILE2}"
+        rm ${CMFILE}
         if [ "$hasbuiltbasecm" == "0" ]; then
           if [[ $DOECHO -ge 2 ]]; then echo "  ... using config for ${WOV_PROJECT}, instead of ${MICROSERVICE}"; fi
           wov-env --cluster ${CLUSTER} --cm ${WOV_PROJECT} >> ${CMFILE}
@@ -510,6 +545,7 @@ fBuildClusterDir()
       fi
 
       # sort and uniq to remove duplicates
+      touch ${CMFILE}  # make sure it exists
       touch ${CMFILE}.1
       chmod 600 ${CMFILE}.1
       sort ${CMFILE} | uniq >> ${CMFILE}.1
@@ -562,6 +598,7 @@ fBuildClusterDir()
       fi
 
       # sort and uniq to remove duplicates
+      touch ${SEFILE}   # make sure it exists
       touch ${SEFILE}.1
       chmod 600 ${SEFILE}.1
       sort ${SEFILE} | uniq >> ${SEFILE}.1
@@ -607,6 +644,10 @@ while [[ $1 =~ ^- ]]; do
     shift
     fBuildSecrets $1
     shift
+
+  elif [ "$1" == "-n" ] || [ "$1" == "--namespace" ]; then
+    echo "ERROR: '$1 $2' is a leading command and should be placed at start of command arguments."
+    exit 1
 
   elif [ "$1" == "-g" ] || [ "$1" == "--global" ]; then
     printf "\n\nERROR: '$1' needs to be first param in args array. Retype your command.\n\n"

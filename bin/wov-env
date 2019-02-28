@@ -46,6 +46,7 @@ Command Options:
   --conf        : print all the configuration as environment variables (one line)
   --exports     : runs all the configuration as environment variables (no output, sourced)
   --var X       : print this variable X
+  --secrets     : prints the merged json secrets file (for debugging)
 
   Kubernetes Generation 
     NOTE: These use Make to run a script... not good... need better way to run
@@ -74,11 +75,14 @@ if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fWovEnvDisplayOptions; exit 0;
 function fBuildClusterSecrets
 { 
   if [ ! -f "${WOV_SECRETFILE}" ] || [ "$1" == "force" ]; then 
-    local G=
+    local NS=
     if [ "${GLOBALCOMMAND}" != "" ]; then
-      G="--global ${GLOBALCOMMAND} "
+      NS="--global ${GLOBALCOMMAND} "
+    else
+      NS="--namespace ${WOV_NS}" 
     fi
     wov-env-build ${G} -q --secrets ${CLUSTER}; 
+    if [ "$?" != "0" ]; then exit 1; fi
   fi
 }
 
@@ -355,6 +359,7 @@ function doPrintVarsEXPORTS()
 function fConfGeneration()
 {
 
+  local MSCFILE=
   local R=
 
   # Read in envs
@@ -362,7 +367,7 @@ function fConfGeneration()
 
   # Get echo env vars, checking multiple locations
   if [ -e "${WOV_BASEDIR}/${1}/src/${1}config.js" ]; then
-    local MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.js"
+    MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.js"
     if [ "$2" == "cm" ]; then 
       R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ) 
       RR=$?
@@ -373,7 +378,7 @@ function fConfGeneration()
     if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code."; exit 1 ; fi
 
   elif [ -e "${WOV_BASEDIR}/src/${1}config.js" ]; then
-    local MSCFILE="${WOV_BASEDIR}/src/${1}config.js"
+    MSCFILE="${WOV_BASEDIR}/src/${1}config.js"
     if [ "$2" == "cm" ]; then
       R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ) 
       RR=$?
@@ -384,13 +389,13 @@ function fConfGeneration()
     if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code."; exit 1 ; fi
 
   elif [ -e "${WOV_BASEDIR}/${1}/src/${1}config.sh" ]; then
-    local MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.sh"
+    MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.sh"
     R=( $(${MSCFILE} $2) )
     RR=$?
     if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code."; exit 1 ; fi
 
   elif [ -e "${WOV_BASEDIR}/src/${1}config.sh" ]; then
-    local MSCFILE="${WOV_BASEDIR}/src/${1}config.sh"
+    MSCFILE="${WOV_BASEDIR}/src/${1}config.sh"
     R=( $(${MSCFILE} $2) )
     RR=$?
     if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code."; exit 1 ; fi
@@ -400,17 +405,28 @@ function fConfGeneration()
     exit 1
   fi
 
+  local SEP=' '
+  if [ "$3" == "1" ]; then SEP='\n'; fi
+
 #  R+=( WOV_STAGE=${WOV_STAGE} WOV_ME=${WOV_ME} )
 
 #  echo "R: ${R[*]}"
   if [[ "${R[@]}" =~ "[WARN"  ]]; then
+
+
     echo "${R[*]}"
-    printf "\n***ERROR(wov-env): warning message in generation of environment variables. Stopping.\n\n"
+    printf "\n***ERROR(wov-env): warning message in generation of environment variables. Stopping. See '${MSCFILE} file'.\n\n"
+
+    if [ "$ECHOMODE" == "2" ]; then
+      printf "\nsecret file (${WOV_SECRETFILE}):\n";
+      cat ${WOV_SECRETFILE}
+    fi
+    printf "\n***ERROR(wov-env): see above.\n\n"
+
+
     exit 2
   fi
 
-  local SEP=' '
-  if [ "$3" == "1" ]; then SEP='\n'; fi
 
   for f in "${R[@]}"; do
     printf "$f$SEP"
@@ -454,6 +470,9 @@ while [[ $1 =~ ^- ]]; do
 #    doLoadEnv
     doPrintVarsENVS
 
+  elif [ "$1" == "--secrets" ]; then
+    printf "\nsecret file (${WOV_SECRETFILE}):\n";
+    cat ${WOV_SECRETFILE}
 
     # print one var
   elif [ "$1" == "--env-var" ]; then
