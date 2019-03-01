@@ -1,7 +1,8 @@
 # A base image to develop on in the test namespace
 #FROM ubuntu:16.04
 #FROM ubuntu:17.10
-FROM ubuntu:bionic
+#FROM ubuntu:bionic
+FROM ubuntu:cosmic
 
 # --------------------------------------------------------------------- 
 # Package installs 
@@ -12,14 +13,19 @@ RUN apt-get -q update
 WORKDIR /usr/src/app
 
 # Some dev tools
-RUN apt-get -y install vim wget curl bash net-tools git iputils-ping dnsutils make ufw gnupg nfs-common
+RUN apt-get -y install vim wget curl bash net-tools git iputils-ping dnsutils make ufw gnupg nfs-common jq
 
 # Install NodeJS (after install curl above)
 RUN curl -sL https://deb.nodesource.com/setup_10.x | bash -
 RUN apt-get install -y nodejs
 ENV NODE_PATH /usr/lib/node_modules
-RUN npm install -g mocha bcryptjs nodemon
-RUN npm install -g npm
+
+# Install yarn and some packages
+RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -
+RUN echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list
+RUN apt-get update && apt-get install yarn
+RUN yarn global add mocha bcryptjs nodemon
+#RUN yarn add -g npm
 
 
 # Because Mongo needs tzdata and it creates an interactive issue
@@ -35,10 +41,11 @@ RUN apt-get install -y mongodb-org
 
 #??
 # Install postgres v9.6 client (AWS is 9.6.5.. bummer)
-RUN apt-get install -y postgresql-client
-
-# parser
-RUN apt-get install -y jq
+#   FROM: https://gist.github.com/ziyan-junaideen/d4a65534c1a17ca6995c9c974e62d74f
+RUN echo "deb http://apt.postgresql.org/pub/repos/apt/ xenial-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+RUN wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+RUN apt-get update
+RUN apt-get install -y postgresql-client-9.6
 
 # Available for keys to be copied in
 RUN mkdir /root/.ssh

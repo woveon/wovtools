@@ -85,6 +85,7 @@ vh : $(shell find vh -type f)
 	@echo "  ... tagging container   : wovtools/vh:$(shell wov-env --vh-label)"
 	@docker tag vh "wovtools/vh:$(shell wov-env --vh-label)"
 	@echo "  ... push to DockerHub: wovtools/vh"
-	@docker push wovtools/vh || echo 'Hmm, did you 'docker login'?'
+	@docker push wovtools/vh || \
+		( echo "Hmm, did you 'docker login'?" && docker login -u wovtools && docker push wovtools/vh )
 	@echo "  ... success"
 

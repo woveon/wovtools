@@ -10,7 +10,7 @@ set ""
 set -- "${wovvhpushgitargs[@]}"
 
 DOECHO=1
-FOLD=140
+FOLD=`tput cols`
 CONTINUE=1
 DOSKIPBASE=0
 
@@ -27,7 +27,7 @@ This script pushes the project's git repo to vh in a safe manner. The additional
 
 To specify a branch, use ':'. 
 
-The following pushes the current git repo, plugin the master branch of plugin-engine.
+The following pushes the current git repo, and the master branch of plugin-engine.
    ex.  `basename $0` ../plugin-engine:master
      
 
