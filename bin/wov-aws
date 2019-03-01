@@ -13,16 +13,16 @@ DOECHO=1
 FOLD=$(tput cols)
 EXIT=1
 
+export WOV_cluster_dns=`wov-env --var WOV_cluster_dns`
+
 
 # TODO: fill this function in, and remove from WIAAS
 function doCluster()
 {
   RANCLUSTER=1
-  fConvertRegionCodeAWS ${WOV_REGION}
-  export CL_REGION="$cRC"
-  export CL_ZONES="c d"
-  export CL_VPC=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${WOV_CLUSTER}-vpc" --query 'Vpcs[0].VpcId' | ${SED} -e 's/^"//' -e 's/"$//')
-  if [ "$?" != "0" ]; then printf "\n\nERROR: aws error... bastion issue?\n\n"; exit 1; fi
+  export CL_REGION="${AWS_REGION}"
+  export CL_ZONES="${AWS_ZONES}"
+  export CL_VPC="${AWS_VPC}"
 }
 
 
@@ -93,17 +93,18 @@ function doVolumeCreate()
 
   doCluster 
 
-  local CL_ZONES_ARRAY=($CL_ZONES)
+  local CL_ZONES_ARRAY=( $CL_ZONES )
   local VOLNAME=$1
   local VOLSIZE=$2
-  local AVAILZONE="${CL_REGION}${CL_ZONES_ARRAY[0]}"
+  local VOLZONE=$3
+  if [ "${VOLZONE}" == "" ]; then VOLZONE=${CL_ZONES_ARRAY[0]}; fi
+  local AVAILZONE="${CL_REGION}${VOLZONE}"
   local ISBAD=0
 
   if [ "${VOLNAME}" == "" ]; then printf "\n\nERROR: No VOLNAME. Pass a volume name as param 1.\n\n"; ISBAD=1; fi
   if [ "${VOLSIZE}" == "" ]; then printf "\n\nERROR: No VOLSIZE. Pass a volume size in MB as param 2.\n\n"; ISBAD=1; fi
   if [ "${CL_REGION}" == "" ]; then printf "\n\nERROR: No CL_REGION.\n\n"; ISBAD=1; fi
-  if [ "${CL_ZONES_ARRAY[0]}" == "" ]; then printf "\n\nERROR: No CL_ZONES_ARRAY[0].\n\n"; ISBAD=1; fi
-  if [ "${AVAILZONE}" == "" ]; then printf "\n\nERROR: No Availability Zone '${AVAILZONE}'. CL_REGION and/or CL_ZONES_ARRAY are not set.\n\n"; ISBAD=1; fi
+  if [ "${AVAILZONE}" == "" ] || [ "${AVAILZONE}" == "${CL_REGION}" ]; then printf "\n\nERROR: No Availability Zone '${AVAILZONE}'. CL_REGION, passed in zone and/or CL_ZONES_ARRAY are not set.\n\n"; ISBAD=1; fi
   if [ "${ISBAD}" == "1" ]; then exit 1; fi
 
   local RES=`aws ec2 create-volume --size ${VOLSIZE} --region ${CL_REGION} \
@@ -119,11 +120,12 @@ function doVolumeEnsure()
 {
   local VOLNAME=$1
   local VOLSIZE=$2
+  local VOLZONE=$3
 
   local VOLID=`doVolumeID ${VOLNAME}`
   local VOLCHECK=$?
   if [ "${VOLID}" == "null" ] || [ "${VOLCHECK}" != "0" ]; then 
-    VOLID=`doVolumeCreate ${VOLNAME} ${VOLSIZE}`
+    VOLID=`doVolumeCreate ${VOLNAME} ${VOLSIZE} ${VOLZONE}`
     if [ ${DOECHO} -ge 2 ]; then echo "volume ${VOLNAME} created as ${VOLID}"; fi
   else 
     if [ ${DOECHO} -ge 2 ]; then echo "volume ${VOLNAME} exists as ${VOLID}"; fi
@@ -173,7 +175,7 @@ elif [ "${COMMAND}" == "volume-describe" ]; then
 elif [ "${COMMAND}" == "volume-check" ]; then
   doVolumeCheck    $*
   EXIT=$?
-  printf "\n\nCould not find volume with name '$*'.\n\n" >&2
+  if [ "$EXIT" != "0" ]; then printf "\n\nCould not find volume with name '$*'.\n\n" >&2 ; fi
 elif [ "${COMMAND}" == "volume-create" ]; then
   doVolumeCreate   $*
   EXIT=$?
