@@ -87,9 +87,11 @@ function doGetDBPVER()
   local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null |  cut -d'|' -f5)
 #  local DB_PVER=$(wov-db-connect $i -q -d wovtools -c 'SELECT * FROM logs WHERE database=\''"$1"'\' ORDER BY id DESC LIMIT 1;' 2> /dev/null |  cut -d'|' -f5)
 #  printf "DB_PVER : $DB_PVER"
-  if [ "$?" != "0" ]; then 
-    printf "\n\nERROR: failed to find wovtools logs on database server $1.\n\n"; 
-    printf "  NOTE: if the datbaseserver is not inited, run:\n"
+  local a=$?
+  if [ "$a" != "0" ]; then 
+    printf "\n\nERROR: failed to connect to database wovtools, table logs, on database server $1.\n\n"; 
+    printf "  ...could be a bastion issue, or a privileges issue. ERROR CODE $a\n"
+    printf "  OLD > NOTE: if the datbaseserver is not inited, run:\n"
     printf "    'wov-db-cloud -D ${1} -I'\n\n"   
   else
     retval=0
@@ -295,7 +297,7 @@ function doPushCheck()
       elif [ "${chk_1}" == "T" ]; then # 4 is false then
         printf "FAILED: if you have db schema changes, you need to have deltas in registry to account.\n"
         printf "\n  run: 'wov-push-db -v --any-push-blockage' for more info.\n"
-        printf "\nTo get current schema of database X: 'wov-db-cloud -D X --schema'\n"
+        printf "\nTo get current schema of database X: 'wov-db-connect DBNAME --schema' (ex. apidb)\n"
   #    elif [ "${chk_4}" == "T" ]; then # 1 is false then
   #      printf "FAILED: if you have deltas in registry, you need to have db schema changes to account.\n"
       fi
@@ -503,6 +505,7 @@ done
 
 
 
+echo ".. starting"
 retval=1
 if [ "$DOACTION" == "check" ]; then
 

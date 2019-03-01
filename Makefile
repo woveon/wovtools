@@ -2,7 +2,7 @@
 
 BINS-ENV=wov-env-loader wov-env-build wov-env wov-env-aws wov-cluster wov-kops
 BINS-CLI=wov-aws wov-cd wov-bastion wov-bastion-connection wov-cmd wov-ed wov-ls wov-ns wov-db-connect wov-db-cloud wov-p wov-plog \
-	       wov-hash wov-enc wov-dec
+	       wov-hash wov-enc wov-dec wov-log
 BINS-VH=wov-vh wov-vh-pushgit wov-vh-pulldir
 BINS-PUSH=wov-push-container wov-push-container-check wov-push-k8s wov-push-db wov-push
 BINS-DEPLOY=wov-deploy-service wov-deploy-info wov-deploy

@@ -216,12 +216,15 @@ function doCheckContainersExist()
     # echo "  - file : ${f}"
     local k=`grep -i 'kind' $rdir/$f | sed 's/.*://g' | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]'`
     if [ "$k" == "deployment" ]; then
-      local kk=`basename $f`
-      kk="${kk%.*}"
+      # NOTE: assume 1 container image in deployment
+      local image=`yq r $rdir/$f spec.template.spec.containers[0].image`
+      local kk=`basename ${image}`
+      kk="${kk%:*}"
       containers+=("$kk")
       if [ ${DOECHO} -ge 2 ]; then printf "  ... check for container $kk\n"; fi
     fi
   done
+#  echo "containers :  ${containers[@]}"
 
   for f in ${containers[@]}; do
 

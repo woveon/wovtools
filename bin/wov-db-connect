@@ -42,6 +42,8 @@ databaseserver - the name of a database server in the project. assumes conf/[dat
   -h : this help
   -q/-v : quiet/verbose
 
+  --schema      : return the db's schema
+
 About commands... you have to be careful about quotes as both bash and psql are very particular. Here, use single quotes so '*' is not expanded, and quote the single quote so mydatabase is interpret properly by postgres.
 
 ex. -c 'SELECT * FROM logs WHERE database=\'mydatabase\' ORDER BY id DESC LIMIT 1'
@@ -110,6 +112,9 @@ DB_PORT=${!DB_PORT}
 #DB_PORT=$(wov-bastion --bhost ${WOV_CLUSTER}-bastion --ldp ${DATABASESERVER})
 #DB_HOST=localhost   # bastion
 
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
 function doDatabaseConnectMessage()
 {
   printf "\n\n"
@@ -120,6 +125,20 @@ function doDatabaseConnectMessage()
   printf "  Host     : ${DB_HOST}\n"
   printf "  Database : ${DB_DATABASE}\n\n"
 }
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function setAsAdmin()
+{
+  DB_USERNAME="$(wov-env --var WOV_${DATABASESERVER}_admin_username)"
+  DB_PASSWORD="$(wov-env --var WOV_${DATABASESERVER}_admin_password)"
+  if [ "${DB_USERNAME}" == "" ] || [ "${DB_PASSWORD}" == "" ]; then
+    printf "\n\nERROR: Setting as admin, but you have no admin configured. Ensure WOV_${DATABASESERVER}_admin_[username/password] is configured in your secrets.\n\n"
+    exit 1
+  fi
+}
+
 
 # ---------------------------------------------------------------------
 # Handle Params
@@ -138,6 +157,10 @@ while [[ $1 =~ ^- ]]; do
     shift
     read DB_PASSWORD
     shift
+
+  elif [ "$1" == "--admin" ]; then
+    shift
+    setAsAdmin
 
 #  elif [ "$1" == "-n" ] || [ "$1" == "--namespace" ]; then
 #    shift
@@ -222,7 +245,7 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #      PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
 #    fi
 
-    PGPASSWORD=${DB_PASSWORD} pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
+    PGPASSWORD="${DB_PASSWORD}" pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
     if [ "$?" != "0" ]; then
       printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
     fi
@@ -240,7 +263,7 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #      PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\"
 #    fi
 
-    PGPASSWORD=${DB_PASSWORD} psql ${DB_HEADEROPTIONS} -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"
+    PGPASSWORD="${DB_PASSWORD}" psql ${DB_HEADEROPTIONS} -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"
     #PGPASSWORD=${DB_PASSWORD} psql --tuples-only -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"
     if [ "$?" != "0" ]; then
       printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
@@ -256,10 +279,12 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #    else
 #      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
 #    fi
-    PGPASSWORD=${DB_PASSWORD} psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
+set -x
+    PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
     if [ "$?" != "0" ]; then
       printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
     fi
+    set +x
 
   elif [ "${DB_OP}" == "" ]; then
     # Log into pod 'vh', run psql
@@ -271,7 +296,7 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
 #    fi
   set -x
-    PGPASSWORD=${DB_PASSWORD} psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
+    PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
     if [ "$?" != "0" ]; then
       printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
     fi

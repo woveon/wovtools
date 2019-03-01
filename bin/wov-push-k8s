@@ -36,6 +36,8 @@ function doPushClusterToArchive()
 
   if [ $DOECHO -ge 1 ]; then echo "  ... building cluster configuration: '${CLUSTER}'"; fi
   wov-env-build -q --cluster ${CLUSTER}
+  A=$?
+  if [ "$A" != "0" ]; then exit $A; fi
 
   if [ $DOECHO -ge 1 ]; then echo "  ... pushing to archive: '${WOV_ARCHIVEENV}/${ARCHPATH}'"; fi
   if [ $DOECHO -ge 2 ]; then echo "$(cd ${CLUSTERDIR} ; ls -d * */* )"; fi

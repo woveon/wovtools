@@ -2,6 +2,7 @@
 
 DOECHO=1
 FOLD=140
+ONEXIT=0
 
 
 # ---------------------------------------------------------------------
@@ -91,6 +92,7 @@ done
 
 if [ ! -e ${HOME}/.wovtools ]; then 
   printf "\n\nERROR: no .wovtools file in home directory.\n" 1>&2
+  ONEXIT=1
 fi
 
 if [ "$#" == 1 ]; then
@@ -100,15 +102,18 @@ if [ "$#" == 1 ]; then
   if [ "$?" != "0" ]; then
     printf "\nERROR: json related error. Check your ~/.wovtools file.\n" 1>&2
     printf " - $(jq -r ".projects.$P.dir" ${HOME}/.wovtools 2>&1)\n" 1>&2
+    ONEXIT=1
   else
     if [ "$D" == "null" ]; then 
       printf "\n\nERROR: no project entry of '$P'.\n" 1>&2
+      ONEXIT=1
     else
       D1=( ${1//\// } )
       D1=( "${D1[@]:1:}" )
       GO="$D$D1"
       if [ ! -e "${D}${D1}" ]; then
         printf "\n\nERROR: no directory '$D$D1'.\n" 1>&2
+        ONEXIT=1
       else
         cd $GO
         if [ ${DOECHO} -ge 1 ]; then
@@ -121,7 +126,9 @@ if [ "$#" == 1 ]; then
   fi
 else
   printf "\n\nERROR: bad number of parameters. Requires a project name.\n" 1>&2
+  ONEXIT=1
 fi
 
 
 
+return ${ONEXIT}

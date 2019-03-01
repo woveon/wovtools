@@ -39,12 +39,15 @@ echo "NOTE[$0]: Skipping git checks.... will do on wov-push."
 
 # If NodeJS project...
 if [ -e "${WOV_BASEDIR}/node_modules" ]; then
-  echo "  ... check for npm 'linked' packages"
-  R3=$(find ${WOV_BASEDIR}/node_modules/* -type l -maxdepth 1)
+  echo "  ... check for yarn 'linked' packages"
+  R3=( $(cd ${WOV_BASEDIR}/node_modules ; find * -type l -maxdepth 1) )
   if [ "${R3}" != "" ]; then
-    printf "\nLinked Node Modules:\n"
-    printf "  : ${R3}\n"
-    printf "\nERROR: You have linked node modules. Type 'npm install'.\n\n"
+    printf "\n***ERROR: You have linked node modules.\n"
+    printf "\n*Linked NodeJS Modules:\n"
+    for l in ${R3[@]}; do
+      printf "*  : ${l}\n"
+    done
+    printf "*  ... yarn publish those, update package.json and then unlink with 'yarn unlink X'.\n\n"
     exit 1
   fi
 fi
@@ -73,7 +76,7 @@ The recipes for containers should:
   - where SRCDIR is the root of your git and DESTDIR is the root of the container to be built (i.e. wovtools/cache/containers/CONTAINER).
 
 2) create a sub-recipes to insert into the Dockerfile. There are BUILD and RUN stages, where BUILD contains ssh keys to access private repos. RUN tells the container how to run.
-  - ${DESTDIR}/SECRET/prebuild.docker - called before all files copied into container (do npm installs here)
+  - ${DESTDIR}/SECRET/prebuild.docker - called before all files copied into container (do yarn installs here)
   - ${DESTDIR}/SECRET/build.docker - all code is in the container
   - ${DESTDIR}/SECRET/run.docker - instructions on how to run container
 
@@ -113,7 +116,7 @@ function doPackContainer
     printf "\nERROR: no 'repositories' entry in secrets. If you have no private repos, create a blank entry.\n"
     exit 1
   fi
-  if [ $DOECHO -ge 2 ]; then echo "    ... adding keys for private repos"; fi
+  if [ $DOECHO -ge 2 ]; then echo "    ... adding ssh keys for private repos "; fi
   for repo in "${PRIVATEREPOS[@]}"; do
     # for each item in private repo, append to ssh/config and add its key
     # echo "  ... add in repo key ${repo}, update .ssh/config"
@@ -153,7 +156,7 @@ EOF
   # start building Dockerfile for the container
   _CONTAINERBASE="WOV_${WOV_PROJECT}${CONTAINERNAME}_containerfrom"
   CONTAINERBASE=${!_CONTAINERBASE}
-  if [ "${CONTAINERBASE}" == "null" ]; then
+  if [ "${CONTAINERBASE}" == "null" ] || [ "${CONTAINERBASE}" == "" ]; then
     printf "\nERROR: Docker container for '${repo}' has no known base to build from in secret: '${WOV_PROJECT}.${CONTAINERNAME}.containerfrom'.\n\n"
     printf "   Check: \n"
     printf "     - secrets are rebuilt (wov-env-build --local)\n"
@@ -394,6 +397,9 @@ function doPushContainer()
         docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
 
         if [ $DOECHO -ge 2 ]; then echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"; fi
+
+        # check exists would be
+        # aws ecr describe-repositories --repository-names ${WOV_PROJECT}/${CONTAINER}
 
         # If just built, dump log, since it will have to push a lot of data
         R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty )
