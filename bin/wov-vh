@@ -49,7 +49,7 @@ NOTE: see the wiki regarding 'service re-routing' for development: https://githu
   --------------------------------------------------------------------- 
   --route-service [service{:TARGETPORT}] : patches the service to point to vh
   --unroute-service [service]            : puts service back to deplpoyment
-  --route-list                           : show current route setup
+  -r/--route-list                        : show current route setup
 
 
   Utility
@@ -323,26 +323,33 @@ function doRouteService()
 {
   local srv=( $(echo "${1}" | tr ':' ' ') )
   local RETVAL=1
-  printf "srv ${srv[*]} \n"
+  # printf "srv ${srv[*]} \n"
   local patch="{ \"spec\" : { \"selector\" : { \"app\" : \"$2\" }}}"
-  echo "PATCH: $patch"
+  # echo "PATCH: $patch"
 
-  printf "... route service '${srv[0]}' to '$2'.\n"
-  kubectl -n ${NAMESPACE} patch service ${srv[0]} -p "$patch"
+  printf "... route service '${srv[0]}' to '$2'"
+  if [ "${#srv[*]}" == "2" ]; then printf " on port '${srv[1]}'.";
+  else printf " with no port change."; fi
+  printf "\n"
+
+  R=$(kubectl -n ${NAMESPACE} patch service ${srv[0]} -p "$patch")
   if [[ $? == 0 ]]; then
-    printf "  ... success\n"
+    # printf "  ... success\n"
     RETVAL=0
+  else
+    printf "\n$R\n"
   fi
 
-  if [ "${#srv[*]}" == "2" ]; then
+  if [ "${#srv[*]}" == "2" ] && [ "${RETVAL}" == "0" ]; then
     local patchport="{ \"spec\" : { \"ports\" : [{ \"targetPort\" : ${srv[1]}, \"port\" : 80, \"protocol\": \"TCP\" }]}}"
-    printf "  ... apply port patch\n"
-    printf "    ${patchport}\n"
-    kubectl -n ${NAMESPACE} patch service ${srv[0]} -p "$patchport"
+    # printf "  ... apply port patch\n"
+    # printf "    ${patchport}\n"
+    R=$(kubectl -n ${NAMESPACE} patch service ${srv[0]} -p "$patchport")
     if [[ $? == 0 ]]; then
-      printf "  ... success\n"
+      # printf "  ... success\n"
       RETVAL=0
     else
+      printf "${R}\n"
       printf "  ... failed or no change to targetPort\n"
       RETVAL=1
     fi
@@ -439,7 +446,7 @@ while [[ $1 =~ ^- ]]; do
       exit 1
     fi
 
-  elif [ "$1" == "--route-list" ]; then
+  elif [ "$1" == "--route-list" ] || [ "$1" == "-r" ]; then
     shift
     doRouteList
     DIDCOMMAND=1
