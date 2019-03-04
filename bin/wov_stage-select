@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// debug, set to true
+let db=false;
+
 // This file performs stage-select for the wov-env command. jq was unable to do the correct 'walk' function, so I wrote this.
 
 //  data   - JSON read from file
@@ -12,6 +15,9 @@ let chaff = process.argv[3];
 let key   = process.argv[4];
 let clean = process.argv[5];
 let needle = `${chaff}${key}`;
+let depth=0;
+let depthstr='';
+
 
 /**
  * Recursive function to collapse chaff part of needle. (i.e. map CLUSTERx to x in json). It
@@ -26,33 +32,73 @@ let needle = `${chaff}${key}`;
  * @return {json} - founds bits, but since placed into haystack anyway, not used
  */
 let doStageSelect = (chaff, needle, haystack, found = []) => {
+  depth++;
 
-  // iterate through each property key in the object
+
+  // first pass, go into objects, including just added (but not matched)
+  Object.keys(haystack).forEach((key) => {
+    if (typeof haystack[key] === 'object' && (!key.startsWith(needle)) && haystack[key] != null ) {
+      // console.error('enter object at key: ', key);
+      depthstr += `.${key}`;
+      doStageSelect(chaff, needle, haystack[key], found);
+    }
+  });
+
+  // second pass,
+  //  - iterate through property keys in object
+  //  - or clean
   if ( clean != 'clean' ) {
     Object.keys(haystack).forEach((key) => {
-      // console.error('check key: ', key);
+      if (db) console.log(` check key:  ${depthstr}.${key}`);
 
-      // ??? Why startsWith???
-
-      // dump items in child, here
+      // dump items in child, here (starts with to match CLUSTER/STAGE/etc)
       if (key.startsWith(needle)) {
-        // console.error('  match key: ', key);
-        Object.assign(haystack, haystack[key]);
+        if (db) console.log(` match needle:  ${key}`);
+
+        // here, don't asssign, but merge since haystack[key] could have properties that are objects that
+        // overwrite things in haystack at this level
+        // --old - Object.assign(haystack, haystack[key]);
+        for (let k in haystack[key]) {
+          if (haystack[key].hasOwnProperty(k)) {
+            if (db) console.log(`move haystack[${key}][${k}] to haystack[${k}]`);
+            if (db) console.log(`move ${depthstr}.${key}.${k} to ${depthstr}.${k}]`);
+
+            // if deeper level is object, need to merge in from deeper level
+            if (db) console.log(`typeof ${typeof haystack[k]}  ${haystack[k]}`  );
+            if ( (typeof haystack[k]) === 'object' && haystack[k] != null) {
+              if (db) console.log(`  1.1  ${JSON.stringify(haystack, null, '  ')}`);
+              if (db) console.log(`  deeper level is object, need to merge`);
+              if ( typeof haystack[k] !== 'object' ) {
+                throw Error(`haystack k ${k} is not object to merge in from haystack key k ${key} ${k}`);
+              }
+              Object.assign(haystack[k], haystack[key][k]);
+              // if (db) console.log('new haystack\n', JSON.stringify(haystack, null, '  '));
+            }
+
+            // else, replace
+            else {
+              if (db) console.log(`  1.2`);
+              haystack[k] = haystack[key][k];
+            }
+          }
+
+          // here assign (object/var/whatever)
+          else {
+            if (db) console.log(`  1`);
+            haystack[k] = haystack[key][k];
+          }
+        }
+        if (db) console.log('new haystack\n', JSON.stringify(haystack, null, '  '));
+
+
         found.push(haystack[key]);
       }
     });
   }
 
-  // second pass, go into objects, including just added (but not matched)
-  Object.keys(haystack).forEach((key) => {
-    if (typeof haystack[key] === 'object' && (!key.startsWith(needle)) && haystack[key] != null ) {
-      // console.error('enter object at key: ', key);
-      doStageSelect(chaff, needle, haystack[key], found);
-    }
-  });
 
-  // third pass, remove key (already recursed into, so can remove)
-  if ( clean == 'clean' ) {
+  // second pass, remove key (already recursed into, so can remove)
+  else { // if ( clean == 'clean' ) 
     Object.keys(haystack).forEach((key) => {
       if (key.startsWith(needle)) {
         // console.log('delete needle', key);
@@ -65,6 +111,10 @@ let doStageSelect = (chaff, needle, haystack, found = []) => {
     });
   }
 
+  let p = depthstr.split('.');
+  p.pop();
+  depthstr = p.join('.');
+  depth--;
   // return the list of found values to the caller of the function
   return found;
 };
