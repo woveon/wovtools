@@ -29,6 +29,7 @@ ex. $HOME/.wovtools: { "projects" : { "myproject" : { "dir" : "/path/to/project"
   -e : echo directory 
   -v : verbose output
   -h/--help : this help
+  -k : current context
   -l : list projects
 
 EOF
@@ -50,6 +51,17 @@ function doGetDir()
   echo "$D"
 }
 
+
+# pull current Kubernetes context and go to project, by putting back into $*
+# ex. wov-aws-va-frog-A-B -> A
+function goK8sContext() 
+{
+  export WOV_CONTEXT="$(kubectl config current-context)"
+  IFS='-' ; array=( $WOV_CONTEXT )
+  # echo "lookup ${array[4]}"
+  echo ${array[4]}
+}
+
 # ---------------------------------------------------------------------
 # Handle Params
 # ---------------------------------------------------------------------
@@ -62,6 +74,11 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-v" ]; then
     shift
     DOECHO=2
+
+  elif [ "$1" == "-k" ]; then
+    shift
+    A=`goK8sContext`
+    set -- "${A}"
 
   elif [ "$1" == "-e" ]; then
     shift
