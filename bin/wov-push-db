@@ -106,14 +106,12 @@ function doGetDBPVER()
   local retval=1
   local DBRAW=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null)
   local r=$?
-  if [ "$a" != "0" ]; then 
+  if [ "$r" != "0" ]; then 
     printf "\n\nERROR: failed to connect to database wovtools, table logs, on database server $1.\n\n"; 
     fFailedDBConnection 1
   fi
   local DB_PVER=`echo ${DBRAW} | cut -d'|' -f5`
   retval=$?
-
-
 
   # local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null |  cut -d'|' -f5)
 #  local DB_PVER=$(wov-db-connect $i -q -d wovtools -c 'SELECT * FROM logs WHERE database=\''"$1"'\' ORDER BY id DESC LIMIT 1;' 2> /dev/null |  cut -d'|' -f5)
@@ -468,7 +466,7 @@ EOF
     jq " .versions.\"${WOV_PVER}\"={ \"checksum\": \"${CHKSUM}\", \"parent\": { \"type\": \"pver\", \"pver\": \"${DB_PVER}\" } }" \
        ${WOV_BASEDIR}/wovtools/db/registry/$1.json > ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/registry/$1.json && rm ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$
     DB_snapshot="$( echo -e "${DB_ENTRY[6]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    echo "DBENTRY snapshot : ${DB_snapshot}" 1>&2
+    #echo "DBENTRY snapshot : ${DB_snapshot}" 1>&2
     if [ "$DB_snapshot" != "" ]; then
       echo "DBENTRY append snapshot : ${DB_snapshot}" 1>&2
       jq " .versions.\"${WOV_PVER}\".parent.snapshot=\"${DB_snapshot}\"" \
