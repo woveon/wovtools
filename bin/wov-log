@@ -15,12 +15,15 @@ while [ "$i" -lt "${#PODS[@]}" ]; do
   p_age=${PODS[$((4+$i))]}
 
 #  printf "  pod      : ${p_name}\n" printf "  ready    : ${p_ready}\n" printf "  status   : ${p_status}\n" printf "  restarts : ${p_restarts}\n" printf "  age      : ${p_age}\n\n"
-  RL+=" ${p_name} '${p_ready}_${p_status}_${p_restarts}_${p_age}' OFF "
+  # RL+=" ${p_name} '${p_ready}_${p_status}_${p_restarts}_${p_age}' OFF "
+  RL+=" ${p_name} '${p_ready}_${p_status}_${p_restarts}_${p_age}' "
 
   i=$(($i+5))
 done
 
-exec 3>&1; result=$(dialog --keep-tite --title 'Log Pod' --radiolist 'Select a pod to log' 15 80 6 ${RL} 2>&1 1>&3); ret=$? ; exec 3>&-
+# exec 3>&1; result=$(dialog --keep-tite --title 'Log Pod' --radiolist 'Select a pod to log' 15 80 6 ${RL} 2>&1 1>&3); ret=$? ; exec 3>&-
+set -x
+exec 3>&1; result=$(dialog --keep-tite --title 'Log Pod' --menu 'Select a pod to log' 15 80 6 ${RL} 2>&1 1>&3); ret=$? ; exec 3>&-
 if [ "$ret" == "0" ]; then
   kubectl describe pod $result
   kubectl logs -f $result
