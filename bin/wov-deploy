@@ -104,6 +104,10 @@ function doDeployConf()
 
   doBuildRecipes ${DEPLOYSRC} $@
 
+  # Add is project project level CM/SE
+  RECIPESCM+=( "${WOV_PROJECT}" )
+  RECIPESSE+=( "${WOV_PROJECT}" )
+
   # Create ConfigMap PLUGIN
   # --------------------------------------------------------------------- 
   for f in "${RECIPESCM[@]}"; do
@@ -118,9 +122,8 @@ function doDeployConf()
 
     # if no configmap file, error out
     if [ ! -e "${CMFILE}" ]; then 
-      printf "\n\nERROR: no configmap '${MSNAME}${CONFEXT}', file ${CMFILE}. (RECIPES: '${RECIPES[@]}')\n\n"
-      exit 1
-      # continue; 
+      # printf "\n\nERROR: no configmap '${MSNAME}${CONFEXT}', file ${CMFILE}. (RECIPES: '${RECIPES[@]}')\n\n"
+      continue; 
     fi
 
     #echo "CMFILE: ${CMFILE}"
@@ -206,10 +209,12 @@ function doCheckContainersExist()
     k8sfiles=( $(cd ${rdir} && ls *.yaml) )
   else
     for f in ${*}; do
-      k8sfiles+=( "${WOV_PROJECT}${f}.yaml" )
+      k8sfiles+=( "pl-deployment-${f}.yaml" )
+      # k8sfiles+=( "${WOV_PROJECT}${f}.yaml" )
     done
   fi
-  # echo "k8sfiles:  ${k8sfiles[@]}"
+
+  if [ $DOECHO -ge 2 ]; then echo "k8sfiles:  ${k8sfiles[@]}"; fi
 
   for f in ${k8sfiles[@]}; do
     # local k=`yaml get $f kind`
@@ -263,22 +268,21 @@ function doDeployK8s()
   if [ $DOECHO -ge 2 ]; then echo "  ... from ${K8SDIR}"; fi
 
   # If $# is not empty, then this is called with recipes, so convert those to files
+  FILES=()
   if [ "$#" != "0" ]; then
-    FILES=()
-    local RECIPES=$*
-    for r in "${RECIPES[@]}"; do
-      FILES+=( "${WOV_PROJECT}$r" )
+    for r in ${@:1}; do
+      FILES+=( "pl-deployment-${r}" )
     done
   else
     # echo "k8sdir ${K8SDIR}"
     FILES=( $(cd ${K8SDIR} && ls *.yaml | sed -e 's/\(.*\)\..*/\1/') )
   fi
 
-  # printf "K8S FILES: ${FILES[*]}\n"
+  # printf "K8S deployment FILES: ${FILES[*]}\n"
 
   for f in "${FILES[@]}"; do
     if [ ! -e ${K8SDIR}/$f.yaml ]; then
-      printf "ERROR: unknown k8s file '$f.yaml'.\n"
+      printf "ERROR: unknown k8s file '$f.yaml' in ${K8SDIR}.\n"
 
       # NOTE: using ^ and $ for exact match of string
     elif [ "$(jq '.nodeploy[] | test("'"^${f}$"'")' ${WOV_CONFIGFILE_MERGED})" == "true" ]; then
