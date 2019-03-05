@@ -271,6 +271,7 @@ EOF
   chmod 600 ${SECRETFILE}.3
   if [[ $DOECHO -ge 1 ]]; then   echo "  ... using cluster     : ${CLUSTER}"; fi
   wov_stage-select ${SECRETFILE}_ CLUSTER ${CLUSTER} >> ${SECRETFILE}.3
+  if [ "$?" != "0" ]; then exit 1; fi
   ${MV} ${SECRETFILE}.3  ${SECRETFILE}_
 
 
@@ -281,6 +282,7 @@ EOF
   chmod 600 ${SECRETFILE}.4
   if [[ $DOECHO -ge 1 ]]; then   echo "  ... using stage       : ${WOV_STAGE}"; fi
   wov_stage-select ${SECRETFILE}_ STAGE ${WOV_STAGE} >> ${SECRETFILE}.4
+  if [ "$?" != "0" ]; then exit 1; fi
   ${MV} ${SECRETFILE}.4  ${SECRETFILE}_
 
 
@@ -334,6 +336,7 @@ EOF
   echo "" > ${SECRETFILE}.6
   chmod 600 ${SECRETFILE}.6
   wov_stage-select ${SECRETFILE}_ CLUSTER ${CLUSTER} clean >> ${SECRETFILE}.6
+  if [ "$?" != "0" ]; then exit 1; fi
   ${MV} ${SECRETFILE}.6  ${SECRETFILE}_
 
   echo "" > ${SECRETFILE}.7
@@ -405,8 +408,10 @@ function _fCleanCache()
 
 # ---------------------------------------------------------------------
 # build all .wov files in a directory
-#   from ${WOV_BASEDIR}/wovtools/{ks8|cm|se}
-#     to ${WOV_BASEDIR}/wovtools/cache/clusters/$1/X
+#   from ${WOV_BASEDIR}/wovtools/k8s}
+#     to ${WOV_BASEDIR}/wovtools/cache/clusters/$1/k8s
+# build cm/se files from containers
+#     to ${WOV_BASEDIR}/wovtools/cache/clusters/$1/{cm|se}
 #  $2 - 1 if secrets have changed
 # ---------------------------------------------------------------------
 fBuildClusterDir()
@@ -466,20 +471,6 @@ fBuildClusterDir()
     done
   fi
 
-
-  # ---------------------------------------------------------------------
-  # cm/se : build K8s ConfigMap and Secrets
-  # ---------------------------------------------------------------------
-  # Each container recipe is for a microservice
-
-  local RECIPES=( )   # here, specify 
-  if [ "${#RECIPES[@]}" == "0" ]; then
-    if [ -d ${WOV_BASEDIR}/wovtools/containers ]; then
-      RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
-    fi
-  fi
-  # echo "Container Recipes: ${RECIPES}"
-
   # ensure directories
   mkdir -p  "${CLUSTER_DIR}/cm"
   mkdir -p  "${CLUSTER_DIR}/se"
@@ -488,127 +479,227 @@ fBuildClusterDir()
 
   local hasbuiltbasecm=0
   local hasbuiltbasese=0
-  # --- ex. {PROJECT}{CONTAINER} is normal, but base would be {PROJECT} ex. plem vs plemov
 
-  # Build ConfigMap and Secrets if needed
-  for f in ${RECIPES}; do
+  # ---------------------------------------------------------------------
+  # cm/se : build K8s ConfigMap and Secrets
+  # ---------------------------------------------------------------------
+  # Each container recipe is for a microservice
 
-    local CONTAINERNAME=$f
-    local MICROSERVICE=${WOV_PROJECT}${CONTAINERNAME}
-    if [ $DOECHO -ge 2 ]; then echo "... build ConfigMap and Secret for '${MICROSERVICE}${CONFEXT}'."; fi
+  local CONFS=(${WOV_PROJECT})
+  if [ -d ${WOV_BASEDIR}/wovtools/containers ]; then
+    local containers=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+    for con in ${containers[@]}; do
+      CONFS+=( "${WOV_PROJECT}${con}" )
+    done
+  fi
+#  echo "build CONFS ${CONFS[@]}"
+
+
+  for f in ${CONFS[@]}; do
 
     # Create CM file to dump into and clear out
     # NOTE: if builing to CMFILE2, then all recipes would build that and only need to build once... TODO / OPTIMIZATION
-    local CMFILE1=${CLUSTER_DIR}/cm/${MICROSERVICE}${CONFEXT}
-    local CMFILE2=${CLUSTER_DIR}/cm/${WOV_PROJECT}${CONFEXT}
+    if [ $DOECHO -ge 2 ]; then echo "  ... review ConfigMap and Secret for '${f}${CONFEXT}'."; fi
+    local CMFILE=${CLUSTER_DIR}/cm/${f}${CONFEXT}
 
     # Check if we need to compile K8s ConfigMap
     local dowecompile=${DOFORCE}
     if [ "$2" == "1" ]; then dowecompile=1;                                  # secrets changed?
-    elif [ ! -e "${CMFILE1}" ] && [ ! -e "${CMFILE2}" ] ; then dowecompile=1; # no CMFILE file
-    elif [ -e "${CMFILE1}" ] && [ ${CLUSTER_DIR}/secrets.json -nt "${CMFILE1}" ]; then dowecompile=1; # existing CMFILE1 and old
-    elif [ -e "${CMFILE2}" ] && [ ${CLUSTER_DIR}/secrets.json -nt "${CMFILE2}" ]; then dowecompile=1; # existing CMFILE2 and old
+    elif [ ! -e "${CMFILE}" ]; then dowecompile=1; # no CMFILE file
+    elif [ -e "${CMFILE}" ] && [ ${CLUSTER_DIR}/secrets.json -nt "${CMFILE}" ]; then dowecompile=1; # existing CMFILE and old
     fi
+    if [ $DOECHO -ge 2 ] && [ "${dowecompile}" == "1" ]; then echo "  ... compile ConfigMap and Secret for '${f}${CONFEXT}'."; fi
 
     # Compile K8s ConfigMap file
     if [ "${dowecompile}" == "1" ]; then 
-      local CMFILE="${CMFILE1}"
       rm -f ${CMFILE} || true
       touch ${CMFILE}
       chmod 600 ${CMFILE}
-      wov-env --cluster ${CLUSTER} --cm ${MICROSERVICE} >> ${CMFILE} 2>&1
+      wov-env --cluster ${CLUSTER} --cm ${f} >> ${CMFILE} 2>&1
       local a=$?
-      if [ "$a" == "2" ]; then
-        printf "ERROR: failed generating configmap in cluster: '${CLUSTER}' for microservice: '${MICROSERVICE}'.\n" >&2
+      if [ "$a" == "1" ]; then
+        if [ $DOECHO -ge 2 ]; then printf "  ... skipping ${CLUSTER}/cm/${f}.\n"; fi
+        rm ${CMFILE} 
+      elif [ "$a" == "2" ]; then
+        printf "ERROR: failed generating configmap in cluster: '${CLUSTER}' for: '${f}'.\n" >&2
         cat ${CMFILE}
         exit 1
-      fi
-      if [ "$a" != "0" ]; then
-        rm ${CMFILE}
-        CMFILE="${CMFILE2}"
-        rm ${CMFILE}
-        if [ "$hasbuiltbasecm" == "0" ]; then
-          if [[ $DOECHO -ge 2 ]]; then echo "  ... using config for ${WOV_PROJECT}, instead of ${MICROSERVICE}"; fi
-          wov-env --cluster ${CLUSTER} --cm ${WOV_PROJECT} >> ${CMFILE}
-          local a=$?
-          if [ "$a" == "2" ]; then
-            printf "ERROR: failed generating configmap in cluster: '${CLUSTER}' for project: '${WOV_PROJECT}'.\n" >&2
-            cat ${CMFILE}
-            exit 1
-          fi
-          if [ "$a" != "0" ]; then exit 1; fi
-          hasbuiltbasecm=1
-          if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${CMFILE}."; fi
-        fi
       else
-        if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${CMFILE}."; fi
+        # sort and uniq to remove duplicates  #??? Needed anymore???
+        touch ${CMFILE}  # make sure it exists
+        touch ${CMFILE}.1
+        chmod 600 ${CMFILE}.1
+        sort ${CMFILE} | uniq >> ${CMFILE}.1
+        mv ${CMFILE}.1 ${CMFILE}
+        if [ $DOECHO -ge 1 ]; then printf "  ... compiled ${CLUSTER}/cm/${f}.\n"; fi
       fi
-
-      # sort and uniq to remove duplicates
-      touch ${CMFILE}  # make sure it exists
-      touch ${CMFILE}.1
-      chmod 600 ${CMFILE}.1
-      sort ${CMFILE} | uniq >> ${CMFILE}.1
-      mv ${CMFILE}.1 ${CMFILE}
-
-    else
-      if [ "${DOECHO}" == "2" ]; then echo "  ... skipped K8s ConfigMap file."; fi
     fi
 
-    # Create SE file to read in
-    local SEFILE1=${CLUSTER_DIR}/se/${MICROSERVICE}${CONFEXT}
-    local SEFILE2=${CLUSTER_DIR}/se/${WOV_PROJECT}${CONFEXT}
+    local SEFILE=${CLUSTER_DIR}/se/${f}${CONFEXT}
 
     # Check if we need to compile K8s Secrets
     local dowecompile=${DOFORCE}
-    if [ "$2" == "1" ]; then dowecompile=1;                                  # secrets changed?
-    elif [ ! -e "${SEFILE1}" ] && [ ! -e "${SEFILE2}" ] ; then dowecompile=1; # no SEFILE file
+    if [ "$2" == "1" ]; then dowecompile=1;                                 # secrets changed?
+    elif [ ! -e "${SEFILE}" ] && [ ! -e "${SEFILE}" ] ; then dowecompile=1; # no SEFILE file
     fi
 
-    # Compile K8s Secrets file
-    if [ "${dowecompile}" == "1" ]; then
-      local SEFILE="${SEFILE1}"
+    # Compile K8s Secret file
+    if [ "${dowecompile}" == "1" ]; then 
       rm -f ${SEFILE} || true
       touch ${SEFILE}
       chmod 600 ${SEFILE}
-      wov-env --cluster ${CLUSTER} --se ${MICROSERVICE} >> ${SEFILE} 2>&1
+      wov-env --cluster ${CLUSTER} --se ${f} >> ${SEFILE} 2>&1
       local a=$?
-      if [ "$a" == "2" ]; then
-        printf "ERROR: failed generating configmap in cluster: '${CLUSTER}' for microservice: '${MICROSERVICE}'.\n" >&2
+      if [ "$a" == "1" ]; then
+        if [ $DOECHO -ge 2 ]; then printf "  ... skipping ${CLUSTER}/se/${f}.\n"; fi
+        rm ${SEFILE} 
+      elif [ "$a" == "2" ]; then
+        printf "ERROR: failed generating secret in cluster: '${CLUSTER}' for: '${f}'.\n" >&2
         cat ${SEFILE}
         exit 1
-      fi
-      if [ "$a" != "0" ]; then
-        rm ${SEFILE}
-        SEFILE="${SEFILE2}"
-        if [ "$hasbuiltbasese" == "0" ]; then
-          wov-env --cluster ${CLUSTER} --se ${WOV_PROJECT} >> ${SEFILE}
-          local a=$?
-          if [ "$a" == "2" ]; then
-            printf "ERROR: failed generating configmap in cluster: '${CLUSTER}' for project: '${WOV_PROJECT}'.\n" >&2
-            cat ${SEFILE}
-            exit 1
-          fi
-          if [ "$?" != "0" ]; then exit 1; fi
-          hasbuiltbasese=1
-          if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${SEFILE}."; fi
-        fi
       else
-        if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${SEFILE}."; fi
+        # sort and uniq to remove duplicates  #??? Needed anymore???
+        touch ${SEFILE}  # make sure it exists
+        touch ${SEFILE}.1
+        chmod 600 ${SEFILE}.1
+        sort ${SEFILE} | uniq >> ${SEFILE}.1
+        mv ${SEFILE}.1 ${SEFILE}
+        if [ $DOECHO -ge 1 ]; then printf "  ... compiled ${CLUSTER}/se/${f}.\n"; fi
       fi
-
-      # sort and uniq to remove duplicates
-      touch ${SEFILE}   # make sure it exists
-      touch ${SEFILE}.1
-      chmod 600 ${SEFILE}.1
-      sort ${SEFILE} | uniq >> ${SEFILE}.1
-      mv ${SEFILE}.1 ${SEFILE}
-
-    else
-      if [ "${DOECHO}" == "2" ]; then echo "  ... skipped K8s Secret file."; fi
     fi
-
   done
+
+
+
+#  local RECIPES=( )   # here, specify 
+#  if [ "${#RECIPES[@]}" == "0" ]; then
+#    if [ -d ${WOV_BASEDIR}/wovtools/containers ]; then
+#      RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+#    fi
+#  fi
+#  #echo "Container Recipes: ${RECIPES}"
+
+
+
+#  # Build ConfigMap and Secrets if needed
+#  for f in ${RECIPES}; do
+#
+#    local CONTAINERNAME=$f
+#    local MICROSERVICE=${WOV_PROJECT}${CONTAINERNAME}
+#    if [ $DOECHO -ge 2 ]; then echo "... build ConfigMap and Secret for '${MICROSERVICE}${CONFEXT}'."; fi
+#
+#    # Create CM file to dump into and clear out
+#    # NOTE: if builing to CMFILE2, then all recipes would build that and only need to build once... TODO / OPTIMIZATION
+#    local CMFILE1=${CLUSTER_DIR}/cm/${MICROSERVICE}${CONFEXT}
+#    local CMFILE2=${CLUSTER_DIR}/cm/${WOV_PROJECT}${CONFEXT}
+#
+#    # Check if we need to compile K8s ConfigMap
+#    local dowecompile=${DOFORCE}
+#    if [ "$2" == "1" ]; then dowecompile=1;                                  # secrets changed?
+#    elif [ ! -e "${CMFILE1}" ] && [ ! -e "${CMFILE2}" ] ; then dowecompile=1; # no CMFILE file
+#    elif [ -e "${CMFILE1}" ] && [ ${CLUSTER_DIR}/secrets.json -nt "${CMFILE1}" ]; then dowecompile=1; # existing CMFILE1 and old
+#    elif [ -e "${CMFILE2}" ] && [ ${CLUSTER_DIR}/secrets.json -nt "${CMFILE2}" ]; then dowecompile=1; # existing CMFILE2 and old
+#    fi
+#
+#    # Compile K8s ConfigMap file
+#    if [ "${dowecompile}" == "1" ]; then 
+#      local CMFILE="${CMFILE1}"
+#      rm -f ${CMFILE} || true
+#      touch ${CMFILE}
+#      chmod 600 ${CMFILE}
+#      wov-env --cluster ${CLUSTER} --cm ${MICROSERVICE} >> ${CMFILE} 2>&1
+#      local a=$?
+#      if [ "$a" == "2" ]; then
+#        printf "ERROR: failed generating configmap in cluster: '${CLUSTER}' for microservice: '${MICROSERVICE}'.\n" >&2
+#        cat ${CMFILE}
+#        exit 1
+#      fi
+#      if [ "$a" != "0" ]; then
+#        rm ${CMFILE}
+#        CMFILE="${CMFILE2}"
+#        rm ${CMFILE}
+#        if [ "$hasbuiltbasecm" == "0" ]; then
+#          if [[ $DOECHO -ge 2 ]]; then echo "  ... using config for ${WOV_PROJECT}, instead of ${MICROSERVICE}"; fi
+#          wov-env --cluster ${CLUSTER} --cm ${WOV_PROJECT} >> ${CMFILE}
+#          local a=$?
+#          if [ "$a" == "2" ]; then
+#            printf "ERROR: failed generating configmap in cluster: '${CLUSTER}' for project: '${WOV_PROJECT}'.\n" >&2
+#            cat ${CMFILE}
+#            exit 1
+#          fi
+#          if [ "$a" != "0" ]; then exit 1; fi
+#          hasbuiltbasecm=1
+#          if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${CMFILE}."; fi
+#        fi
+#      else
+#        if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${CMFILE}."; fi
+#      fi
+#
+#      # sort and uniq to remove duplicates
+#      touch ${CMFILE}  # make sure it exists
+#      touch ${CMFILE}.1
+#      chmod 600 ${CMFILE}.1
+#      sort ${CMFILE} | uniq >> ${CMFILE}.1
+#      mv ${CMFILE}.1 ${CMFILE}
+#
+#    else
+#      if [ "${DOECHO}" == "2" ]; then echo "  ... skipped K8s ConfigMap file."; fi
+#    fi
+#
+#    # Create SE file to read in
+#    local SEFILE1=${CLUSTER_DIR}/se/${MICROSERVICE}${CONFEXT}
+#    local SEFILE2=${CLUSTER_DIR}/se/${WOV_PROJECT}${CONFEXT}
+#
+#    # Check if we need to compile K8s Secrets
+#    local dowecompile=${DOFORCE}
+#    if [ "$2" == "1" ]; then dowecompile=1;                                  # secrets changed?
+#    elif [ ! -e "${SEFILE1}" ] && [ ! -e "${SEFILE2}" ] ; then dowecompile=1; # no SEFILE file
+#    fi
+#
+#    # Compile K8s Secrets file
+#    if [ "${dowecompile}" == "1" ]; then
+#      local SEFILE="${SEFILE1}"
+#      rm -f ${SEFILE} || true
+#      touch ${SEFILE}
+#      chmod 600 ${SEFILE}
+#      wov-env --cluster ${CLUSTER} --se ${MICROSERVICE} >> ${SEFILE} 2>&1
+#      local a=$?
+#      if [ "$a" == "2" ]; then
+#        printf "ERROR: failed generating configmap in cluster: '${CLUSTER}' for microservice: '${MICROSERVICE}'.\n" >&2
+#        cat ${SEFILE}
+#        exit 1
+#      fi
+#      if [ "$a" != "0" ]; then
+#        rm ${SEFILE}
+#        SEFILE="${SEFILE2}"
+#        if [ "$hasbuiltbasese" == "0" ]; then
+#          wov-env --cluster ${CLUSTER} --se ${WOV_PROJECT} >> ${SEFILE}
+#          local a=$?
+#          if [ "$a" == "2" ]; then
+#            printf "ERROR: failed generating configmap in cluster: '${CLUSTER}' for project: '${WOV_PROJECT}'.\n" >&2
+#            cat ${SEFILE}
+#            exit 1
+#          fi
+#          if [ "$?" != "0" ]; then exit 1; fi
+#          hasbuiltbasese=1
+#          if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${SEFILE}."; fi
+#        fi
+#      else
+#        if [ "${DOECHO}" == "2" ]; then echo "  ... compiled ${SEFILE}."; fi
+#      fi
+#
+#      # sort and uniq to remove duplicates
+#      touch ${SEFILE}   # make sure it exists
+#      touch ${SEFILE}.1
+#      chmod 600 ${SEFILE}.1
+#      sort ${SEFILE} | uniq >> ${SEFILE}.1
+#      mv ${SEFILE}.1 ${SEFILE}
+#
+#    else
+#      if [ "${DOECHO}" == "2" ]; then echo "  ... skipped K8s Secret file."; fi
+#    fi
+#
+#  done
 
 
   # mark as done
