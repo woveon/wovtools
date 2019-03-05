@@ -110,21 +110,11 @@ function doGetDBPVER()
     printf "\n\nERROR: failed to connect to database wovtools, table logs, on database server $1.\n\n"; 
     fFailedDBConnection 1
   fi
+#  echo "DBRAW ${DBRAW}" 1>&2
   local DB_PVER=`echo ${DBRAW} | cut -d'|' -f5`
   retval=$?
 
-  # local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null |  cut -d'|' -f5)
-#  local DB_PVER=$(wov-db-connect $i -q -d wovtools -c 'SELECT * FROM logs WHERE database=\''"$1"'\' ORDER BY id DESC LIMIT 1;' 2> /dev/null |  cut -d'|' -f5)
-#  printf "DB_PVER : $DB_PVER"
-#  local a=$?
-#  if [ "$a" != "0" ]; then 
-#    printf "\n\nERROR: failed to connect to database wovtools, table logs, on database server $1.\n\n"; 
-#    fFailedDBConnection 1
-#  else
-#    retval=0
-#    echo ${DB_PVER}
-#  fi
-
+  echo "${DB_PVER}"
   return $retval
 }
 
@@ -556,15 +546,20 @@ elif [ "$DOACTION" == "log" ]; then
   # check each db
   retval=0
   for i in "${DATABASES[@]}"; do
+    printf "  ... check db '$i'\n"
+    CHKSUM=$(doHashDBSchema $i)
     r=${?}
+    # printf "    ... CHKSUM ${CHKSUM}\n"
     if [ "$r" != "0" ]; then retval=1; fi
     LLE=$(doGetDBLastLogEntry $i)
     r=${?}
+    # printf "    ... LLE ${LLE}\n"
     if [ "$r" != "0" ]; then retval=1; fi
     DBVER=$(doGetDBPVER $i)
     r=${?}
+    # printf "    ... DBVER ${DBVER}\n"
     if [ "$r" != "0" ]; then retval=1; fi
-    echo "$i : ${DBVER} : ${CHKSUM} : ${LLE}"
+    echo "$i> ver:${DBVER}  chksum:${CHKSUM} lle:${LLE}"
   done
 
 elif [ "$DOACTION" == "checksum" ]; then
