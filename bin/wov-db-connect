@@ -245,10 +245,13 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #      PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
 #    fi
 
+    echo "schema getting"
     PGPASSWORD="${DB_PASSWORD}" pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
     if [ "$?" != "0" ]; then
       printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
+      exit 1
     fi
+    echo "schema getting post"
 
   elif [ "${DB_OP}" == "command" ]; then
     # Log into pod 'vh', run psql
@@ -279,12 +282,11 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #    else
 #      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
 #    fi
-set -x
     PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
     if [ "$?" != "0" ]; then
       printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
+      exit 1
     fi
-    set +x
 
   elif [ "${DB_OP}" == "" ]; then
     # Log into pod 'vh', run psql
@@ -295,12 +297,11 @@ set -x
 #    else
 #      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
 #    fi
-  set -x
     PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
     if [ "$?" != "0" ]; then
       printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
+      exit 1
     fi
-  set +x
   fi
 
 elif [ "${DB_TYPE}" == "mongo" ]; then

@@ -55,6 +55,23 @@ Switches:
 EOF
 }
 
+
+function fFailedDBConnection()
+{
+  local RET=$1
+  printf "  > Is db inited?\n"
+  printf "    - init>        'wov-db-cloud -D ${1} -I'\n"   
+  printf "    - get version> 'wov-db-cloud -D $1 --ver'\n"
+  printf "\n"
+  printf "\n"
+  printf "  > Is it a bastion issue, or a privileges issue.\n"
+      printf "  - is 'vh' pod up and running?\n"
+  printf "\n"
+  printf "\n"
+
+  exit $RET
+}
+
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
 #function doGetDBSchema()
@@ -70,7 +87,10 @@ EOF
 function doHashDBSchema()
 {
   local CHKSUM=$(wov-db-connect $1 --schema 2> /dev/null | shasum -a 256 | cut -d' ' -f1)
-  if [ "$?" != "0" ]; then printf "\n\nERROR: failed to connect to database server $i.\n"; exit 1; fi
+  if [ "$?" != "0" ]; then 
+    printf "\n\nERROR: failed to connect to database server $i.\n"; 
+    fFailedDBConnection 1
+  fi
   echo ${CHKSUM}
 }
 
@@ -84,19 +104,28 @@ function doHashDBSchema()
 function doGetDBPVER()
 {
   local retval=1
-  local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null |  cut -d'|' -f5)
-#  local DB_PVER=$(wov-db-connect $i -q -d wovtools -c 'SELECT * FROM logs WHERE database=\''"$1"'\' ORDER BY id DESC LIMIT 1;' 2> /dev/null |  cut -d'|' -f5)
-#  printf "DB_PVER : $DB_PVER"
-  local a=$?
+  local DBRAW=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null)
+  local r=$?
   if [ "$a" != "0" ]; then 
     printf "\n\nERROR: failed to connect to database wovtools, table logs, on database server $1.\n\n"; 
-    printf "  ...could be a bastion issue, or a privileges issue. ERROR CODE $a\n"
-    printf "  OLD > NOTE: if the datbaseserver is not inited, run:\n"
-    printf "    'wov-db-cloud -D ${1} -I'\n\n"   
-  else
-    retval=0
-    echo ${DB_PVER}
+    fFailedDBConnection 1
   fi
+  local DB_PVER=`echo ${DBRAW} | cut -d'|' -f5`
+  retval=$?
+
+
+
+  # local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null |  cut -d'|' -f5)
+#  local DB_PVER=$(wov-db-connect $i -q -d wovtools -c 'SELECT * FROM logs WHERE database=\''"$1"'\' ORDER BY id DESC LIMIT 1;' 2> /dev/null |  cut -d'|' -f5)
+#  printf "DB_PVER : $DB_PVER"
+#  local a=$?
+#  if [ "$a" != "0" ]; then 
+#    printf "\n\nERROR: failed to connect to database wovtools, table logs, on database server $1.\n\n"; 
+#    fFailedDBConnection 1
+#  else
+#    retval=0
+#    echo ${DB_PVER}
+#  fi
 
   return $retval
 }
@@ -110,8 +139,7 @@ function doGetDBLastLogEntry()
   local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null)
   if [ "$?" != "0" ]; then 
     printf "\n\nERROR: failed to find wovtools logs on database server $1.\n\n"; 
-    printf "  NOTE: if the datbaseserver is not inited, run:\n"
-    printf "    'wov-db-cloud -D ${1} -I'\n\n"   
+    fFailedDBConnection 1
   else
     retval=0
     echo ${DB_PVER}
@@ -128,11 +156,11 @@ function doFindDatabases()
   DATABASES=$*
   if [ ! -e ${WOV_BASEDIR}/wovtools/db ]; then
     printf "\n\nERROR: no database directory in wovtools: '${WOV_BASEDIR}/wovtools/db' missing.\n" 1>&2
-    exit 1
+    fFailedDBConnection 1
 
   elif [ ! -e ${WOV_BASEDIR}/wovtools/db/registry ]; then
     printf "\n\nERROR: no database registry in wovtools/db: '${WOV_BASEDIR}/wovtools/db/registry' missing.\n" 1>&2
-    exit 1
+    fFailedDBConnection 1
 
   elif [ "$DATABASES" == "" ]; then
     DATABASES=()
@@ -215,13 +243,10 @@ function doPushCheck()
     DB_PVER=$(doGetDBPVER $1)
     if [ "$?" != "0" ] || [ "$DB_PVER" == "" ]; then
       printf "\n\nERROR: could not get database version.\n"
-      printf "  - is it inited? 'wov-db-cloud -D $1 --is-inited'\n"
-      printf "  - what version? 'wov-db-cloud -D $1 --ver' to get version\n"
-      printf "  - is 'vh' pod up and running?\n"
-      retval=2
+      fFailedDBConnection 2
     elif [ ! -e ${WOV_BASEDIR}/wovtools/db/registry/${1}.json ]; then 
       printf "\nERROR: no registry/${1}.json.\n"; 
-      retval=2 
+      fFailedDBConnection 2
     else
       REG_HASH=$( jq -r " .versions.\"${WOV_PVER}\".checksum" ${WOV_BASEDIR}/wovtools/db/registry/${1}.json )
       if [ "${REG_HASH}" == "null" ]; then
@@ -324,6 +349,7 @@ function doCommit()
   R=$(wov-git-check ${WOV_BASEDIR})
   if [ "$?" != "0" ] && [ $SKIPGITCHECKS -eq 0 ]; then
     printf "\n\nERROR: check in main git repo, then continue with $1.\n"
+    fFailedDBConnection 1
     exit 1
   fi
 
@@ -357,7 +383,7 @@ function doCommitDB()
   deltafile=${WOV_BASEDIR}/wovtools/db/$1.deltas
   if [ ! -e $deltafile ]; then
     printf "\n\nERROR: can't find deltas file: 'wovtools/db/$1.deltas'.\n\n"
-    exit 1
+    fFailedDBConnection 1
   fi
 
   # make sure directory exists for database
@@ -369,10 +395,10 @@ function doCommitDB()
 #  DB_PVER=$(doGetDBPVER $1)
   if [ "$?" != "0" ]; then
     printf "\n\n***ERROR: database not inited.\n"
-    retval=1
+    fFailedDBConnection 1
   elif [ "${DB_ENTRY}" == "" ]; then
     printf "\n\n***ERROR: database has no parent.\n"
-    retval=2
+    fFailedDBConnection 2
   fi
 #  printf "\nDB_ENTRY '${DB_ENTRY}'\n"
   OLDIFS=$IFS
@@ -388,6 +414,10 @@ function doCommitDB()
     # get current db checksum
     CHKSUM=$(doHashDBSchema $1)
     DB_PVER=$(doGetDBPVER $1)
+    if [ "$?" != "0" ]; then
+      printf "**ERROR: failed connecting to db.\n\n"
+      fFailedDBConnection 1
+    fi
 
     echo "Chksum : ${CHKSUM}  DBPVER: ${DB_PVER}  PVER: ${WOV_PVER}"
 
@@ -415,9 +445,10 @@ EOF
     # --------------------------------------------------------------------- 
     mkdir -p ${WOV_BASEDIR}/wovtools/db/registry/$1/schemas
     wov-db-connect ${1} --schema > ${WOV_BASEDIR}/wovtools/db/registry/$1/schemas/${WOV_PVER}.schema
-    if [ "$?" != "0" ]; then
+    r=$?
+    if [ "$r" != "0" ]; then
       printf "\n\nERROR: failed to write schemas to regsitry.\n\n"
-      exit 1
+      fFailedDBConnection 1
     fi
 
 
@@ -451,7 +482,7 @@ EOF
     R=$(wov-db-connect $1 -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver ) VALUES ( '$1', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER} );")
     if [ "$?" != "0" ]; then
       printf "\n\nERROR: failed updating registry database pver number with checksum.\n"
-      retval=3
+      fFailedDBConnection 3
     fi
   fi
 
@@ -568,6 +599,8 @@ else
   fDisplayOptions
   exit 1
 fi
+
+
 
 #echo "retval $retval"
 exit $retval
