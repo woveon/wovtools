@@ -40,6 +40,7 @@ Command Options:
   -e            : echo the output with newlines
   -E            : echo the output on one line (bash executable)
   -p/--provider : run cluster config as well (WAS -c/--cluster) FIXME|TODO
+  --health      : check routes of a deployment
 
   Secrets/Config:
   --envs        : print all the configuration as environment variables (sep lines)
@@ -438,6 +439,81 @@ function fConfGeneration()
 }
 
 
+# --------------------------------------------------------------------- 
+# Check routes
+#  NOTE: This is pretty limited since it only has 3 vars.
+# --------------------------------------------------------------------- 
+doHealthChecks() 
+{
+  local routes=( `cat ${WOV_BASEDIR}/wovtools/cache/.merged.json | jq -r ".health.routes[]"` )
+  local retval=0
+  local MSG=
+  local PROTO=
+  local STATUS=
+  local CT=
+  local SERVER=
+
+  for r in ${routes[@]}; do
+    local URL=`echo "${r}" | sed  \
+      -e 's/{WOV_STAGE}/'"${WOV_STAGE}"'/g' \
+      -e 's/{WOV_ME}/'"${WOV_ME}"'/g' \
+      -e 's/{WOV_PROJECT}/'"${WOV_PROJECT}"'/g'`
+    # echo " check route ${r}: ${URL}"
+
+    local CMD="curl -sS $URL"
+    #printf "  ... health check:\n    - ${URL}'\n"
+    printf "  ... ${URL}\n"
+    local R=$(${CMD} 2>&1)
+    local RR=$?
+    # echo " '$R:$RR' "
+    if [ "$RR" != "0" ]; then
+      printf "\n\nERROR ($RR) : $R\n"
+      retval=1
+    else
+      # parse http header
+      # FROM : https://stackoverflow.com/questions/24943170/how-to-parse-http-headers-using-bash
+      shopt -s extglob # Required to trim whitespace; see below
+      while IFS=':' read key value; do
+        # trim whitespace in "value"
+        value=${value##+([[:space:]])}; value=${value%%+([[:space:]])}
+        case "$key" in
+          Server) SERVER="$value"
+            ;;
+          Content-Type) CT="$value"
+          ;;
+#        HTTP*) read PROTO STATUS MSG <<< "$key$value}"
+#        HTTP*) read PROTO STATUS MSG <<< "$key{$value:+:$value}"
+          HTTP*) read PROTO STATUS MSG <<< "$key$value"
+              ;;
+        esac
+      done < <(curl -sI ${URL})
+
+      MSG=${MSG/$'\r'/} # remove \r that gets match in sed above
+
+      if [[ ${CT} = application/json* ]]; then
+        printf "    - "
+        echo "$R" | jq -c
+      elif [[ ${CT} = text/html* ]]; then
+        # curl -sI ${URL}
+        # echo "CT: ${CT}"
+        # echo "'${STATUS}' '${SERVER}' '${MSG}'"
+        if [ "${STATUS}" == "200" ]; then
+          printf "    - text/html: ${PROTO} ${STATUS} ${MSG}\n"
+        else
+          printf "\n*** ERROR: Failed retreiving ${CT}: ${STATUS} ${MSG}\n"
+          echo "$R"
+          retval=1
+        fi
+      else
+        printf "\n*** ERROR: Unknown content type : '${CT}'\n"
+        curl -sI ${URL}
+        retval=1
+      fi
+    fi
+  done
+}
+
+
 
 # --------------------------------------------------------------------- 
 # Load env
@@ -495,9 +571,9 @@ while [[ $1 =~ ^- ]]; do
     shift
 
   elif [ "$1" == "--CC" ]; then
-    shift
-    doCluster
-    shift
+    echo "NOTE: this seems broken"
+    . wov-aws cluster --
+    echo 
 
   elif [ "$1" == "--cm" ]; then
     shift
@@ -528,6 +604,9 @@ while [[ $1 =~ ^- ]]; do
     DOALL=0
   elif [ "$1" == '-v' ] || [ "$1" == '--version' ]; then
     echo $WOV_VERSION
+
+  elif [ "$1" == '--health' ]; then
+    doHealthChecks
 
   elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
     fWovEnvDisplayOptions
