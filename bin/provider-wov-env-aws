@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+
+if [ "${WOV_CLUSTER}" == "" ]; then
+  echo "ERROR: don't call wov-env-aws directly, but through 'wov-env --provider'"
+  exit 1
+fi
+
+export WOV_cluster_dns_domain=`wov-env --cluster ${WOV_CLUSTER} --var WOV_cluster_dns_domain`
+
+
+# ---------------------------------------------------------------------
+# Turns region codes into AWS regions.
+# ---------------------------------------------------------------------
+function fConvertRegionCodeAWS()
+{
+  local retval=
+  case $1 in
+    va)  retval='us-east-1' ;;
+    iad) retval='us-east-1' ;;
+    *)   printf "\nWARNING: unknown AWS region code of '$1'.\n"
+  esac
+  echo "$retval"
+}
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+REGIONVARS=( 'AWS_REGION' 'AWS_ZONES' 'AWS_VPC' )
+
+AWS_ZONES="c d"
+  # --- fixed for now
+
+AWS_REGION="$(fConvertRegionCodeAWS $WOV_REGION)"
+if [ "${AWS_REGION}" == "" ]; then printf "\n\nERROR: unknown AWS_REGION.\n\n"; exit 1; fi
+
+AWS_VPC="$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}" --query 'Vpcs[0].VpcId' | ${SED} -e 's/^"//' -e 's/"$//')"
+if [ "$?" != "0" ]; then printf "\n\nERROR: failed to connect to AWS to understand VPC.\n\n"; exit 1; fi
+
+export AWS_REGION
+export AWS_ZONES
+export AWS_VPC
