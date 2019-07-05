@@ -9,6 +9,15 @@ PROVIDERVARS=()
 RANCLUSTER=0
 
 
+# Default variables to echo
+ECHOVARS=( 'WOV_VERSION' 'WOV_ME' 'WOV_BASEDIR' 'WOV_ARCHIVEREPOSITORY' 'WOV_ARCHIVEENV' 'WOV_CONTEXT' \
+           'WOV_CLUSTER' 'WOV_NS' 'WOV_CLTYPE' 'WOV_PROVIDER' 'WOV_REGION' 'WOV_FLAVOR' 'WOV_PROJECT' \
+           'WOV_KSTAGE' 'WOV_GSTAGE' 'WOV_STAGE' 'WOV_PVER' 'WOV_SVER' 'WOV_USERNAME' 'WOV_USEREMAIL' \
+           'WOV_PROJECT' 'WOV_PROJECTTYPE' 'WOV_PROJECTTITLE' 'WOV_PROJECTDESCRIPTION' 'WOV_KPROJECT' \
+           'WOV_WPROJECT' )
+#CLUSTERVARS=( 'CL_REGION' 'CL_ZONES' 'CL_VPC' )
+
+
 function fWovEnvDisplayOptions()
 {
   cat <<EOF | fold -w ${FOLD} -s
@@ -39,7 +48,7 @@ Command Options:
   -g/--global X : target output for another context (not from Kubernetes)  NOTE: must be 1st param
   -e            : echo the output with newlines
   -E            : echo the output on one line (bash executable)
-  -p/--provider : run cluster config as well (WAS -c/--cluster) FIXME|TODO
+  -p/--provider : run cluster config as well (queries cloud provider via wov-env-PROVIDER)
   --health      : check routes of a deployment
 
   Secrets/Config:
@@ -54,7 +63,6 @@ Command Options:
   -c/--cluster X  : set the cluster to X (required for --cm/--se)
   --cm X          : only config used by plugin, (sep lines)
   --se X          : only secrets used by plugin, (sep lines)
-  --CC            : cluster configuration
 
 Example Usage:
   `basename $0`    : sets all environment variables
@@ -82,7 +90,7 @@ function fBuildClusterSecrets
     else
       NS="--namespace ${WOV_NS}" 
     fi
-    wov-env-build ${G} -q --secrets ${CLUSTER}; 
+    wov-env-build ${NS} -q --secrets ${CLUSTER}; 
     if [ "$?" != "0" ]; then exit 1; fi
   fi
 }
@@ -94,6 +102,8 @@ function fBuildClusterSecrets
 # whatever cluster this project considers the localcontext.
 # NOTE: creates the directory, but not file since that would look like 
 #       it was current.
+# $1 - cluster name
+# $2 - if true, force build
 # --------------------------------------------------------------------- 
 function doSetCluster
 {
@@ -115,13 +125,15 @@ function doSetCluster
   #  - newly merged wovtools/config.json|local.json
   #  - wovtools/secrets directory has changes
   if [ ! -f "${WOV_SECRETFILE}" ] || 
-     [ "${HOME}/.kube/config" -nt "${WOV_SECRETFILE}" ] ||
-     [ "${WOV_CONFIGFILE_MERGED}" -nt "${WOV_SECRETFILE}" ] || 
-     [ "${WOV_BASEDIR}/wovtools/secrets" -nt "${WOV_SECRETFILE}" ]; then
+     [ "${HOME}/.kube/config"            -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_CONFIGFILE_MERGED}"        -nt "${WOV_SECRETFILE}" ] || 
+     [ "${WOV_BASEDIR}/wovtools/secrets" -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_BASEDIR}/.git/config"      -nt "${WOV_SECRETFILE}" ]; then
+    
     fBuildClusterSecrets force 
     touch "${WOV_SECRETFILE}"
     . wov-env-loader
-fi
+  fi
 }
 
 
@@ -266,15 +278,11 @@ fi
 # --------------------------------------------------------------------- 
 function fDoEcho() 
 {
-  local v=( 'WOV_VERSION' 'WOV_ME' 'WOV_BASEDIR' 'WOV_ARCHIVEREPOSITORY' 'WOV_ARCHIVEENV' 'WOV_CONTEXT' \
-          'WOV_CLUSTER' 'WOV_NS' 'WOV_CLTYPE' 'WOV_PROVIDER' 'WOV_REGION' 'WOV_FLAVOR' 'WOV_PROJECT' \
-          'WOV_KSTAGE' 'WOV_GSTAGE' 'WOV_STAGE' 'WOV_PVER' 'WOV_SVER' 'WOV_USERNAME' 'WOV_USEREMAIL' \
-          'WOV_PROJECT' 'WOV_PROJECTTYPE' 'WOV_PROJECTTITLE' 'WOV_PROJECTDESCRIPTION' 'WOV_KPROJECT' \
-          'WOV_WPROJECT' )
 
-  for f in "${v[@]}"; do
+  for f in "${ECHOVARS[@]}"; do
     printf "$2$f='${!f}'$1"
   done
+  # if [ "$RANCLUSTER" == "1" ]; then doClusterEcho "$1"; fi
   if [ "$RANPROVIDER" == "1" ]; then doProviderEcho "$1"; fi
 }
 
@@ -287,7 +295,12 @@ function fDoProvider() # Cluster()
 {
   RANPROVIDER=1
 
-  if [ "$WOV_PROVIDER" == "aws" ]; then . wov-env-aws; 
+  if [ "${CLUSTER}" != "${WOV_CLUSTER}" ]; then
+    #if [ "$ECHOMODE" == "1" ] || [ "${ECHOMODE}" == "2" ]; then printf "  ... setting cluster to '${WOV_CLUSTER}'\n"; fi
+    doSetCluster ${WOV_CLUSTER} true
+  fi
+
+  if [ "$WOV_PROVIDER" == "aws" ]; then . provider-wov-env-aws; 
   else
     printf "\n\nERROR: Unknown provider to load env vars from : '${WOV_PROVIDER}'.\n\n"
     exit 1
@@ -305,6 +318,17 @@ function doProviderEcho
     printf "$2$f='${!f}'$1"
   done
 }
+
+# --------------------------------------------------------------------- 
+# $1 - appending char(s): ex. ' ' or '\n'
+# $2 - prepending char(s): ex. 'export '
+# --------------------------------------------------------------------- 
+#function doClusterEcho
+#{
+#  for f in "${CLUSTERVARS[@]}"; do
+#    printf "$2$f='${!f}'$1"
+#  done
+#}
 
 
 # --------------------------------------------------------------------- 
@@ -565,15 +589,10 @@ while [[ $1 =~ ^- ]]; do
     echo $(fConvertRegionCodeAWS $1)
     shift
 
-  elif [ "$1" == "--cluster" ]; then
-    shift
-    CLUSTER=$1
-    shift
-
-  elif [ "$1" == "--CC" ]; then
-    echo "NOTE: this seems broken"
-    . wov-aws cluster --
-    echo 
+#  elif [ "$1" == "--CC" ]; then
+#    echo "NOTE: this seems broken"
+#    . wov-aws cluster --
+#    echo 
 
   elif [ "$1" == "--cm" ]; then
     shift

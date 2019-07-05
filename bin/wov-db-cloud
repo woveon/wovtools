@@ -335,34 +335,41 @@ function resCreate()
 function doCreateDBServer()
 {
 
+  echo "NOTE: this script is not working as expected. Echoing commands to run."
+
+  echo "Subnet 1 : $(resName SN ${1})"
+  echo "Subnet 2 : $(resName SN ${1})"
+  exit 1
+
+
   # Ensure Creation of Subnets
   SN1R1=$(resName SN ${1})
-#  echo "SN1R1 ${SN1R1}"
+  echo "SN1R1 ${SN1R1}"
+  exit 1
   SN1R2=$(resCreate SN ${SN1R1})
-#  echo "SN1R2 ${SN1R2}"
+  echo "SN1R2 ${SN1R2}"
   SN2R1=$(resName SN ${1} ${WOVDB_AVAILZONEALT})
-#  echo "SN2R1 ${SN2R1}"
+  echo "SN2R1 ${SN2R1}"
   SN2R2=$(resCreate SN ${SN2R1} ${WOVDB_AVAILZONEALT})
-#  echo "SN2R2 ${SN2R2}"
+  echo "SN2R2 ${SN2R2}"
 
   # Create database subnet group
   DBSNGR1=$(resName DBSNG ${1})
-#  echo "DBSNGR1 ${DBSNGR1}"
+  echo "DBSNGR1 ${DBSNGR1}"
   DBSNGR2=$(resCreate DBSNG ${DBSNGR1})
-#  echo "DBSNGR2 ${DBSNGR2}"
+  echo "DBSNGR2 ${DBSNGR2}"
 
   # Create database security group
   SG1=$(resName SG ${1})
-#  echo "SG1 ${SG1}"
+  echo "SG1 ${SG1}"
   SG2=$(resCreate SG ${SG1})
-#  echo "SG2 ${SG2}"
+  echo "SG2 ${SG2}"
   WOVDB_LAST_SGID=$(resQuerySecurityID $SG1)
-#  echo "WOVDB_LAST_SGID ${WOVDB_LAST_SGID}" 1>&2
+  echo "WOVDB_LAST_SGID ${WOVDB_LAST_SGID}" 1>&2
 
   echo "TODO: Route 53 to instance .... not needed, just use HOSTADDR"
 
   # Create the database server
-
   aws rds create-db-instance \
     --db-instance-identifier $(resName DB ${1}) \
     --allocated-storage ${WOV_apidb_instanceStorage} \

@@ -84,7 +84,10 @@ function doConnect()
   ssh "${CL}-bastion"
   local r=$?
   if [ "$r" == "255" ]; then
-    echo "\nERROR: check key permissions.\n"
+    printf "\nERROR: ssh error occurred when connecting to basion.\n"
+    printf "  Try checking:\n"
+    printf "   - key permissions.\n"
+    printf "   - wifi blocking port 22 (use VPN or switch to cellular).\n"
     exit 1
   elif [ "$r" != "0" ]; then
     printf "\nERROR: wov-bastion-connection failed... let me check a few things...\n\n";

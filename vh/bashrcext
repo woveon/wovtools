@@ -1,6 +1,6 @@
 #alias ngrep="grep --exclude-dir node_modules --exclude-dir '_old*' --exclude-dir '.*' *"
 
-PS1='\[\033[1;34m\]\u\[\033[0m\]@\h \w {\#} >
+PS1='\[\033[1;34m\]\u\[\033[0m\]@\h \w {\#} >'
 
 #export WOV_LOGGER_ASPECTS='listener listener.incoming listener.route listener.result'
 

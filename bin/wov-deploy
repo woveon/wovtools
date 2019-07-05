@@ -209,7 +209,7 @@ function doCheckContainersExist()
     k8sfiles=( $(cd ${rdir} && ls *.yaml) )
   else
     for f in ${*}; do
-      k8sfiles+=( "pl-deployment-${f}.yaml" )
+      k8sfiles+=( "deployment-${f}.yaml" )
       # k8sfiles+=( "${WOV_PROJECT}${f}.yaml" )
     done
   fi
@@ -271,7 +271,8 @@ function doDeployK8s()
   FILES=()
   if [ "$#" != "0" ]; then
     for r in ${@:1}; do
-      FILES+=( "pl-deployment-${r}" )
+      echo "HERE: this makes assumptions about the names of these files... either skip that or do a grep for the deployment and name"
+      FILES+=( "deployment-${r}" )
     done
   else
     # echo "k8sdir ${K8SDIR}"

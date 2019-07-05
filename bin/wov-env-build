@@ -103,8 +103,8 @@ if [ "$GLOBALCOMMAND" != "" ]; then
 # Forced namespace
 elif [ "${FORCEDNS}" != "" ]; then
   IFS='-' read -r -a array <<< "${FORCEDNS}"
-  echo "array : ${array[@]}"
-  echo "here - shifting namespace to ${FORCEDNS}, from ${WOV_NAMESPACE} ${WOV_NS} ${WOV_STAGE}"
+  #echo "array : ${array[@]}"
+  #echo "here - shifting namespace to ${FORCEDNS}, from ${WOV_NAMESPACE} ${WOV_NS} ${WOV_STAGE}"
   export WOV_NS="${array[0]}-${array[1]}"
   export WOV_PROJECT="${array[0]}"
   export WOV_STAGE="${array[1]}"
@@ -248,6 +248,7 @@ EOF
 
   # STEP 1: Check for source file existence
   for sf in ${SRCSECRETFILES[*]}; do
+    echo "looking for ${WOV_BASEDIR}/wovtools/secrets/$sf"
     if [ ! -e ${WOV_BASEDIR}/wovtools/secrets/$sf ]; then
       printf "\n\nERROR: file for secret build does not exist: 'wovtools/secrets/$sf'.\n"
       exit 1

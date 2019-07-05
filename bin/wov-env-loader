@@ -4,6 +4,7 @@
 # This is a light-weight env variable loader. Used by wov-env and wov-env-build.
 # --------------------------------------------------------------------- 
 
+
 # --------------------------------------------------------------------- 
 # Versions
 # --------------------------------------------------------------------- 
@@ -129,3 +130,4 @@ fi
 export WOV_STAGE="$WOV_KSTAGE"        # KSTAGE has priority since git repo might differ but want to build for current stage.
 export WOV_PROJECT="${WOV_WPROJECT}"  
 
+# echo "PROJECT ${WOV_PROJECT} KSTAGE ${WOV_KSTAGE}"

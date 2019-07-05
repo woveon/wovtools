@@ -13,17 +13,17 @@ DOECHO=1
 FOLD=$(tput cols)
 EXIT=1
 
-export WOV_cluster_dns=`wov-env --var WOV_cluster_dns`
+export WOV_cluster_dns_domain=`wov-env --var WOV_cluster_dns_domain`
 
 
 # TODO: fill this function in, and remove from WIAAS
-function doCluster()
-{
-  RANCLUSTER=1
-  export CL_REGION="${AWS_REGION}"
-  export CL_ZONES="${AWS_ZONES}"
-  export CL_VPC="${AWS_VPC}"
-}
+#function doCluster()
+#{
+#  RANCLUSTER=1
+#  export CL_REGION="${AWS_REGION}"
+#  export CL_ZONES="${AWS_ZONES}"
+#  export CL_VPC="${AWS_VPC}"
+#}
 
 
 # ---------------------------------------------------------------------
@@ -109,7 +109,7 @@ function doVolumeCreate()
 
   local RES=`aws ec2 create-volume --size ${VOLSIZE} --region ${CL_REGION} \
     --availability-zone ${AVAILZONE} --volume-type gp2 \
-    --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=${VOLNAME}},{Key=KubernetesCluster,Value=${WOV_CLUSTER}.${WOV_cluster_dns}}]" | jq ".VolumeId" -r`
+    --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=${VOLNAME}},{Key=KubernetesCluster,Value=${WOV_CLUSTER}.${WOV_cluster_dns_domain}}]" | jq ".VolumeId" -r`
   RET=$?
   #echo "Create: $RES"
   echo ${RES}
@@ -184,12 +184,14 @@ elif [ "${COMMAND}" == "volume-ensure" ]; then
   EXIT=$?
 
 elif [ "${COMMAND}" == "cluster" ]; then
-  doCluster
-  EXIT=$?
+  echo "UNSUPPORTED: Use specific cloud info."
+#  doCluster
+#  EXIT=1
+  exit 1
 
 else
   printf "\n\nERROR: unknown command \"${COMMAND}\".\n\n" 1>&2
 fi
 
 
-exit ${EXIT}
+return ${EXIT}

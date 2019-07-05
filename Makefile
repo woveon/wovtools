@@ -1,8 +1,9 @@
 
 
-BINS-ENV=wov-env-loader wov-env-build wov-env wov-env-aws wov-cluster wov-kops
+BINS-ENV=wov-env-loader wov-env-build wov-env wov-cluster wov-kops
+BINS-PROVIDER=provider-wov-env-aws
 BINS-CLI=wov-aws wov-cd wov-bastion wov-bastion-connection wov-cmd wov-ed wov-ls wov-ns wov-db-connect wov-db-cloud wov-p wov-plog \
-	       wov-hash wov-enc wov-dec wov-log
+	       wov-hash wov-enc wov-dec wov-log wov-context
 BINS-VH=wov-vh wov-vh-pushgit wov-vh-pulldir
 BINS-PUSH=wov-push-container wov-push-container-check wov-push-k8s wov-push-db wov-push
 BINS-DEPLOY=wov-deploy-service wov-deploy-info wov-deploy
@@ -16,7 +17,7 @@ BINS-DEPLOY=wov-deploy-service wov-deploy-info wov-deploy
 #		 wov-deploy wov-deploy-info wov-hbs wov-db-deploy  wov-deploy-dev \
 #		 wov-users wov-cl wov-mod  wov-env-build  wov_stage-select \
 #		 $(BINS-UTIL) $(BINS-GLOBAL) wov-aws wov
-BINS=${BINS-ENV} ${BINS-CLI} ${BINS-VH} ${BINS-PUSH} ${BINS-DEPLOY}
+BINS=${BINS-ENV} ${BINS-PROVIDER} ${BINS-CLI} ${BINS-VH} ${BINS-PUSH} ${BINS-DEPLOY}
 
 .PHONY: vh
 
