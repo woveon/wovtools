@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+
+if [ -z ${WOV_CLTYPE+x} ];               then echo "var WOV_CLTYPE is unset"; exit 1; fi
+if [ -z ${WOV_CLUSTER+x} ];               then echo "var WOV_CLUSTERis unset"; exit 1; fi
+
+
+
+KEY_PUBLIC=~/.ssh/${WOV_CLTYPE}/${WOV_CLUSTER}_pub
+KEYEXISTS=`aws ec2 describe-key-pairs | jq '.KeyPairs[] | select(.KeyName=="'"${WOV_CLUSTER}"'")'`
+if [ ! -f "${KEY_PUBLIC}" ]; then
+  printf "ERROR: failed to find key locally at: '${KEY_PUBLIC}'.\n\n"
+  echo "... run the following:"
+  echo "openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out ~/.ssh/${WOV_CLTYPE}/${WOV_CLUSTER}.pem"
+  echo "openssl rsa -in ~/.ssh/${WOV_CLTYPE}/${WOV_CLUSTER}.pem -outform PEM -pubout -out ~/.ssh/${WOV_CLTYPE}/${WOV_CLUSTER}_pub.pem"
+  echo "ssh-keygen -f ~/.ssh/${WOV_CLTYPE}/${WOV_CLUSTER}_pub.pem -i -mPKCS8 > ~/.ssh/${WOV_CLTYPE}/${WOV_CLUSTER}_pub"
+  echo "chmod 400 ~/.ssh/wov/wov-aws-va-frog.pem"
+  echo "chmod 400 ~/.ssh/wov/wov-aws-va-frog_pub"
+  echo "chmod 400 ~/.ssh/wov/wov-aws-va-frog_pub.pem"
+  exit 1
+fi
+if [ "$?" != "0" ] || [ "${KEYEXISTS}" == "" ]; then
+  printf "ERROR: failed to find key '${WOV_CLUSTER}' in aws key pairs.\n\n"
+  echo "Generate the key and import it into AWS key pairs : EC2 > Key Pairs"
+  echo " - open https://console.aws.amazon.com/ec2/v2/home?region=${WOV_cluster_region}#KeyPairs:sort=keyName"
+  echo "   - import the key with the name: '${WOV_CLUSTER}'"
+  echo "   - copy in public key (file contents: ~/.ssh/wov/${WOV_CLUSTER}_pub.pem -- NOTE: only parts between '---') "
+  echo "     - 'open -a TextEdit ~/.ssh/wov/${WOV_CLUSTER}_pub.pem'"
+  exit 1
+fi
+
+echo "... found cluster key: ${KEY_PUBLIC}"
+
+export KEY_PUBLIC=$KEY_PUBLIC

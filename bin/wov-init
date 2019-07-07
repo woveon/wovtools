@@ -5,9 +5,14 @@ DOFORCE=0
 FOLD=$(tput cols)
 
 
+echo ""
+echo "`basename $0`"
+echo "Initializes this directory as a wovtools project. This should be non-destructive, only adding at .git and wovtools directories." | fold -w ${FOLD} -s
+echo ""
+
 PROJECT=$(basename $(pwd))
 while true; do
-  read -r -p "PROJECT name : ${PROJECT} ... Correct? [Y/n] " A
+  read -r -p "One word PROJECT name (not a title!) : (\"${PROJECT}\") ... Correct? [Y/n] " A
 
   case $A in
     ""|[Yy][Ee][Ss]|[Yy])
@@ -27,6 +32,14 @@ while true; do
   esac
 done
 
+# Useful timeout script : https://stackoverflow.com/questions/28927783/is-it-possible-to-set-time-out-from-bash-script
+function timeout_monitor() {
+  sleep "$1"
+  shift
+  kill "$1"
+  shift
+  echo "$*"
+}
 
 # --------------------------------------------------------------------- 
 # Work with ~/.wovtools file
@@ -38,6 +51,14 @@ if [ ! -e "${HOME}/.wovtools" ]; then
 fi
 WOV_ME=$(cat ${HOME}/.wovtools | jq -r '.me')
 
+
+# Ensure global entry for the project
+WOV_PROJDIR=$(cat ${HOME}/.wovtools | jq -r ".projects[\"${PROJECT}\"].dir")
+if [ "${WOV_PROJDIR}" == "null" ]; then
+  echo "  ... creating project entry in: ~/.wovtools"
+  CWD=`pwd`
+  cat ~/.wovtools | jq " .projects[\"${PROJECT}\"].dir = \"${CWD}\"" > ~/.wovtools.$$ && cp ~/.wovtools.$$ ~/.wovtools
+fi
 
 
 # ---------------------------------------------------------------------
@@ -78,7 +99,7 @@ function InitProject()
   # Select user name
   echo
   if [ "${WOV_USERNAME}" == "" ]; then WOV_USERNAME=$(git config user.name); fi
-  printf "Enter your name (${WOV_USERNAME}): "
+  printf "Enter your name (\"${WOV_USERNAME}\"): "
   read A
   if [ "${A}" != "" ]; then WOV_USERNAME="${A}"; fi
 
@@ -86,7 +107,7 @@ function InitProject()
   # Select user email
   echo
   if [ "${WOV_USEREMAIL}" == "" ]; then WOV_USEREMAIL=$(git config user.email); fi
-  printf "Enter your email (${WOV_USEREMAIL}): "
+  printf "Enter your email (\"${WOV_USEREMAIL}\"): "
   read A
   if [ "${A}" != "" ]; then WOV_USEREMAIL="${A}"; fi
 
@@ -433,28 +454,47 @@ wov-env -e
 # query for new/updated data, overwriting env vars.
 
 echo 
-printf "Project Title [i.e. what shall we call it?]: (${WOV_PROJECTTITLE}) "
+printf "Project Title [i.e. what shall we call it?]: (\"${WOV_PROJECTTITLE}\"): "
 read A
 if [ "${A}" != "" ]; then WOV_PROJECTTITLE=${A}; fi
 
 
 echo
-printf "Project Type [i.e. unused for now, but will be used for initial gen of project]: (%s) " "${WOV_PROJECTTYPE}"
+printf "Project Type [i.e. unused for now, but will be used for initial gen of project]: (\"${WOV_PROJECTTYPE}\"): "
 read A
 if [ "${A}" != "" ]; then WOV_PROJECTTYPE=${A}; fi
 
 echo
-printf "Project Description (one line): (${WOV_PROJECTDESCRIPTION}) "
+printf "Project Description (one line): (\"${WOV_PROJECTDESCRIPTION}\"): "
 read A
 if [ "${A}" != "" ]; then WOV_PROJECTDESCRIPTION=${A}; fi
 
-echo
-printf "Remote Docker Repository (i.e. you can skip for now): (${WOV_ARCHIVEREPOSITORY}) "
-read A
-if [ "${A}" != "" ]; then WOV_ARCHIVEREPOSITORY=${A}; fi
 
+WOV_ARCHIVEREPOSITORY=$(cat ${HOME}/.wovtools | jq -r '.archive.repository')
 echo
-printf "Archive Env Location (i.e. S3 location (ex. s3://${WOV_PROJECT}.mycompany.com/archive ): (${WOV_ARCHIVEENV}) "
+while true; do
+  read -r -p "ARCHIVE> Remote Docker Repository: (\"${WOV_ARCHIVEREPOSITORY}\") ... Correct? [Y/n] " A
+
+  case $A in
+    ""|[Yy][Ee][Ss]|[Yy])
+      break
+    ;;
+    [Nn][Oo]|[Nn])
+      printf "ok, enter Docker repository for ARCHIVE name (ex. see AS ECR Repository URI: XXXX.dkr.ecr.us-east-1.amazonaws.com): "
+      read WOV_ARCHIVEREPOSITORY
+    ;;
+  *)
+    echo "Invalid input..."
+    ;;
+  esac
+done
+
+
+
+
+WOV_ARCHIVEENV=$(cat ${HOME}/.wovtools | jq -r '.archive.env')
+echo
+printf "ARCHIVE> Env Location (i.e. S3 location (ex. s3://wovtools.MYCOMPANY.com/archive ): (\"${WOV_ARCHIVEENV}\") "
 read A
 if [ "${A}" != "" ]; then WOV_ARCHIVEENV=${A}; fi
 
@@ -465,5 +505,62 @@ rm ${WOV_BASEDIR}/wovtools/.config.json.*
 
 
 
+echo ""
+if [ -e "${WOV_BASEDIR}/wovtools/db" ] && 
+   [ -e "${WOV_BASEDIR}/wovtools/db/registry" ] &&
+   [ -e "${WOV_BASEDIR}/wovtools/db/registry/.git" ]; then
+  echo "ARCHIVE> Database Registry exists (at wovtools/db/registry)"
+else
+  mkdir -p ${WOV_BASEDIR}/wovtools/db/registry/.git
+
+  # make gitignore
+  cat <<EOF > ${WOV_BASEDIR}/wovtools/db/registry/.gitignore
+*.swp
+EOF
+
+  WOV_DBREGISTRY=`git config --get remote.origin.url`
+  WOV_DBREGISTRY="${WOV_DBREGISTRY::-4}_registry.git"
+  read -r -p "ARCHIVE> Database Registry git location: (\"${WOV_DBREGISTRY}\") ... Correct? [Y/n] " A
+  if [ "${A}" != "" ]; then WOV_DBREGISTRY="${A}"; fi
+
+  # make git repository
+  cd ${WOV_BASEDIR}/wovtools/db/registry && git init -q
+
+  # configure it
+  cat <<EOF > ${WOV_BASEDIR}/wovtools/db/registry/.git/config
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+	ignorecase = true
+	precomposeunicode = true
+[remote "origin"]
+	url = ${WOV_DBREGISTRY}
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[user]
+	name = ${WOV_USERNAME}
+	email = ${WOV_USEREMAIL}
+[branch "master"]
+	remote = origin
+	merge = refs/heads/master
+EOF
+
+fi
+
+echo "... test Git remote repo configuration/existence"
+#  cd ${WOV_BASEDIR}/wovtools/db/registry && git remote -v
+timeout_monitor 8 "$$" "TIMEOUT ERROR: failed to connect to remote repository. You should: 1) check network connection 2) ensure repo exists." &
+Timeout_monitor_pid=$!
+cd ${WOV_BASEDIR}/wovtools/db/registry && git ls-remote -q > /dev/null
+if [ "$?" != "0" ]; then
+  kill "$Timeout_monitor_pid"
+  printf "\nERROR: failed to find repo. Check your configuration and ensure repo exists.\n\n"
+  exit 1
+else
+  kill "$Timeout_monitor_pid"
+fi
 
 
+
+printf "\n\n... success! WovTools is successfully initialized for this project.\n\n"
