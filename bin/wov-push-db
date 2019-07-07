@@ -35,19 +35,19 @@ function fDisplayOptions()
 
 usage: `basename $0` [options] {databases...}
 
-This moves database changes for the current checked in code (pver) into the db registry for versioning.
+This moves database changes for the current checked in code (pver) into the db archive for versioning.
 
 This does the following:
 1. if all main repo git checked in, continue (this ‘seals the database with the code’).
-2. move 'wovtools/db/*.deltas' into registry
-3. update registry entry for this pver
+2. move 'wovtools/db/*.deltas' into archive 
+3. update archive entry for this pver
 4. update database pver number 
 
 By default, checks all database delta files that exist.
 
 Switches:
   --checksum
-  --skip-git-checks  : ignores unchecked git changes of secrets and code (dev and prod stages will override this). Does not skip registry checks.
+  --skip-git-checks  : ignores unchecked git changes of secrets and code (dev and prod stages will override this). Does not skip archive checks.
   -pc|--push-check|--any-push-blockage : checks if the database changes are checked in for pver, and ready to push to archive
   -h : this help
   -q/-v : quiet/verbose
@@ -99,7 +99,7 @@ function doHashDBSchema()
 # returns 1 on error
 #  - This returns the value in the database, which is when this 
 #    database was updated. If you want all the entries, see the 
-#    registry file.
+#    archive file.
 # --------------------------------------------------------------------- 
 function doGetDBPVER()
 {
@@ -138,7 +138,7 @@ function doGetDBLastLogEntry()
 
 # Create a list of databases to look at
 # 1. take from command line if they have it
-# 2. else, from all deltas files and registry files
+# 2. else, from all deltas files and archive files
 function doFindDatabases()
 {
   DATABASES=$*
@@ -146,8 +146,8 @@ function doFindDatabases()
     printf "\n\nERROR: no database directory in wovtools: '${WOV_BASEDIR}/wovtools/db' missing.\n" 1>&2
     fFailedDBConnection 1
 
-  elif [ ! -e ${WOV_BASEDIR}/wovtools/db/registry ]; then
-    printf "\n\nERROR: no database registry in wovtools/db: '${WOV_BASEDIR}/wovtools/db/registry' missing.\n" 1>&2
+  elif [ ! -e ${WOV_BASEDIR}/wovtools/db/archive ]; then
+    printf "\n\nERROR: no database archive in wovtools/db: '${WOV_BASEDIR}/wovtools/db/archive' missing.\n" 1>&2
     fFailedDBConnection 1
 
   elif [ "$DATABASES" == "" ]; then
@@ -158,7 +158,7 @@ function doFindDatabases()
     for d in "${DELTAS[@]}"; do
       D1+=("${d%.deltas}")
     done
-    REGFILES=( $(cd ${WOV_BASEDIR}/wovtools/db/registry && ls *.json 2> /dev/null ) )
+    REGFILES=( $(cd ${WOV_BASEDIR}/wovtools/db/archive && ls *.json 2> /dev/null ) )
     for f in "${REGFILES[@]}"; do
       D2+=("${f%.json}")
     done
@@ -202,8 +202,8 @@ function doFindDatabases()
 #1. db schema changes                   T F
 #2. delta files exist                   F F
 #3. git repo changes                    F F
-#4. registry delta changes for pver     T F
-#5. registry git changes                F F
+#4. archive delta changes for pver     T F
+#5. archive git changes                F F
 #
 # $1 == db
 # return question: ?Any blockage to pushing?? 0=no-blockage, 1=blockage, 2=error
@@ -222,7 +222,7 @@ function doPushCheck()
 
   # 1 - compare current to parent checksum (reg value if exists, or then db (i.e. last checkin)
   #   - current comes from the database hash
-  #   - parent comes from registry entry if exists,
+  #   - parent comes from archive entry if exists,
   #     or if nothing checked in yet, then db's pver is parent pver, so hash that
   if [ "$retval" == "0" ]; then
     if [ $DOECHO -ge 1 ]; then printf "... retrieve db hash.\n"; fi
@@ -232,14 +232,14 @@ function doPushCheck()
     if [ "$?" != "0" ] || [ "$DB_PVER" == "" ]; then
       printf "\n\nERROR: could not get database version.\n"
       fFailedDBConnection 2
-    elif [ ! -e ${WOV_BASEDIR}/wovtools/db/registry/${1}.json ]; then 
-      printf "\nERROR: no registry/${1}.json.\n"; 
+    elif [ ! -e ${WOV_BASEDIR}/wovtools/db/archive/${1}.json ]; then 
+      printf "\nERROR: no archive/${1}.json.\n"; 
       fFailedDBConnection 2
     else
-      REG_HASH=$( jq -r " .versions.\"${WOV_PVER}\".checksum" ${WOV_BASEDIR}/wovtools/db/registry/${1}.json )
+      REG_HASH=$( jq -r " .versions.\"${WOV_PVER}\".checksum" ${WOV_BASEDIR}/wovtools/db/archive/${1}.json )
       if [ "${REG_HASH}" == "null" ]; then
-        if [ "$DOECHO" -ge 2 ]; then echo "no registry entry for pver ${WOV_PVER} so looking at DB as parent (pver:${DB_PVER})" 1>&2; fi
-        REG_HASH=$( jq -r " .versions.\"${DB_PVER}\".checksum" ${WOV_BASEDIR}/wovtools/db/registry/${1}.json )
+        if [ "$DOECHO" -ge 2 ]; then echo "no archive entry for pver ${WOV_PVER} so looking at DB as parent (pver:${DB_PVER})" 1>&2; fi
+        REG_HASH=$( jq -r " .versions.\"${DB_PVER}\".checksum" ${WOV_BASEDIR}/wovtools/db/archive/${1}.json )
       fi 
       if [ "${DB_HASH}" == "${REG_HASH}" ]; then chk_1=F; else chk_1=T; fi
     fi
@@ -270,14 +270,14 @@ function doPushCheck()
     #if [ "$?" == "0" ]; then chk_3=F; else chk_3=T; fi
   fi
 
-  # 4 - are there changes in the registry, for this database and pver
+  # 4 - are there changes in the archive, for this database and pver
   if [ "$retval" == "0" ]; then
-    if [ -e ${WOV_BASEDIR}/wovtools/db/registry/${1}/${WOV_PVER}.deltas ]; then chk_4=T; else chk_4=F; fi
+    if [ -e ${WOV_BASEDIR}/wovtools/db/archive/${1}/${WOV_PVER}.deltas ]; then chk_4=T; else chk_4=F; fi
   fi
 
-  # 5 - check git of registry NOTE: SKIPGITCHECKS does not impact registry
+  # 5 - check git of archive NOTE: SKIPGITCHECKS does not impact archive
   if [ "$retval" == "0" ]; then
-    wov-git-check -q ${WOV_BASEDIR}/wovtools/db/registry
+    wov-git-check -q ${WOV_BASEDIR}/wovtools/db/archive
     if [ "$?" == "0" ]; then chk_5=F; else chk_5=T; fi
   fi
 
@@ -295,8 +295,8 @@ function doPushCheck()
       else
         printf "     3 : ${chk_3} - main git repo changes, try: 'git status'\n"
       fi
-      printf "     4 : ${chk_4} - registry delta changes for pver\n"
-      printf "     5 : ${chk_5} - registry git changes\n"
+      printf "     4 : ${chk_4} - archive delta changes for pver\n"
+      printf "     5 : ${chk_5} - archive git changes\n"
     fi
 
 
@@ -308,16 +308,16 @@ function doPushCheck()
       elif [ "${chk_1}" == "F" ] && [ "${chk_4}" == "F" ]; then
         retval=0
       elif [ "${chk_1}" == "T" ]; then # 4 is false then
-        printf "FAILED: if you have db schema changes, you need to have deltas in registry to account.\n"
+        printf "FAILED: if you have db schema changes, you need to have deltas in archive to account.\n"
         printf "\n  run: 'wov-push-db -v --any-push-blockage' for more info.\n"
         printf "\nTo get current schema of database X: 'wov-db-connect DBNAME --schema' (ex. apidb)\n"
   #    elif [ "${chk_4}" == "T" ]; then # 1 is false then
-  #      printf "FAILED: if you have deltas in registry, you need to have db schema changes to account.\n"
+  #      printf "FAILED: if you have deltas in archive, you need to have db schema changes to account.\n"
       fi
     else
-      if [ "${chk_2}" == "T" ] ; then printf "BLOCK: you have ${1}.deltas in wovtools/db to commit. Run 'wov-push-db' to push deltas into registry.\n"; fi
+      if [ "${chk_2}" == "T" ] ; then printf "BLOCK: you have ${1}.deltas in wovtools/db to commit. Run 'wov-push-db' to push deltas into archive.\n"; fi
       if [ "${chk_3}" == "T" ] ; then printf "BLOCK: project has changes to check into git.\n"; fi
-      if [ "${chk_5}" == "T" ] ; then printf "BLOCK: wovtools/db/registry has changes to check into git.\n"; fi
+      if [ "${chk_5}" == "T" ] ; then printf "BLOCK: wovtools/db/archive has changes to check into git.\n"; fi
     fi
 
     if [ $DOECHO -ge 1 ]; then
@@ -375,7 +375,7 @@ function doCommitDB()
   fi
 
   # make sure directory exists for database
-  mkdir -p ${WOV_BASEDIR}/wovtools/db/registry/$1
+  mkdir -p ${WOV_BASEDIR}/wovtools/db/archive/$1
 
 
   # get current db wovtools pver
@@ -411,10 +411,10 @@ function doCommitDB()
 
     # - 2 ----------------------------------------------------------------- 
     # --------------------------------------------------------------------- 
-    echo "  ... move deltas into registry"
+    echo "  ... move deltas into archive"
 
     # append delta to file
-    appendfile=${WOV_BASEDIR}/wovtools/db/registry/$1/${WOV_PVER}.deltas
+    appendfile=${WOV_BASEDIR}/wovtools/db/archive/$1/${WOV_PVER}.deltas
     cat <<EOF >> ${appendfile}
 
 # - wov-push-db -------------------------------------------------------
@@ -431,8 +431,8 @@ EOF
 
     # - 2.1 save schema ---------------------------------------------------
     # --------------------------------------------------------------------- 
-    mkdir -p ${WOV_BASEDIR}/wovtools/db/registry/$1/schemas
-    wov-db-connect ${1} --schema > ${WOV_BASEDIR}/wovtools/db/registry/$1/schemas/${WOV_PVER}.schema
+    mkdir -p ${WOV_BASEDIR}/wovtools/db/archive/$1/schemas
+    wov-db-connect ${1} --schema > ${WOV_BASEDIR}/wovtools/db/archive/$1/schemas/${WOV_PVER}.schema
     r=$?
     if [ "$r" != "0" ]; then
       printf "\n\nERROR: failed to write schemas to regsitry.\n\n"
@@ -440,12 +440,12 @@ EOF
     fi
 
 
-    # - 3. update db registry entry for this pver -------------------------
+    # - 3. update db archive entry for this pver -------------------------
     # --------------------------------------------------------------------- 
-    echo "  ... updating db registry entry for this pver"
-    if [ ! -e ${WOV_BASEDIR}/wovtools/db/registry/$1.json ]; then
-      echo "    ... building registry for $1."
-      cat <<EOF > ${WOV_BASEDIR}/wovtools/db/registry/$1.json
+    echo "  ... updating db archive entry for this pver"
+    if [ ! -e ${WOV_BASEDIR}/wovtools/db/archive/$1.json ]; then
+      echo "    ... building archive for $1."
+      cat <<EOF > ${WOV_BASEDIR}/wovtools/db/archive/$1.json
 {
   "wovtoolsversion": "$WOV_VERSION",
   "versions"       : {}
@@ -454,22 +454,22 @@ EOF
     fi
     # append this entry
     jq " .versions.\"${WOV_PVER}\"={ \"checksum\": \"${CHKSUM}\", \"parent\": { \"type\": \"pver\", \"pver\": \"${DB_PVER}\" } }" \
-       ${WOV_BASEDIR}/wovtools/db/registry/$1.json > ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/registry/$1.json && rm ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$
+       ${WOV_BASEDIR}/wovtools/db/archive/$1.json > ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/archive/$1.json && rm ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$
     DB_snapshot="$( echo -e "${DB_ENTRY[6]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
     #echo "DBENTRY snapshot : ${DB_snapshot}" 1>&2
     if [ "$DB_snapshot" != "" ]; then
       echo "DBENTRY append snapshot : ${DB_snapshot}" 1>&2
       jq " .versions.\"${WOV_PVER}\".parent.snapshot=\"${DB_snapshot}\"" \
-       ${WOV_BASEDIR}/wovtools/db/registry/$1.json > ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/registry/$1.json && rm ${WOV_BASEDIR}/wovtools/db/registry/.$1.json.$$
+       ${WOV_BASEDIR}/wovtools/db/archive/$1.json > ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/archive/$1.json && rm ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$
     fi
 
 
-    # - 4. update registry database pver number, with checksum ------------
+    # - 4. update archive database pver number, with checksum ------------
     # --------------------------------------------------------------------- 
-    echo "  ... update registry database pver number, with checksum"
+    echo "  ... update archive database pver number, with checksum"
     R=$(wov-db-connect $1 -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver ) VALUES ( '$1', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER} );")
     if [ "$?" != "0" ]; then
-      printf "\n\nERROR: failed updating registry database pver number with checksum.\n"
+      printf "\n\nERROR: failed updating archive database pver number with checksum.\n"
       fFailedDBConnection 3
     fi
   fi

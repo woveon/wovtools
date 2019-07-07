@@ -63,10 +63,10 @@ function doGenDBDeltas()
   C=${DB_TARGET}
 
   # check if current DB_TARGET exists
-  DB_TARGET_CHECK=$(cat ${WOV_BASEDIR}/wovtools/db/registry/${WOVDB_DBNAME}.json | jq -r '.versions["'${C}'"]')
+  DB_TARGET_CHECK=$(cat ${WOV_BASEDIR}/wovtools/db/archive/${WOVDB_DBNAME}.json | jq -r '.versions["'${C}'"]')
   if [ "${DB_TARGET_CHECK}" == "null" ]; then
     printf "\nERROR: current DB_TARGET does not exist. Find the largest version smaller than yours.\n"
-    DB_TARGET_CHECK=( $(cat ${WOV_BASEDIR}/wovtools/db/registry/${WOVDB_DBNAME}.json | jq -r '.versions | to_entries[] | .key' | sort) )
+    DB_TARGET_CHECK=( $(cat ${WOV_BASEDIR}/wovtools/db/archive/${WOVDB_DBNAME}.json | jq -r '.versions | to_entries[] | .key' | sort) )
     printf "  ...existing versions: ${DB_TARGET_CHECK[*]}\n"
     printf "  ... set target with '--pver X'\n"
     exit 1
@@ -76,7 +76,7 @@ function doGenDBDeltas()
   # Start at targe and work back
   while [ "$C" != "" ] && [ "$C" != "${DB_CUR}"  ]; do
     echo "db recurse at $C, going back to ${DB_CUR}, from db target ${DB_TARGET}"
-    parray=( $(cat ${WOV_BASEDIR}/wovtools/db/registry/${WOVDB_DBNAME}.json | jq -r '.versions["'${C}'"].parent | .type, .pver, .snapshot') )
+    parray=( $(cat ${WOV_BASEDIR}/wovtools/db/archive/${WOVDB_DBNAME}.json | jq -r '.versions["'${C}'"].parent | .type, .pver, .snapshot') )
     # echo "parray :${parray[@]}"
     C=${parray[1]}
     ORDER=( "${C}" "${ORDER[@]}" )
@@ -87,9 +87,9 @@ function doGenDBDeltas()
 
   # build deltas
   for i in "${ORDER[@]}"; do
-    #if [ "$(cat ${WOV_BASEDIR}/wovtools/db/registry/${WOVDB_DBNAME}.json | jq -r '.versions["'${C}'"].parent.snapshot') )
+    #if [ "$(cat ${WOV_BASEDIR}/wovtools/db/archive/${WOVDB_DBNAME}.json | jq -r '.versions["'${C}'"].parent.snapshot') )
     printf "\n# = wov-db-deploy =====================================================\n" 
-    cat ${WOV_BASEDIR}/wovtools/db/registry/${WOVDB_DBNAME}/$i.deltas
+    cat ${WOV_BASEDIR}/wovtools/db/archive/${WOVDB_DBNAME}/$i.deltas
   done
 
 }

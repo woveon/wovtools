@@ -119,7 +119,7 @@ function InitProject()
 
   # Ensure lines in .gitignore
   echo "... creating .gitignore"
-  LINES=("*.swp" ".DS_Store" "wovtools/secrets" "wovtools/cache" "wovtools/db/*.deltas" "wovtools/db/registry" "wovtools/local.json" "*.old" "*.orig" ".mochawesome-report" "*.log")
+  LINES=("*.swp" ".DS_Store" "wovtools/secrets" "wovtools/cache" "wovtools/db/*.deltas" "wovtools/db/archive" "wovtools/local.json" "*.old" "*.orig" ".mochawesome-report" "*.log")
   touch .gitignore
   for f in "${LINES[@]}"; do
     echo "  ... adding to .gitignore: $f"
@@ -507,27 +507,27 @@ rm ${WOV_BASEDIR}/wovtools/.config.json.*
 
 echo ""
 if [ -e "${WOV_BASEDIR}/wovtools/db" ] && 
-   [ -e "${WOV_BASEDIR}/wovtools/db/registry" ] &&
-   [ -e "${WOV_BASEDIR}/wovtools/db/registry/.git" ]; then
-  echo "ARCHIVE> Database Registry exists (at wovtools/db/registry)"
+   [ -e "${WOV_BASEDIR}/wovtools/db/archive" ] &&
+   [ -e "${WOV_BASEDIR}/wovtools/db/archive/.git" ]; then
+  echo "ARCHIVE> Database Registry exists (at wovtools/db/archive)"
 else
-  mkdir -p ${WOV_BASEDIR}/wovtools/db/registry/.git
+  mkdir -p ${WOV_BASEDIR}/wovtools/db/archive/.git
 
   # make gitignore
-  cat <<EOF > ${WOV_BASEDIR}/wovtools/db/registry/.gitignore
+  cat <<EOF > ${WOV_BASEDIR}/wovtools/db/archive/.gitignore
 *.swp
 EOF
 
   WOV_DBREGISTRY=`git config --get remote.origin.url`
-  WOV_DBREGISTRY="${WOV_DBREGISTRY::-4}_registry.git"
+  WOV_DBREGISTRY="${WOV_DBREGISTRY::-4}_archive.git"
   read -r -p "ARCHIVE> Database Registry git location: (\"${WOV_DBREGISTRY}\") ... Correct? [Y/n] " A
   if [ "${A}" != "" ]; then WOV_DBREGISTRY="${A}"; fi
 
   # make git repository
-  cd ${WOV_BASEDIR}/wovtools/db/registry && git init -q
+  cd ${WOV_BASEDIR}/wovtools/db/archive && git init -q
 
   # configure it
-  cat <<EOF > ${WOV_BASEDIR}/wovtools/db/registry/.git/config
+  cat <<EOF > ${WOV_BASEDIR}/wovtools/db/archive/.git/config
 [core]
 	repositoryformatversion = 0
 	filemode = true
@@ -549,10 +549,10 @@ EOF
 fi
 
 echo "... test Git remote repo configuration/existence"
-#  cd ${WOV_BASEDIR}/wovtools/db/registry && git remote -v
+#  cd ${WOV_BASEDIR}/wovtools/db/archive && git remote -v
 timeout_monitor 8 "$$" "TIMEOUT ERROR: failed to connect to remote repository. You should: 1) check network connection 2) ensure repo exists." &
 Timeout_monitor_pid=$!
-cd ${WOV_BASEDIR}/wovtools/db/registry && git ls-remote -q > /dev/null
+cd ${WOV_BASEDIR}/wovtools/db/archive && git ls-remote -q > /dev/null
 if [ "$?" != "0" ]; then
   kill "$Timeout_monitor_pid"
   printf "\nERROR: failed to find repo. Check your configuration and ensure repo exists.\n\n"

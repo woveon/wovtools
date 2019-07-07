@@ -485,7 +485,7 @@ function doPushDB()
   # TODO: check db version and make sure matches to base
   doCheckDBVer
 
-  # push files into registry
+  # push files into archive
 
   # create new base
 
@@ -698,7 +698,7 @@ function doRoll()
     local v=${TARGETPVER}
     while [ "$v" != "" ]; do
       echo "    ... v:$v"
-      REG_HASH=$( jq -r " .versions.\"${v}\".parent.pver" ${WOV_BASEDIR}/wovtools/db/registry/${WOVDB_DBNAME}.json )
+      REG_HASH=$( jq -r " .versions.\"${v}\".parent.pver" ${WOV_BASEDIR}/wovtools/db/archive/${WOVDB_DBNAME}.json )
       echo "    ...   hash:$REG_HASH"
       v=$REG_HASH
     done

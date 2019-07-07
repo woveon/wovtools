@@ -57,7 +57,7 @@ function fDisplayCommands()
 #PUSH to ARCHIVE: BUILD and PUSH
 - wov-push-container - Pushes the container(s) by building and pushing to the archive.
 - wov-push-k8s       - Pushes the Kubernetes files to the archive. (was wov-build-conf or wov-arch-conf)
-- wov-push-db        - (previous wov-db-commit) This moves database changes for the current checked in code (pver) into the db registry for versioning.
+- wov-push-db        - (previous wov-db-commit) This moves database changes for the current checked in code (pver) into the db archive for versioning.
 - wov-push           - Formal push of a version into the archive.
 
 
