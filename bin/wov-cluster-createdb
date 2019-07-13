@@ -1,0 +1,87 @@
+#!/usr/bin/env bash 
+
+# Load vars
+eval $(wov-env --provider --conf)
+
+. wov-env-common
+
+if [ $# -ne 1 ]; then
+  printf "\n\nERROR: requires a database name as parameter #1.\n\n"
+  exit 1
+fi
+
+WOV_CLUSTER_UNFLAVORED="${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}"
+
+
+DB=$(doResName "DB" "${WOV_CLUSTER}" "${1}") ; DBe=$?
+if [ $DBe -ne 0 ]; then printf "\nERROR: failed to construct the database name.\n\n"; exit 1; fi
+
+DBSG=$(doResName "DBSG" "${WOV_CLUSTER_UNFLAVORED}" "${1}") ; DBSGe=$?
+if [ $DBSGe -ne 0 ]; then printf "\nERROR: failed to construct the database security group name.\n\n"; exit 1; fi
+
+DBSNG=$(doResName "DBSNG" "${WOV_CLUSTER_UNFLAVORED}" "${1}")
+
+WOV_DB_type="WOV_${1}_type" ; WOV_DB_type=${!WOV_DB_type}
+WOV_DB_username="WOV_${1}_username" ; WOV_DB_username=${!WOV_DB_username}
+WOV_DB_password="WOV_${1}_password" ; WOV_DB_password=${!WOV_DB_password}
+WOV_DB_database="WOV_${1}_database" ; WOV_DB_database=${!WOV_DB_database}
+WOV_DB_version="WOV_${1}_version" ; WOV_DB_version=${!WOV_DB_version}
+WOV_DB_instance_class="WOV_${1}_instance_class" ; WOV_DB_instance_class=${!WOV_DB_instance_class}
+WOV_DB_instance_storage="WOV_${1}_instance_storage" ; WOV_DB_instance_storage=${!WOV_DB_instance_storage}
+
+cat <<EOF
+
+This is a manual process, so follow these steps:
+
+1) Run 'wov-cluster-configdbnet' to set up db networkiing to your cluster. 
+   NOTE: it is(should be) non-destructive so you should not have fear running multiple times.
+
+2) Create a database in AWS's GUI.
+
+--------------------------------------------------
+ DB instance identifier : ${DB}
+          Database Type : ${WOV_DB_type}
+        Master Username : ${WOV_DB_username}
+               password : ${WOV_DB_password}
+               database : ${WOV_DB_database}
+       postgres version : ${WOV_DB_version}
+                    VPC : Default
+            DB Instance : ${WOV_DB_instance_class}
+             DB Storage : ${WOV_DB_instance_storage} GB, General Purpose SSD
+
+           Subnet group : ${DBSNG}
+      DB security group : ${DBSG}
+     Availability zones : ${AWS_ZONES[@]}, multi, so no preference for which 
+
+---fixed values
+   Enable Encryption : true, master key aws/rds
+      Deletion Prot. : true
+   Public Accessible : false
+          Monitoring : disabled
+ log postgresql log, upgrade log
+ auto minor version upgrade enabled
+ maint window, no pref
+ backup 7 days no pref
+ IAM DB Authentication - disabled
+
+
+3) Bastion configuration:
+--------------------------------------------------
+  You should add a line to ~/.ssh/config, to your bastion host entry:
+EOF
+
+wov-bastion-connection --check-db ${1} > /dev/null
+if [ $? -ne 0 ]; then
+  cat <<EOF
+
+LocalForward 65440 ENDPOINT.rds.amazonaws.com:5432
+  > When your database is up, use RDS to find it's actual endpoint,
+  > which will look something like :
+  >  ${DB}.STUFF.REGION.rds.amazonaws.com:5432
+
+EOF
+else
+  echo "  - found bastion entry for database (hope it's correct!)."
+  echo ""
+fi
+

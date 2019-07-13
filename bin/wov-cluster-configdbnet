@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 
-CONFIG_DBS=0
-CONFIG_PEERING=0
-CONFIG_PEERINGROUTES=0
+DOECHO=1
+
+# --------------------------------------------------------------------- 
+# Set to 0 to turn this off for debugging
+# --------------------------------------------------------------------- 
+CONFIG_DBS=1
+CONFIG_PEERING=1
+CONFIG_PEERINGROUTES=1
 [ "${CONFIG_PEERINGROUTES}" == "1" ] && CONFIG_PEERING=1
   # --- requires some variables
+
+
 
 # Load base environment, enough to grab cluster
 . wov-env-loader
@@ -29,12 +36,46 @@ if [ "${UNDEFVAR}" != "0" ]; then
   exit 1
 fi
 
+if [ $DOECHO -gt 0 ]; then echo "Configuring/Ensuring Database Network for Cluster '${WOV_CLUSTER}'"; fi
 
 # --------------------------------------------------------------------- 
-echo "... find default VPC"
+#echo "... finding default VPC"
 DVPCID=`aws ec2 describe-vpcs --filters "Name=tag-key, Values=Name, Name=tag-value, Values=default" | jq -r ".Vpcs[].VpcId"`
 if [ "$?" != "0" ]; then echo "\nERROR: failed to find default VPC.\n"; exit 1; fi
 
+CVPCID=`aws ec2 describe-vpcs --filters "Name=tag-key, Values=Name, Name=tag-value, Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}" | jq -r ".Vpcs[].VpcId"`
+if [ "$?" != "0" ]; then echo "\nERROR: failed to find Cluster VPC.\n"; exit 1; fi
+
+WOV_CLUSTER_UNFLAVORED="${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}"
+
+# Subnets in default VPC (DBSN is created to use in searches)
+DBSN1=$(doResName "DBSN" "${WOV_CLUSTER_UNFLAVORED}" "${WOV_cluster_zone_primary}")
+DBSN2=$(doResName "DBSN" "${WOV_CLUSTER_UNFLAVORED}" "${WOV_cluster_zone_secondary}")
+DBSN=$(doResName "DBSN" "${WOV_CLUSTER_UNFLAVORED}" "")
+DBSNG=$(doResName "DBSNG" "${WOV_CLUSTER_UNFLAVORED}")
+
+# Security Group in default VPC
+DBSG=$(doResName  "DBSG" "${WOV_CLUSTER_UNFLAVORED}")
+
+# Route table in default VPC for Databases
+DBRT=$(doResName DBRT ${WOV_CLUSTER_UNFLAVORED})
+
+# Peering Connection between cluster and default VPC
+PEERCONN=$(doResName "PEERCONN" "${WOV_CLUSTER}")
+
+
+if [ $DOECHO -gt 0 ]; then
+  echo ""
+  echo "... Database Network Setup"
+  echo "  ... will ensure in Default VPC:"
+  echo "              subnets : ${DBSN1} ${DBSN2}"
+  echo "          subnetgroup : ${DBSNG}"
+  echo "    DB security group : ${DBSG}"
+  echo "          route table : ${DBRT}"
+  echo "  ... will create to link to cluster VPC:"
+  echo "   peering connection : ${PEERCONN}"
+  echo ""
+fi
 
 
 # --------------------------------------------------------------------- 
@@ -44,41 +85,53 @@ if [ "$?" != "0" ]; then echo "\nERROR: failed to find default VPC.\n"; exit 1; 
 #  requires a Peered connection and a separate subnet block.
 # --------------------------------------------------------------------- 
 if [ "$CONFIG_DBS" == "1" ]; then
-
   # --------------------------------------------------------------------- 
   # create 2 private subnets
 
-  if [ "$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${WOV_CLUSTER}-dbsn-${WOV_cluster_zone_primary}" | jq '.Subnets[0]')" == "null" ]; then
-    echo "  ... creating ${WOV_CLUSTER}-dbsn-${WOV_cluster_zone_primary}"
-    R1=$(aws ec2 create-subnet --vpc-id ${DVPCID} --cidr-block ${WOV_cluster_rds_subnet1} --availability-zone ${WOV_cluster_region}${WOV_cluster_zone_primary})
-    RR1=$?
-    if [ "$RR1" != "0" ]; then printf "\n\nERROR: could not create subnet.\n  ${R1}\n"; exit 1; fi
+  # echo "DBSN1 : ${DBSN1}"
+  # echo "DBSN2 : ${DBSN2}"
+  DBSNQ1=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${DBSN1}" | jq '.Subnets[0]') ; DBSNQ1e=$?
+  if [ "${DBSNQ1e}" != "0" ]; then echo "ERROR: could not query subnets."; exit 1; fi
+  if [ "${DBSNQ1}" == "null" ]; then
+    echo "  ... creating ${DBSN1}"
+    R1=$(aws ec2 create-subnet --vpc-id ${DVPCID} --cidr-block ${WOV_cluster_rds_subnet1} --availability-zone ${WOV_cluster_region}${WOV_cluster_zone_primary}) ; RR1=$?
+#    echo "R1: ${R1}"
+#    echo "RR1: ${RR1}"
+    if [ "${RR1}" != "0" ]; then printf "\n\nERROR: could not create subnet: ${R1}\n"; exit 1; fi
     SNID1=$(echo ${R1} | jq '.Subnet.SubnetId' | sed -e 's/^"//' -e 's/"$//' )
-    RRR1=$(aws ec2 create-tags --resources $SNID1 --tags "Key=Name,Value=\"${WOV_CLUSTER}-dbsn-${WOV_cluster_zone_primary}\"" "Key=Cluster,Value=\"${WOV_CLUSTER}\"" )
-    RRRR1=$?
+#    echo "SNID1: ${SNID1}"
+    RRR1=$(aws ec2 create-tags --resources $SNID1 --tags "Key=Name,Value=\"${DBSN1}\"" "Key=Cluster,Value=\"${WOV_CLUSTER}\"" ) ; RRRR1=$?
+#    echo "RRR1: ${RRR1}"
+#    echo "RRRR1: ${RRRR1}"
     if [ "$RRRR1" != "0" ]; then printf "\n\nERROR: failed to name subnet id '${SNID1}'. Unknown error.\n"; printf "${RRR1}"; exit 1; fi
   else
-    echo "  ... existing ${WOV_CLUSTER}-dbsn-${WOV_cluster_zone_primary}"
+    echo "  ... existing ${DBSN1} : $(echo ${DBSNQ1} | jq -r ".CidrBlock")"
   fi
 
-  if [ "$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${WOV_CLUSTER}-dbsn-${WOV_cluster_zone_secondary}" | jq '.Subnets[0]')" == "null" ]; then
-    echo "  ... creating ${WOV_CLUSTER}-dbsn-${WOV_cluster_zone_secondary}"
-    R2=$(aws ec2 create-subnet --vpc-id ${DVPCID} --cidr-block ${WOV_cluster_rds_subnet2} --availability-zone ${WOV_cluster_region}${WOV_cluster_zone_secondary})
-    RR2=$?
-    if [ "$RR2" != "0" ]; then printf "\n\nERROR: could not create subnet.\n  ${R2}\n"; exit 1; fi
+  DBSNQ2=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${DBSN2}" | jq '.Subnets[0]') ; DBSNQ2e=$?
+  if [ "${DBSNQ2e}" != "0" ]; then echo "ERROR: could not query subnets."; exit 1; fi
+  if [ "${DBSNQ2}" == "null" ]; then
+    echo "  ... creating ${DBSN2}"
+    R2=$(aws ec2 create-subnet --vpc-id ${DVPCID} --cidr-block ${WOV_cluster_rds_subnet2} --availability-zone ${WOV_cluster_region}${WOV_cluster_zone_secondary}) ; RR2=$?
+#    echo "R2: ${R2}"
+#    echo "RR2: ${RR2}"
+    if [ "${RR2}" != "0" ]; then printf "\n\nERROR: could not create subnet: ${R2}\n"; exit 1; fi
     SNID2=$(echo ${R2} | jq '.Subnet.SubnetId' | sed -e 's/^"//' -e 's/"$//' )
-    RRR2=$(aws ec2 create-tags --resources $SNID2 --tags "Key=Name,Value=\"${WOV_CLUSTER}-dbsn-${WOV_cluster_zone_secondary}\"" "Key=Cluster,Value=\"${WOV_CLUSTER}\"" )
-    RRRR2=$?
+#    echo "SNID2: ${SNID2}"
+    RRR2=$(aws ec2 create-tags --resources $SNID2 --tags "Key=Name,Value=\"${DBSN2}\"" "Key=Cluster,Value=\"${WOV_CLUSTER}\"" ) ; RRRR2=$?
+#    echo "RRR2: ${RRR2}"
+#    echo "RRRR2: ${RRRR2}"
     if [ "$RRRR2" != "0" ]; then printf "\n\nERROR: failed to name subnet id '${SNID2}'. Unknown error.\n"; printf "${RRR2}"; exit 1; fi
   else
-    echo "  ... existing ${WOV_CLUSTER}-dbsn-${WOV_cluster_zone_secondary}"
+    echo "  ... existing ${DBSN2} : $(echo ${DBSNQ2} | jq -r ".CidrBlock")"
   fi
 
 
   # --------------------------------------------------------------------- 
   # create database subnet group
-  SNIDS=$(aws ec2 describe-subnets --filters "Name=tag:Cluster,Values=${WOV_CLUSTER}" --query 'Subnets[*].SubnetId' --output text)
-  if [ "$?" != "0" ]; then echo "ERROR: could not find subnet groups, tagged to cluster ${WOV_CLUSTER}."; exit 1; fi
+  SNIDS=$(aws ec2 describe-subnets --filters "Name=tag:Cluster,Values=${WOV_CLUSTER}" --query 'Subnets[*].SubnetId' --output text) ; SNIDSe=$?
+  if [ "${SNIDSe}" != "0" ]; then echo "ERROR: could not find subnet groups, tagged to cluster ${WOV_CLUSTER}."; exit 1; fi
+
 
   SNIDARRAY=( ${SNIDS} )
   DBSNGS=$(aws rds describe-db-subnet-groups)
@@ -91,17 +144,45 @@ if [ "$CONFIG_DBS" == "1" ]; then
   done
 
   if [ "${FOUND}" != "0" ]; then 
-    echo "  ... some of the db subnet groups are used, assuming part of existing and valid db subnet"
+    echo "  ... existing db subnet group ${DBSNG} as some of the db subnet groups are used, assuming part of existing and valid db subnet"
   else
-    echo "  ... creating db subnet group ${WOV_CLUSTER}-dsng"
+    echo "  ... creating db subnet group ${DBSNG}"
     DSNG=$(aws rds create-db-subnet-group \
-      --db-subnet-group-name ${WOV_CLUSTER}-dsng \
+      --db-subnet-group-name ${DBSNG} \
       --db-subnet-group-description "DBSubnet for database ${WOV_CLUSTER}." \
-      --subnet-ids ${SNIDS})
-    if [ "$?" != "0" ]; then echo "ERROR: could not create database subnet groups with subnet-ids '${SNIDS}'."; exit 1; fi
+      --subnet-ids ${SNIDS}) ; DSNGe=$?
+    if [ "${DSNGe}" != "0" ]; then echo "ERROR: could not create database subnet groups with subnet-ids '${SNIDS}'."; exit 1; fi
+  fi
+
+  # --------------------------------------------------------------------- 
+  # create security group in Default cluster for database to be created
+
+  DBSG_GroupId=$(aws ec2 describe-security-groups --filters "Name=tag:KubernetesCluster,Values=wov-aws-va-grape.alywan.com" --filters "Name=vpc-id,Values=${DVPCID}" --group-names "${DBSG}" 2> /dev/null |  jq -r ".SecurityGroups[].GroupId") ; DBSG_GroupIde=$?
+  # echo "DBSG_GroupId: '${DBSG_GroupId}' '${DBSG_GroupIde}'"
+  if [[ ${DBSG_GroupIde} -ne 0 ]]; then printf "\n\nERROR: failed to query the security group.\n"; exit 1; fi
+  if [ "${DBSG_GroupId}" == "" ]; then
+    echo "  ... create security group '${DBSG}' in default cluster for cluster databases"
+    DBSG_JSON=$(aws ec2 create-security-group --description "DB Security group for ${WOV_CLUSTER}" --group-name "${DBSG}" --vpc-id "${DVPCID}") ; DBSG_JSONe=$?
+    if [[ ${DBSG_JSONe} -ne 0 ]]; then printf "\n${DBSG_JSON}\n\nERROR: failed to create the security group.\n"; exit 1; fi
+    # echo "DBSG_JSON: ${DBSG_JSON}"
+    DBSG_GroupId=$(echo "${DBSG_JSON}" | jq -r ".GroupId")
+    echo "    ... created DBSG: ${DBSG_GroupId}"
+
+    # Tagging 
+    aws ec2 create-tags --resources "${DBSG_GroupId}" --tags "Key=Name,Value=${DBSG}" > /dev/null
+    if [[ ${?} -ne 0 ]]; then printf "\n\nERROR: failed to tag database security group.\n"; exit 1; fi
+
+    # now add rules for postgres, port 5432, cidr 0.0.0.0/0
+    # NOTE: should probably restrict to subnets in Cluster, but leaving open for now since is private anyway
+    Q=$(aws ec2 authorize-security-group-ingress --group-id ${DBSG_GroupId} --ip-permissions "IpProtocol=tcp,FromPort=5432,ToPort=5432,IpRanges=[{CidrIp=0.0.0.0/0}]") ; Qe=$?
+    if [[ ${Qe} -ne 0 ]]; then printf "ERROR: failed to authorize the security group ingress rule for postgres.\n"; exit 1; fi
+
+  else
+    echo "  ... existing SG: '${DBSG}' as '${DBSG_GroupId}'. Assuming ingress rules are good (postgres 5432 0.0.0.0/0)"
   fi
 
 fi
+
 
 # --------------------------------------------------------------------- 
 # Peered Connection - for databases
@@ -109,141 +190,179 @@ fi
 #  This connects the default VPC subnets with databases in them, to the 
 #  subnets in the Cluster VPC.
 # --------------------------------------------------------------------- 
-
-
 if [ "${CONFIG_PEERING}" == "1" ]; then
-  echo "... create peering connection"
+  printf "\n... create peering connection between DB and cluster VPCs : ${PEERCONN}\n"
 
-  echo "  ... check for existing"
-  PC=$(aws ec2 describe-vpc-peering-connections --filters "Name=tag:Name,Values=${WOV_CLUSTER}-peerconn" | jq -r '.VpcPeeringConnections[0]')
-  if [ "$?" != "0" ]; then echo "ERROR: could not connect to AWS."; exit 1; fi
-
-
+  PC=$(aws ec2 describe-vpc-peering-connections --filters "Name=tag:Name,Values=${PEERCONN}" | jq -r '.VpcPeeringConnections[0]') ; PCe=$?
+  if [ "${PCe}" != "0" ]; then echo "ERROR: could not connect to AWS."; exit 1; fi
+  if [ "$(echo ${PC} | jq -r '.Status.Code')" == "deleted" ]; then echo "ERROR: peering connection ${PEERCONN} is currently of status 'deleted'. Might want to rename it for now, then it will delete normally and you can continue."; exit 1; fi
   if [ "${PC}" == "null" ]; then
     echo "  ... creating peering connection"
 
-    PEERCONNTAG="${WOV_CLUSTER}-peerconn"
+#    CVPCID=`aws ec2 describe-vpcs --filters "Name=tag-key, Values=Name, Name=tag-value, Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}" | jq -r ".Vpcs[].VpcId"`
+#    if [ "$?" != "0" ]; then echo "\nERROR: failed to find default VPC.\n"; exit 1; fi
+#    if [ "${CVPCID}" == "" ]; then echo "ERROR: Could not find peer vpc with tag/name: ${WOV_CLUSTER}.${WOV_cluster_dns_domain}"; exit 1; fi
 
-    PEERVPCID=`aws ec2 describe-vpcs --filters "Name=tag-key, Values=Name, Name=tag-value, Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}" | jq -r ".Vpcs[].VpcId"`
-    if [ "$?" != "0" ]; then echo "\nERROR: failed to find default VPC.\n"; exit 1; fi
-    if [ "${PEERVPCID}" == "" ]; then echo "ERROR: Could not find peer vpc with tag/name: ${WOV_CLUSTER}.${WOV_cluster_dns_domain}"; exit 1; fi
-
-    echo "    - requester: ${DVPCID} acceptor: ${PEERVPCID}"
-    PC=$(aws ec2 create-vpc-peering-connection --vpc-id ${DVPCID} --peer-vpc-id ${PEERVPCID} )
+    echo "    - requester: ${DVPCID} acceptor: ${CVPCID}"
+    PC=$(aws ec2 create-vpc-peering-connection --vpc-id ${DVPCID} --peer-vpc-id ${CVPCID} )
     a=$?
     # echo "PC: ${PC}"
-    if [ "$a" != "0" ]; then echo "\nERROR: failed to create Peer Connection from VPC ${DVPCID} to ${PEERVPCID}.\n"; exit 1; fi
+    if [ "$a" != "0" ]; then echo "\nERROR: failed to create Peer Connection from VPC ${DVPCID} to ${CVPCID}.\n"; exit 1; fi
 
     PCID=`echo ${PC} | jq -r '.VpcPeeringConnection.VpcPeeringConnectionId'`
     echo "  ... peer connection made : ${PCID}, need to tag"
 
-    aws ec2 create-tags --resources "${PCID}" --tags "Key=Name,Value=${PEERCONNTAG}" > /dev/null
+    aws ec2 create-tags --resources "${PCID}" --tags "Key=Name,Value=${PEERCONN}" > /dev/null
     if [ "$?" != "0" ]; then echo "\nERROR: failed to tag/name Peer Connection ${PCID} with ${WOV_CLUSTER}.${WOV_cluster_dns_domain}.\n"; exit 1; fi
 
+    echo "  ... peer connection tagged, need to accept"
     aws ec2 accept-vpc-peering-connection --vpc-peering-connection-id ${PCID} > /dev/null
     if [ "$?" != "0" ]; then echo "\nERROR: failed accepting peer connection ${PCID}\n"; exit 1; fi
 
-    # dns resolution from cluster VPC into RDS subnet
+    echo "  ... peer connection, enabling DNS resolution."
     aws ec2 modify-vpc-peering-connection-options --vpc-peering-connection-id ${PCID} --accepter-peering-connection-options  "AllowDnsResolutionFromRemoteVpc=true"
     if [ "$?" != "0" ]; then echo "\nERROR: failed accepting peer connection ${PCID}\n"; exit 1; fi
   else
     PCID=`echo ${PC} | jq -r '.VpcPeeringConnectionId'`
-    echo "  ... existing peering connection named '${WOV_CLUSTER}-peerconn', ${PCID}"
+    echo "  ... existing peering connection named '${PEERCONN}', ${PCID}"
   fi
 fi
 
 
 # This creates routes w/o checking
 if [ "${CONFIG_PEERINGROUTES}" == "1" ]; then
-  echo "... peering connection routes"
+  printf "\n... create peering connection subnet routes (to and from) and associations\n"
 
-  echo "  ... get subnets in default VPC where databases are"
-  echo "    - ${WOV_cluster_rds_subnet1}"
-  echo "    - ${WOV_cluster_rds_subnet2}"
+#  echo "  ... get subnets in default VPC where databases are"
+#  echo "    - ${WOV_cluster_rds_subnet1}"
+#  echo "    - ${WOV_cluster_rds_subnet2}"
 
-  echo "  ... get subnets in cluster VPC"
-  CLSNIDS=( $(aws ec2 describe-subnets --filters "Name=tag:KubernetesCluster,Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}" | jq -r '.Subnets[].SubnetId') )
-  CLSNCIDR=( $(aws ec2 describe-subnets --filters "Name=tag:KubernetesCluster,Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}" | jq -r '.Subnets[].CidrBlock') )
+  echo "  ... get subnets in cluster's VPC"
+  CLSN=$(aws ec2 describe-subnets --filters "Name=tag:KubernetesCluster,Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}")
+  CLSNNAME=( $(echo ${CLSN} | jq -r '.Subnets[].Tags[] | select(.Key=="Name") | .Value' ) )
+  CLSNIDS=( $(echo ${CLSN} | jq -r '.Subnets[].SubnetId') )
+  CLSNCIDR=( $(echo ${CLSN} | jq -r '.Subnets[].CidrBlock') )
+#  CLSNIDS=( $(aws ec2 describe-subnets --filters "Name=tag:KubernetesCluster,Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}" | jq -r '.Subnets[].SubnetId') )
+#  CLSNCIDR=( $(aws ec2 describe-subnets --filters "Name=tag:KubernetesCluster,Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}" | jq -r '.Subnets[].CidrBlock') )
   let j=${#CLSNIDS[@]}-1
   for i in `seq 0 $j`; do
-    echo "    - ${CLSNIDS[i]} ${CLSNCIDR[i]}"
+    echo "    - ${CLSNNAME[i]} : ${CLSNIDS[i]} ${CLSNCIDR[i]}"
   done
 
-  ALLRTIDS=( $(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=${DVPCID}" --query 'RouteTables[*].RouteTableId' --output text) )
-  echo "all default VPC(${DVPCID}) route table ids ${ALLRTIDS[@]}"
+  #ALLRTIDS=( $(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=${DVPCID}" --query 'RouteTables[*].RouteTableId' --output text) )
+  #echo "all default VPC(${DVPCID}) route table ids ${ALLRTIDS[@]}"
 
-  echo "  ... get all route tables in requester (cluster) vpc in the cluster (2 public and 2 private)"
+  echo "  ... get all route tables in cluster vpc (2 public and 2 private)"
   PR=$(aws ec2 describe-route-tables --filters "Name=tag-key,Values=KubernetesCluster,Name=tag-value,Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}")
-#  echo "PR: ${PR}"
+  # echo "PR: ${PR}"
   PRIDS=( $(echo ${PR} | jq -r ".RouteTables[].RouteTableId")  )
- 
-  if [ "1" == "0" ]; then
-    echo "  ... associate cluster subnet route tables with a cidr with the pcx"
-    # - ie. go to route tables, routes tab, 'edit routes' button"
-    for f in ${PRIDS[@]}; do
-      echo "    - ${f}"
+  echo "    : ${PRIDS[@]}"
 
-      AR=$(aws ec2 create-route --route-table-id $f --vpc-peering-connection-id ${PCID} --destination-cidr-block ${WOV_cluster_rds_subnet1})
-      AR1=$?
-      if [ "${AR1}" == "255" ]; then printf "WARNING: existing route, keeping it and continuing.\n";
-      elif [ "$AR1" != "0" ]; then printf "\nERROR: failed associating route table '$f' with cidr '${WOV_cluster_rds_subnet1}' in peering connection '${PCID}'.\n\n"; exit 1; fi
+  # Get the private route table in default VPC that has all the subnet associations for databases (these subnets are in default VPC, but are then to be peered to the cluster VPC)
+  # TODO: make sure rt-private-subnet-for-rds exists in default VPC
+  DBRTID=
+  DBRTData=$(aws ec2 describe-route-tables --filters "Name=tag:Name,Values=${DBRT}" | jq -r ".RouteTables[]") ; DBRTDatae=$?
+  # echo "DBRTData: 'e:${DBRTDatae}' : ${DBRTData}"
+  if [[ $DBRTDatae -ne 0 ]]; then echo "ERROR: failed describing route tables."; exit 1; fi
+  if [ "${DBRTData}" == "" ]; then 
+    DBRTData=$(aws ec2 create-route-table --vpc-id ${DVPCID} ) ; DBRTDatae=$?
+    if [[ $DBRTDatae -ne 0 ]]; then echo "ERROR: failed creating route table."; exit 1; fi
+    DBRTID=$(echo ${DBRTData} | jq -r ".RouteTable.RouteTableId" )
 
-      AR=$(aws ec2 create-route --route-table-id $f --vpc-peering-connection-id ${PCID} --destination-cidr-block ${WOV_cluster_rds_subnet2})
-      AR1=$?
-      if [ "${AR1}" == "255" ]; then printf "WARNING: existing route, keeping it and continuing.\n";
-      elif [ "$AR1" != "0" ]; then printf "\nERROR: failed associating route table '$f' with cidr '${WOV_cluster_rds_subnet2}' in peering connection '${PCID}'.\n\n"; exit 1; fi
+    # tag it
+    aws ec2 create-tags --resources "${DBRTID}" --tags "Key=Name,Value=\"${DBRT}\"" "Key=Cluster,Value=\"${WOV_CLUSTER}\""
 
-    done
+    echo "  ... created DB route table : ${DBRT} : ${DBRTID}"
   else
-    echo "WARNING: skipping associating cluster subnets with pcx"
+    DBRTID=$(echo ${DBRTData} | jq -r ".RouteTableId" )
+    echo "  ... existing DB route table : ${DBRT} : ${DBRTID}"
   fi
 
-  echo " ... get route tables for DB subnets, let them talk to CLUSTER cidrs"
-  DBSNIDS=( $(aws ec2 describe-subnets --filters "Name=tag:Cluster,Values=${WOV_CLUSTER}" --query 'Subnets[*].SubnetId' --output text) )
-  if [ "$?" != "0" ]; then echo "ERROR: could not find db subnet groups, tagged to cluster ${WOV_CLUSTER}."; exit 1; fi
-  echo "DBSNIDS: ${DBSNIDS[@]}"
+  # Get all DBSN (missing zone param so it selects all)
+  echo "  ... associate DB subnets (in Default VPC) to DB route tables : ${DBSN}*"
+  DBSNIDS=( $(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${DBSN}*" | jq -r '.Subnets[].SubnetId') )
+  # echo "    : ${DBSNIDS[@]}"
+  # echo " DBRTID: ${DBRTID}"
+  # echo " DBRTData: ${DBRTData}"
+  # - For each default VPC subnet that the cluster will run a database in
+  for dbsnid in ${DBSNIDS[@]}; do
+    echo "    ... associating ${dbsnid}"
 
-  DBRTIDS=( $(aws ec2 describe-route-tables --filters "Name=tag:Name,Values=rt-private-subnet-for-rds" --query 'RouteTables[*].RouteTableId' --output text) )
-  if [ "$?" != "0" ]; then echo "ERROR: could not find route tables for database subnets"; exit 1; fi
-  echo "DBRTIDS: ${DBRTIDS[@]}"
-
-  echo "  ... associate database subnet route tables with each cluster subnet's cidr through the pcx"
-  for rtid in ${ALLRTIDS[@]}; do #  for rt in allrts of default VPC,
-    echo "  ... rtid : ${rtid}"
-    rtmatched=0
-    RTASS=( $(aws ec2 describe-route-tables --route-table-ids ${rtid} | jq -r '.RouteTables[].Associations[].SubnetId' ) )
-    for rtassid in ${RTASS[@]}; do #    for rtassid in rt.Associations.SubnetId
-      echo "    ... rtassid : ${rtassid}"
-      for dbsnid in ${DBSNIDS[@]}; do #      for dbsnid in alldbsubnets
-        echo "      ... dbsnid : ${dbsnid}"
-        if [ "${rtassid}" == "${dbsnid}" ]; then #        if rtassid = dbsnid 
-          echo "        ... match: cur${rtmatched}"
-          rtmatched=1
-
-        fi
-      done
-    done
-    if [ "${rtmatched}" != "0" ]; then 
-      echo "do match here for rtid ${rtid}"; 
-      for clsncidr in ${CLSNCIDR[@]}; do #  aws ec2 create-route --route-table-id $rtid --vpc-peering-connection-id ${PCID} --destination-cidr-block $ { }"
-        echo "RUN aws ec2 create-route --route-table-id $rtid --vpc-peering-connection-id ${PCID} --destination-cidr-block ${clsncidr}"
-        aws ec2 create-route --route-table-id $rtid --vpc-peering-connection-id ${PCID} --destination-cidr-block ${clsncidr}
-        if [ "$?" != "0" ]; then
-          echo "ERROR: failed create route"
-          exit 1
-        fi
-      done
+    # - associate it with the private route table
+    # NOTE: with DBRTData, we could check subnet ids against .RouteTables[].Associations[].SubnetId
+    #       buuuut... since it doesn't error, just make the call each time
+    aws ec2 associate-route-table --route-table-id ${DBRTID} --subnet-id ${dbsnid} > /dev/null
+    A=$?
+    # echo ${A}
+    if [[ $A -ne 0 ]]; then
+      echo "ERROR: failed associating subnet to route table."
+      if [[ $A == 255 ]]; then echo "  - do you need to unassociate the subnet from an existing route table?"; fi
+      exit 1
     fi
   done
 
-#  echo "  ... associate database subnet route tables with a cidr with the pcx"
-#  for dbrt in ${DBRTIDS[@]}; do
-#    for clsn in ${CLSNIDS[@]}; do
-#      echo "TOCALL: aws ec2 create-route --route-table-id $dbrt --vpc-peering-connection-id ${PCID} --destination-cidr-block $ { }"
-##    done
-#  done
 
+
+#  CLUSTERRT=$(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=${CVPCID}")
+#  echo "CLUSTER RTs: ${CLUSTERRT}"
+
+  # are existing routes to wrong pcx?
+  echo ""
+  echo "  ... add routes from cluster VPC to defaul VPC on peering connection ${PCID} (delete then add)"
+  if [ "1" == "1" ]; then
+
+    # - ie. go to route tables, routes tab, 'edit routes' button"
+    for f in ${PRIDS[@]}; do
+
+      # -- for each cluster subnet
+      CSNS=( "${WOV_cluster_rds_subnet1}" "${WOV_cluster_rds_subnet2}" )
+      for csn in ${CSNS[@]}; do
+        echo "    - cluster route table '${f}' to CIDR '${WOV_cluster_rds_subnet1}'."
+
+        DR=$(aws ec2 delete-route --route-table-id $f --destination-cidr-block ${csn} 2>&1) ; DRe=$?
+        # echo "DR: '${DRe}' ${DR}"
+        if [ ${DRe} -eq 0 ]; then printf "      ... deleted existing route from table '$f' with cidr '${csn}'.\n";fi
+
+        AR=$(aws ec2 create-route --route-table-id $f --vpc-peering-connection-id ${PCID} \
+              --destination-cidr-block ${csn} 2>&1) ; ARe=$?
+        # echo "AR: ${AR}"
+        if [ "${ARe}" == "255" ]; then printf "      WARNING: existing route, keeping it and continuing.\n";
+        elif [ "${ARe}" != "0" ]; then printf "\nERROR: failed associating route table '$f' with cidr '${csn}' in peering connection '${PCID}'.\n${AR}\n\n"; exit 1; fi
+
+      done
+    done
+  else
+    echo "  - WARNING: skipping"
+  fi
+
+  #echo " ... get route tables for DB subnets, let them talk to CLUSTER cidrs"
+  #DBSNIDS=( $(aws ec2 describe-subnets --filters "Name=tag:Cluster,Values=${WOV_CLUSTER}" --query 'Subnets[*].SubnetId' --output text) )
+  #if [ "$?" != "0" ]; then echo "ERROR: could not find db subnet groups, tagged to cluster ${WOV_CLUSTER}."; exit 1; fi
+  #echo "DBSNIDS: ${DBSNIDS[@]}"
+
+
+
+
+  # Peer connection - routes
+  # Create route from Default VPC database subnets, to each cluster VPC subnet
+  echo ""
+  echo "  ... add routes from default VPC to cluster VPC on peering connection ${PCID}"
+  for clsncidr in ${CLSNCIDR[@]}; do
+    echo "    - peering connection: from default VPC to cluster subnet cidr block ${clsncidr}"
+
+    # Delete them first
+    DR=$(aws ec2 delete-route --route-table-id $DBRTID --destination-cidr-block ${clsncidr} 2>&1) ; DRe=$?
+    # echo "DR: '${DRe}' ${DR}"
+    if [ ${DRe} -eq 0 ]; then printf "      ... deleted existing route from table '$DBRTID' with cidr '${clsncidr}'.\n";fi
+
+    # Create a VPC peering connection 
+    #echo "RUN: aws ec2 create-route --route-table-id $DBRTID --vpc-peering-connection-id ${PCID} --destination-cidr-block ${clsncidr}"
+    AR=$(aws ec2 create-route --route-table-id $DBRTID --vpc-peering-connection-id ${PCID} --destination-cidr-block ${clsncidr} 2>&1) ;  ARe=$?
+    if [ "${ARe}" == "255" ]; then printf "      WARNING: existing route, keeping it and continuing.\n";
+    elif [ "${ARe}" != "0" ]; then printf "\nERROR: failed create route.\n${AR}\n\n"; exit 1; fi
+  done
 
 fi
 
 
+echo "... success"

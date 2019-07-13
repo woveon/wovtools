@@ -34,7 +34,7 @@ SRCDIR=${WOV_BASEDIR}
 DESTDIR=
 ARCHDIR=
 
-echo "NOTE[$0]: Skipping git checks.... will do on wov-push."
+# echo "NOTE[$0]: Skipping git checks.... will do on wov-push."
 
 
 # If NodeJS project...
@@ -493,6 +493,11 @@ done
 
 # Find the recipes and push them
 if [ "${BLOCK}" == "0" ]; then
+
+  if [ ! -e "${WOV_BASEDIR}/wovtools/containers" ]; then
+    printf "\nERROR: wovtools/containers directory does not exist. Should have container recipes there.\n\n"
+    exit 1
+  fi
 
   RECIPES=( "$@" )
   if [ "${#RECIPES[@]}" == "0" ]; then

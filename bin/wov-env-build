@@ -248,7 +248,7 @@ EOF
 
   # STEP 1: Check for source file existence
   for sf in ${SRCSECRETFILES[*]}; do
-    echo "looking for ${WOV_BASEDIR}/wovtools/secrets/$sf"
+    # echo "looking for ${WOV_BASEDIR}/wovtools/secrets/$sf"
     if [ ! -e ${WOV_BASEDIR}/wovtools/secrets/$sf ]; then
       printf "\n\nERROR: file for secret build does not exist: 'wovtools/secrets/$sf'.\n"
       exit 1

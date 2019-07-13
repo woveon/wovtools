@@ -508,7 +508,8 @@ rm ${WOV_BASEDIR}/wovtools/.config.json.*
 echo ""
 if [ -e "${WOV_BASEDIR}/wovtools/db" ] && 
    [ -e "${WOV_BASEDIR}/wovtools/db/archive" ] &&
-   [ -e "${WOV_BASEDIR}/wovtools/db/archive/.git" ]; then
+   [ -e "${WOV_BASEDIR}/wovtools/db/archive/.git" ] &&
+   [ -e "${WOV_BASEDIR}/wovtools/db/archive/.git/config" ]; then
   echo "ARCHIVE> Database Registry exists (at wovtools/db/archive)"
 else
   mkdir -p ${WOV_BASEDIR}/wovtools/db/archive/.git
@@ -519,7 +520,13 @@ else
 EOF
 
   WOV_DBREGISTRY=`git config --get remote.origin.url`
-  WOV_DBREGISTRY="${WOV_DBREGISTRY::-4}_archive.git"
+  if [ "$?" != "0" ]; then
+    printf "\nERROR: remote origin is not set for this repository.\n"
+    printf "  Use 'git remote add origin X' to set your remote repository.\n\n"
+    exit 1
+  fi
+  #  WOV_DBREGISTRY="${WOV_DBREGISTRY::-4}_archive.git"
+
   read -r -p "ARCHIVE> Database Registry git location: (\"${WOV_DBREGISTRY}\") ... Correct? [Y/n] " A
   if [ "${A}" != "" ]; then WOV_DBREGISTRY="${A}"; fi
 
@@ -550,7 +557,7 @@ fi
 
 echo "... test Git remote repo configuration/existence"
 #  cd ${WOV_BASEDIR}/wovtools/db/archive && git remote -v
-timeout_monitor 8 "$$" "TIMEOUT ERROR: failed to connect to remote repository. You should: 1) check network connection 2) ensure repo exists." &
+timeout_monitor 8 "$$" "TIMEOUT ERROR: failed to connect to remote repository. You should: 1) check network connection 2) ensure repo exists 3) ensure you are using ssh, not https." &
 Timeout_monitor_pid=$!
 cd ${WOV_BASEDIR}/wovtools/db/archive && git ls-remote -q > /dev/null
 if [ "$?" != "0" ]; then

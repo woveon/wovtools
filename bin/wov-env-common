@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+
+
+
+  # [res] [dbserver]
+# NOTE: DB is for the RDS databse name, and 1st part of hostname
+# return : 0=success,1=fail
+function doResName()
+{
+  local retval=""
+
+  if [ "$2" == "" ]; then
+    printf "\n\nERROR: resource name not provided.\n"
+    retval=1
+  else
+    retval=0
+
+    # Subnet for X, zone Y
+    if [ "$1" == "SN" ]; then
+      # 3rd params sets availability zone
+      # if [ "$4" != "" ]; then z=$4; else z=${WOVDB_AVAILZONE}; fi
+      echo "${2}-sn-${3}${4}"
+
+    # UNFLAVORED: DB Subnet for X, zone Y : note: this will be in hte default VPC
+    elif [ "$1" == "DBSN" ]; then
+      echo "${2}-dbsn-${3}${4}"
+        # 3rd param sets availability zone
+
+    # UNFLAVORED: DB SubnetGroup for X : note: this will be in hte default VPC
+    elif [ "$1" == "DBSNG" ]; then
+      echo "${2}-dbsng"
+
+    # UNFLAVORED: DB Security Group for cluster X
+    elif [ "$1" == "DBSG" ]; then
+      echo "${2}-dbsg"
+
+    # UNFLAVORED: DB Route Table for cluster X
+    elif [ "$1" == "DBRT" ]; then
+      echo "${2}-dbrt"
+
+    # Security Group for X
+    elif [ "$1" == "SG" ]; then
+      echo "${2}-SG-${3}"
+
+    # Database Name
+    elif [ "$1" == "DB" ]; then
+      echo "${2}-db-${3}"
+
+    # Peered connection from default VPC to cluster's, for the db
+    elif [ "$1" == "PEERCONN" ]; then
+      echo "${2}-peerconn"
+
+    elif [ "$1" == "DNS" ]; then
+      DBNAME=$(doResName DB ${2})
+      echo $(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.Address' --output text)
+    else
+      printf "\n\nERROR: unknown resource of ${1} to doResName.\n"
+      retval=1
+    fi
+  fi
+
+  return $retval
+}

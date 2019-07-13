@@ -51,6 +51,14 @@ Command Options:
   -p/--provider : run cluster config as well (queries cloud provider via wov-env-PROVIDER)
   --health      : check routes of a deployment
 
+  Resource Names:
+  --res SN RES ZONE  : subnet name
+  --res DBSNG RES    : DB subnet group
+  --res SG RES       : security group
+  --res DB RES       : database name
+  --res DBDNS RES    : DB DNS address
+  --vres RN RES      : verify resource of type RN, name RES
+
   Secrets/Config:
   --envs        : print all the configuration as environment variables (sep lines)
   --conf        : print all the configuration as environment variables (one line)
@@ -75,6 +83,14 @@ EOF
 
 if [ "$1" == '--help' ] || [ "$1" == '-h' ]; then fWovEnvDisplayOptions; exit 0; fi
 
+
+#_ARGS=()
+#shift_globally () {
+#  echo "...shift_globally on : '$@' ${#@}"
+#  shift
+#  _ARGS=$@
+#  echo "  ...shifted_globally: '${_ARGS[@]}' ${#_ARGS[@]}"
+#}
 
 
 # --------------------------------------------------------------------- 
@@ -537,6 +553,42 @@ doHealthChecks()
   done
 }
 
+# 1 exists, 0 does not, anything else, error
+# [res] [resname]
+#   -resname, get from doResName func
+# TODO move to provider-wov-env-aws
+function doResVerify()
+{
+  local retval=0
+
+  if [ "$2" == "" ]; then printf "\n\nERROR: resname name not provided to resVerify.\n"; fDisplayOptions; exit 1; fi
+  if [ "$1" == "SN" ]; then
+    R=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${2}" --query 'Subnets[0]')
+    RR=$?
+    if [ "$R" == "null" ]; then retval=0; else retval=1; fi
+
+  elif [ "$1" == "DBSNG" ]; then
+    R=$(aws rds describe-db-subnet-groups --db-subnet-group-name ${2} >& /dev/null )
+    RR=$?
+    if [ "$RR" == "0" ]; then retval=1; else retval=0; fi
+
+  elif [ "$1" == "SG" ]; then
+    SG=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=${2}" --query 'SecurityGroups[].GroupName' --output=text)
+    if [ "${SG}" == "" ]; then
+#      echo "  ... no existing secrurity group '${SG}'"
+      retval=0
+    else
+      retval=1
+    fi
+  else
+    printf "\n\nERROR: unknown resource of ${1} to resVerify.\n"
+    fDisplayOptions
+    exit 1
+  fi
+
+  echo $retval
+}
+
 
 
 # --------------------------------------------------------------------- 
@@ -546,12 +598,18 @@ doHealthChecks()
 . wov-env-loader
 doSetCluster "local"
 
+# --------------------------------------------------------------------- 
+# Load common functionality
+# --------------------------------------------------------------------- 
+. wov-env-common
+
 
 # --------------------------------------------------------------------- 
 # Command line processing
 while [[ $1 =~ ^- ]]; do
   if [ "$1" == '-e' ]; then
     ECHOMODE=1
+
   elif [ "$1" == '-E' ]; then
     ECHOMODE=2
 
@@ -630,6 +688,24 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
     fWovEnvDisplayOptions
     exit 0
+
+  elif [ "$1" == '--res' ]; then
+    shift
+    doResName $@
+    A=$?
+    if [ $A -ne 0 ]; then exit $A; fi
+    # clear params until next '-'
+    while [[ ! ( $1 =~ ^- ) ]]; do shift; if [ "$1" == "" ]; then break; fi; done 
+    set - blank "$@"
+      # -- pushes 'blank' onto arguments, so next shift can get rid of it
+
+  elif [ "$1" == '--vres' ]; then
+    R1=$(doResVerify ${2} ${3}) ; RR1=$?
+    if [ ${DOECHO} -ge 2 ]; then echo "  ... verify ${2} ${3}"; fi
+    if [ "$R1" == "1" ]; then echo "true"; else echo "false"; fi
+    shift
+    shift
+
   else
     echo
     echo "***ERROR: unknown option '$1'."
@@ -637,6 +713,8 @@ while [[ $1 =~ ^- ]]; do
     exit 1
   fi
   shift
+
+
 done
 
 # if user never asked to show any individual variables, show all
