@@ -352,7 +352,6 @@ EOF
   # mark as secret being updated
   HAS_SECRET=1
 
-
   # Update local context if this was it
   retreiveLocalContextCluster
   if [ "${LOCALCONTEXT}" == "${CLUSTER}" ]; then

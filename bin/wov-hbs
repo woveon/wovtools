@@ -6,44 +6,86 @@ let ArgumentParser = require('argparse').ArgumentParser;
 let parser         = new ArgumentParser({
   version     : '0.0.1',
   addHelp     : true,
+  // epilog      : 'epilog\nepilog2\n',
   description : `
-Uses Handlebars to parse the .wov files (.ck8s.wov and .sk8s.wov). This does two passes so {{STAGE}} can be interpreted as a parameter to inputs.
-  
-  ex. with JSON { "myplugin": { "dev" : { "value" : 1 }, "prod" : { "value" : 2 } } }. 
-      with file text : A=\{{myplugin.{{STAGE}}.value}} 
-      results in "A=1" if WOV_STAGE is 'dev', "A=2" if WOV_STAGE is 'prod' and "A=" otherwise.
-
-  NOTE: Added in "if_eq" helper as well. 
+Uses Handlebars to parse the .wov files (.ck8s.wov and .sk8s.wov). This does two passes so {{STAGE}} can be interpreted as a parameter to inputs.\n`+`
+ \n 
+  ex. with JSON { "myplugin": { "dev" : { "value" : 1 }, "prod" : { "value" : 2 } } }. \n
+      with file text : A=\{{myplugin.{{STAGE}}.value}} \n
+      results in "A=1" if WOV_STAGE is 'dev', "A=2" if WOV_STAGE is 'prod' and "A=" otherwise.\n
+\n
+  Data:\n
+    The --data-set loads the const file from from wovtools/data (ex. X_const.js file) and loads it on 'C'. So if you have X_const.js with { id : { A : 1 } }, you can use it via {{C.id.A}}.\n
+\n
+  Helpers:\n
+   - "if_eq"\n
+   - "include"\n
+   - "math"    : does '+', '-', '*', '/', '%%' operations (ex. {{math 5 %% 2}} or {{math C.id.X + 2}})\n
 `,
 });
 parser.addArgument(['-sf', '--secret-file'], {help : 'secrets file location (JSON format)'});
+parser.addArgument(['-ds', '--data-set'], {help : 'loads a data set constants file (wovtools/data/X_const.js)'});
 
 let progargs = parser.parseArgs();
-let args = JSON.parse(fs.readFileSync(progargs.secret_file).toString());
+let data_args = {};
+let secret_args = {};
+if ( progargs.secret_file ) { secret_args = JSON.parse(fs.readFileSync(progargs.secret_file).toString()); }
+if ( progargs.data_set) {
+  let wov_basedir=process.env.WOV_BASEDIR;
+  if ( wov_basedir == null ) { throw Error('No WOV_BASEDIR in wov-hbs'); }
+  data_args = require(`${wov_basedir}/wovtools/data/${progargs.data_set}_const.js`);
+  // JSON.parse(fs.readFileSync(`${wov_basedir}/wovtools/data/${progargs.data_set}_const.js`).toString());
+}
+
+// combile from secrets file and data_args
+let args = Object.assign({}, secret_args, {C : data_args});
 // console.dir(args);
 
 
+/**
+ */
 function readInputStream(s, done) {
     let bufs = [];
-    s.on('data', function(d) {bufs.push(d);});
-    s.on('end', function() {done(null, Buffer.concat(bufs));});
+    s.on('data', function(d) { bufs.push(d); });
+    s.on('end', function() { done(null, Buffer.concat(bufs)); });
     s.resume();
 }
 
 
 readInputStream(process.stdin, function(err, tmpl) {
+  /**
+   */
   function handle(tmpl, args) {
 
-    h.registerHelper('include', function(file, context, opt) {
-      let context = null == context ? args : context;
+    h.registerHelper('include', function(file, _context, opt) {
+      let context = null == _context ? args : _context;
       let f = fs.readFileSync(file);
       return handle(f, context);
     });
 
     // https://code-maven.com/handlebars-conditionals
     h.registerHelper('if_eq', function(a, b, opts) {
-      if (a == b) {return opts.fn(this);}
-      else {return opts.inverse(this);}
+      if (a == b) { return opts.fn(this); }
+      else { return opts.inverse(this); }
+    });
+
+    // from https://gist.github.com/FrankFang/6603970
+    h.registerHelper('math', function(lvalue, operator, rvalue, options) {
+      if (arguments.length < 4) {
+        // Operator omitted, assuming "+"
+        options = rvalue;
+        rvalue = operator;
+        operator = '+';
+      }
+      lvalue = parseFloat(lvalue);
+      rvalue = parseFloat(rvalue);
+      return {
+        '+' : lvalue + rvalue,
+        '-' : lvalue - rvalue,
+        '*' : lvalue * rvalue,
+        '/' : lvalue / rvalue,
+        '%' : lvalue % rvalue,
+              }[operator];
     });
 
     // This does 2 passes, so stage can be handled.

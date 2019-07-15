@@ -5,16 +5,15 @@
 # Import Env
 # ---------------------------------------------------------------------
 wov-env-build -q --local
-pushenvargs=( "$@" )
+pushdbenvargs=( "$@" )
 set ""
-. <(wov-env --exports)
-#. wov-ns-check
-set -- "${pushenvargs[@]}"
+. <(wov-env --exports -e)
+. wov-env-common
+set -- "${pushdbenvargs[@]}"
 
 DOECHO=1
 FOLD=$(tput cols)
 DATABASESERVER=
-#NAMESPACE="${WOV_NS}"
 DB_COMMAND=
 DB_OP=
 DB_FILE=
@@ -28,28 +27,47 @@ function fDisplayOptions()
   cat <<EOF | fold -w ${FOLD} -s
 
 
-usage: `basename $0` [databaseserver] {options}
+usage: `basename $0` DBSERVER {options}
 
-Connect to a database via SSL tunnelling through the bastion host and has db utilities. Takes information from Woveon environment variables. If no commands are given (-c), then opens a shell.
+Connect to a database server via SSH tunnelling through the bastion host. Takes information from Woveon environment variables. The default command is (-c) to open a shell.
 
-databaseserver - the name of a database server in the project. assumes conf/[database].[cs]k8s files.
+DBSERVER - the name of a database server in the project (created via wov-cluster-createdb).
 
-  -d [database] : sets the database inside the server
-  -U [user]     : login user
-  -f [file]     : load file
-  -c [command]  : run command
-  -p            : ask for password
   -h : this help
   -q/-v : quiet/verbose
 
-  --schema      : return the db's schema
+ Database Commands:
+  -c [command]  : run a DB command
+  -f [file]     : load file of SQL commands into a DB
+  --schema      : return the DB's schema
 
-About commands... you have to be careful about quotes as both bash and psql are very particular. Here, use single quotes so '*' is not expanded, and quote the single quote so mydatabase is interpret properly by postgres.
+ Data Mods:
+  -d [database] : changes the database name (DB inside the DB server)
+  -U [user]     : DB user
+  -p            : prompt for a password
+
+ DataSets : non-production data management:
+  --data-schema/-ds : reloads the database schema (clearing existing data)
+  --data-clear/-dc  : clears data in the database
+  --data-data/-dd   : loads the database data
+  --data-full/-df   : loads a full DataSet by loading schema, clear and load data
+
+ Local Postgres via Docker:
+  --docker-postgres-start : start a local Postgres database via Docker
+  --docker-postgres-stop  : stop a local Postgres database in Docker
+
+
+NOTE:
+About commands (-c)... you have to be careful about quotes as both bash and psql are very particular. Here, use single quotes so '*' is not expanded, and quote the single quote so mydatabase is interpret properly by postgres.
 
 ex. -c 'SELECT * FROM logs WHERE database=\'mydatabase\' ORDER BY id DESC LIMIT 1'
 
 EOF
 }
+
+# Help command catch here
+if [ "$1" == "-h" ] || [ "$1" == "--help" ]; then fDisplayOptions; exit 0; fi
+
 
 # Set the default commands
 if [ "$#" == "0" ] && [ "$WOV_PROJECTTYPE" != "pl" ] ; then
@@ -58,22 +76,9 @@ if [ "$#" == "0" ] && [ "$WOV_PROJECTTYPE" != "pl" ] ; then
   fDisplayOptions
   exit 1
 fi
-if [ "$1" == "-h" ]; then
-  fDisplayOptions
-  exit 0
-fi
 DATABASESERVER=$1
 shift
 
-#echo $DATABASESERVER
-
-# load env vars
-#eval $(wov-env --env ${DATABASESERVER}.ck8s --env ${DATABASESERVER}.sk8s )
-#if [ "${WOV_stagemod}" != "" ]; then
-#  eval $(wov-env --mod ${WOV_stagemod} --conf)
-#else
-#  eval $(wov-env --conf)
-#fi
 
 # --------------------------------------------------------------------- 
 # Set config from env vars and project type
@@ -87,17 +92,17 @@ DB_PORT=WOV_${DATABASESERVER}_port
 
 DB_HEADEROPTIONS=-t
 
-# if in Plugin and using default database, default to the mongodb
-if [[ ( "$DATABASESERVER" == "" ) || ( "$DATABASESERVER" == "${WOV_PROJECT}db" ) ]] && [[ "${WOV_PROJECTTYPE}" == "pl" ]]; then
-  # echo "...defaulting to plugin mongodb."
-  DB_TYPE=WOV_we_db_type
-  DB_DATABASE=WOV_we_db_collection
-  DB_USERNAME=WOV_we_db_user
-  DB_PASSWORD=WOV_we_db_password
-  DB_HOST=WOV_we_db_url
-  DB_PORT=WOV_we_db_port
-  DATABASESERVER=${WOV_PROJECT}db
-fi
+## if in Plugin and using default database, default to the mongodb
+#if [[ ( "$DATABASESERVER" == "" ) || ( "$DATABASESERVER" == "${WOV_PROJECT}db" ) ]] && [[ "${WOV_PROJECTTYPE}" == "pl" ]]; then
+#  # echo "...defaulting to plugin mongodb."
+#  DB_TYPE=WOV_we_db_type
+#  DB_DATABASE=WOV_we_db_collection
+#  DB_USERNAME=WOV_we_db_user
+#  DB_PASSWORD=WOV_we_db_password
+#  DB_HOST=WOV_we_db_url
+#  DB_PORT=WOV_we_db_port
+#  DATABASESERVER=${WOV_PROJECT}db
+#fi
 
 # Set variables to values of the name
 DB_TYPE=${!DB_TYPE}
@@ -112,6 +117,74 @@ DB_PORT=${!DB_PORT}
 #DB_PORT=$(wov-bastion --bhost ${WOV_CLUSTER}-bastion --ldp ${DATABASESERVER})
 #DB_HOST=localhost   # bastion
 
+# --------------------------------------------------------------------- 
+# Builds the X data set for a database from the wovtools/data/X_* files
+#  $1 - data set name (ex. alywan)
+# --------------------------------------------------------------------- 
+function doDBDataBuild()
+{
+  if [ "$1" == "" ]; then echo "ERROR: need a data set name parameter to wov-db-connect::doDBDataBuild."; exit 1; fi
+
+  local DATASETFILES=( 'schema' 'data' 'clear' )
+
+  # Make the target directory
+  mkdir -m 700 -p ${WOV_BASEDIR}/wovtools/cache/data
+  if [ $? -ne 0 ]; then echo "ERROR: failed to make target data directory in cache."; exit 1; fi
+
+  for f in ${DATASETFILES[@]}; do
+
+    local fname=`cd ${WOV_BASEDIR}/wovtools/data ; ls $1_$f.*`
+    # echo "f: '${f}'  fname: '${fname}'   last 4: '${fname: -4}'"
+
+    # compile file if it has .wov on it
+    if [ "${fname: -4}" == ".wov" ]; then
+      local finname="${fname::-4}"
+      if [ ! -e "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ] ||
+         [ "${WOV_BASEDIR}/wovtools/data/${1}_const.js" -nt "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ] ||
+         [ "${WOV_BASEDIR}/wovtools/data/${fname}" -nt "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ]; then
+        if [ ${DOECHO} -ge 1 ]; then echo "  ... compile ${finname}"; fi
+        WOV_BASEDIR=${WOV_BASEDIR} wov-compile -ds ${1} "${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/secrets.json" "${WOV_BASEDIR}/wovtools/data/${fname}" > "${WOV_BASEDIR}/wovtools/cache/data/${finname}"
+      fi
+
+    # or copy it over
+    else
+      if [ ! -e "${WOV_BASEDIR}/wovtools/cache/data/${fname}" ]; then
+        if [ ${DOECHO} -ge 1 ]; then echo "  ... cp ${fname}"; fi
+        cp "${WOV_BASEDIR}/wovtools/data/${fname}" "${WOV_BASEDIR}/wovtools/cache/data/."
+      fi
+    fi
+
+  done
+}
+
+
+# --------------------------------------------------------------------- 
+# Loads a data set file.
+# $1 - data set to use
+# #2 - data command to run: schema, clear or data which match to a file 
+# --------------------------------------------------------------------- 
+function doDBDataCommand()
+{
+  if [ "$WOV_STAGE" == "prod" ]; then echo "ERROR: wov-db-connect DataSets do not work on production."; exit 1; fi
+  if [ "$1" == "" ]; then echo "ERROR: need a data set name parameter to wov-db-connect::doDBDataCommand."; exit 1; fi
+  if [ "$2" == "schema" ] ||
+     [ "$2" == "clear" ] ||
+     [ "$2" == "data" ]; then
+    local A=1
+  else
+    echo "ERROR: Unknown command for doDBDataCommand of '${2}'. Should be one of 'schema', 'clear', or 'data'."
+    exit 1
+  fi
+
+  R=$(PGPASSWORD=${DB_PASSWORD} psql --quiet -P "footer=off" -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f "${WOV_BASEDIR}/wovtools/cache/data/${1}_${2}.sql") ; Re=$?
+  if [ ${DOECHO} -ge 2 ]; then echo "${R}"; fi
+  if [ ${DOECHO} -ge 1 ]; then echo "  ... loaded ${1}_${2}.sql"; fi
+  if [ "$Re" != "0" ]; then
+    printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
+    exit 1
+  fi
+}
+
 
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
@@ -122,7 +195,8 @@ function doDatabaseConnectMessage()
   printf "  DBServer : ${DATABASESERVER}\n"
   printf "  Type     : ${DB_TYPE}\n"
   printf "  User     : ${DB_USERNAME}\n"
-  printf "  Host     : tunneling through ${DB_HOST}\n"
+  printf "  Host     : ${DB_HOST}\n"
+  printf "  Port     : ${DB_PORT}\n"
   printf "  Database : ${DB_DATABASE}\n\n"
 }
 
@@ -204,6 +278,59 @@ while [[ $1 =~ ^- ]]; do
     shift
     DB_OP="schema"
 
+  elif [ "$1" == "--data-schema" ] || [ "$1" == "-ds" ]; then
+    shift
+    doDBDataBuild $1
+    doDBDataCommand $1 "schema"
+    exit 0
+    shift
+
+  elif [ "$1" == "--data-clear" ] || [ "$1" == "-dc" ]; then
+    shift
+    doDBDataBuild $1
+    doDBDataCommand $1 "clear"
+    exit 0
+    shift
+
+  elif [ "$1" == "--data-data" ] || [ "$1" == "-dd" ]; then
+    shift
+    doDBDataBuild $1
+    doDBDataCommand $1 "data"
+    exit 0
+    shift
+
+  elif [ "$1" == "--data-full" ] || [ "$1" == "-df" ]; then
+    shift
+    doDBDataBuild $1
+    doDBDataCommand $1 'schema'
+    doDBDataCommand $1 'clear'
+    doDBDataCommand $1 'data'
+    exit 0
+    shift
+
+  elif [ "$1" == "--docker-postgres-start" ]; then
+    shift
+    pg_isready -p 5432 -h localhost 2>&1  > /dev/null
+    A=$?
+    if [ "$A" == "0" ]; then echo "ERROR: postgres already accepting connections. Try --docker-postgres-stop."; exit 1; fi
+    docker run --rm --name postgres-local -e POSTGRES_PASSWORD=${DB_PASSWORD} -d -p 5432:5432 postgres
+    I=0
+    while [ "$(pg_isready -p 5432 -h localhost 2>&1 > /dev/null ; echo $?)" != "0" ]; do
+      sleep 1 # sleep to account for time for it to spin up
+      I=$((I + 1))
+      if [ $I -gt 10 ]; then echo "ERROR: failed to connect to local postgres." ; exit 1; fi
+    done
+    PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -c "create database ${DB_DATABASE}"  > /dev/null
+    if [ "$?" != "0" ]; then echo "ERROR: could not create database of '${DB_DATABASE}'."; exit 1; fi
+    echo "  ... success"
+    exit 0
+
+  elif [ "$1" == "--docker-postgres-stop" ]; then
+    shift
+    docker stop postgres-local > /dev/null
+    if [ "$?" == "0" ]; then echo "  ... success"; exit 0; fi
+    exit 0
+
   elif [ "$1" == "-H" ]; then
     shift
     DB_HOST="$1"
@@ -245,13 +372,11 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #      PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
 #    fi
 
-    echo "schema getting"
     PGPASSWORD="${DB_PASSWORD}" pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
     if [ "$?" != "0" ]; then
       printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
       exit 1
     fi
-    echo "schema getting post"
 
   elif [ "${DB_OP}" == "command" ]; then
     # Log into pod 'vh', run psql
@@ -290,7 +415,7 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 
   elif [ "${DB_OP}" == "" ]; then
     # Log into pod 'vh', run psql
-    doDatabaseConnectMessage
+    if [ $DOECHO -ge 1 ]; then doDatabaseConnectMessage; fi
     if [ $DOECHO -ge 2 ]; then echo "... connect with 'PGPASSWORD=... psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}'"; fi
 #    if [ "${DB_HOST}" != "localhost" ]; then
 #      kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}"
@@ -347,7 +472,7 @@ EOF
       mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} ${DB_FILE}
     fi
   elif [ "${DB_OP}" == "" ]; then
-    doDatabaseConnectMessage
+    if [ $DOECHO -ge 1 ]; then doDatabaseConnectMessage; fi
     
     echo "entering pod ${DATABASESERVER}-${WOV_STAGE}"
     kubectl exec -it $(wov-p ${DATABASESERVER}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE}"

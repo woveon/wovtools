@@ -106,7 +106,8 @@ function fBuildClusterSecrets
     else
       NS="--namespace ${WOV_NS}" 
     fi
-    wov-env-build ${NS} -q --secrets ${CLUSTER}; 
+    # echo "wov-env-build ${NS} -q --secrets ${CLUSTER} "
+    wov-env-build ${NS} -q --secrets ${CLUSTER} 
     if [ "$?" != "0" ]; then exit 1; fi
   fi
 }

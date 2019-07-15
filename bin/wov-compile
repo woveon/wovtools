@@ -33,15 +33,18 @@ CMTCHR='//'
 CMT_PRE=""
 CMT_POST=""
 WARNINGLINE=1   # line number to insert message
+DS=
 
 alloptions=$*
 
 fDisplayOptions()
 {
   echo 
-  echo "Usage : `basename $0` [-v] [-h|--help] [comment_character] secret_file template_file"
+  echo "Usage : `basename $0` [-v] [-h|--help][-ds] [comment_character] secret_file template_file"
   echo
   echo "   This is a simple handlebars running script, with some headings."
+  echo ""
+  echo "  -ds/--data-set : The --data-set loads the const file from from wovtools/data (ex. X_const.js file) and loads it on 'C'. So if you have X_const.js with   { id : { A : 1 } }, you can use it via {{C.id.A}}."
   echo
 }
 
@@ -49,6 +52,7 @@ showverbose()
 {
   echo
   echo " Secret file      : '$SCF'"
+  if [ "$DS" != "" ]; then echo " Data Set         : '$DS'"; fi
   echo " Template file    : '$TEMPLATEFILE'"
   echo " Temp file        : '$TMPFILE'"
   echo " Comment character: '$CMTCHR'"
@@ -65,9 +69,12 @@ showverbose()
 # Manage all arguments starting with '-'
 # NOTE: currently, these are overwritten by file extension... bummer... need to swap order
 while [[ $1 =~ ^- ]]; do
-  echo "param '$1'"
   if [ "$1" == "-v" ]; then
     VERBOSE=1
+    shift
+  elif [ "$1" == "-ds" ] || [ "$1" == "--data-set" ]; then
+    shift
+    DS=$1
     shift
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
@@ -123,6 +130,9 @@ TEMPLATEFILE_REALSUFFIX=${TEMPLATEFILE_SANSSUFFIX##*.}
 case $TEMPLATEFILE_REALSUFFIX in 
   ini) 
     CMTCHR=";"
+    ;;
+  sql) 
+    CMTCHR="--"
     ;;
   html)
     CMT_PRE="<!--"
@@ -180,7 +190,11 @@ SEDCMD=''$WARNINGLINE"i$WARNING"
 # 1st and 2nd passes at once
 #echo "time wov-hbs" 1>&2
 # echo "wov-hbs calling ${TEMPLATEFILE}"
-wov-hbs -sf $SCF  < $TEMPLATEFILE  | $SED "$SEDCMD"
+if [ "$DS" == "" ]; then
+  wov-hbs -sf $SCF  < $TEMPLATEFILE  | $SED "$SEDCMD"
+else
+  wov-hbs -sf $SCF -ds $DS < $TEMPLATEFILE  | $SED "$SEDCMD"
+fi
 #echo "/time wov-hbs" 1>&2
 
 rm $TMPFILE
