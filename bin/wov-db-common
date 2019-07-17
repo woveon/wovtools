@@ -33,8 +33,8 @@ function doFindDatabases()
     done
 
     # Make sure only one entry : so add y, then every z not in y
-#    echo "D1: ${D1[@]}" 1>&2
-#    echo "D2: ${D2[@]}" 1>&2
+    # echo "D1: ${D1[@]}" 1>&2
+    # echo "D2: ${D2[@]}" 1>&2
     i=0
     for y in ${D2[@]}
     do

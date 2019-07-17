@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+
+
+
+# Sets global RECIPES variable
+function fGetContainerRecipes()
+{
+  RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+}

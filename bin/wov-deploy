@@ -206,7 +206,8 @@ function doCheckContainersExist()
   # Build files to check for containers, from arguments or all directory files
   local k8sfiles=()
   if [ "$#" == "0" ]; then
-    k8sfiles=( $(cd ${rdir} && ls *.yaml) )
+    k8sfiles=( $(cd ${rdir} && ls *.yaml) ) ; k8sfilese=$?
+    if [ $k8sfilese != 0 ]; then echo "ERROR: failed to find k8s files."; exit 1; fi
   else
     for f in ${*}; do
       k8sfiles+=( "deployment-${f}.yaml" )
@@ -276,7 +277,8 @@ function doDeployK8s()
     done
   else
     # echo "k8sdir ${K8SDIR}"
-    FILES=( $(cd ${K8SDIR} && ls *.yaml | sed -e 's/\(.*\)\..*/\1/') )
+    FILES=( $(cd ${K8SDIR} && ls *.yaml | sed -e 's/\(.*\)\..*/\1/') ) ; FILESe=$?
+    if [ $FILESe != 0 ]; then echo "ERROR: failed to find files."; exit 1; fi
   fi
 
   # printf "K8S deployment FILES: ${FILES[*]}\n"

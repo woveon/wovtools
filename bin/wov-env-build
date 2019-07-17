@@ -83,6 +83,8 @@ done
 envbuildargs=( "$@" )
 set ""
 . wov-env-loader
+. wov-env-common
+. wov-db-common
 set -- "${envbuildargs[@]}"
 
 # --------------------------------------------------------------------- 
@@ -204,6 +206,9 @@ function fBuildSecrets()
     exit 1
   fi
 
+  # Find the databases as array, then flatten for WOV_DATABASES
+  DATABASES=( $(doFindDatabases) )
+  WOV_DATABASES="${DATABASES[@]}"
 
 
   # ---------------------------------------------------------------------
@@ -230,6 +235,7 @@ function fBuildSecrets()
   "PROJECTTYPE"        : "${WOV_PROJECTTYPE}",
   "PROJECTTITLE"       : "${WOV_PROJECTTITLE}",
   "PROJECTDESCRIPTION" : "${WOV_PROJECTDESCRIPTION}",
+  "DATABASES"          : "${WOV_DATABASES}",
 
   "ARCHIVEREPOSITORY" : "${WOV_ARCHIVEREPOSITORY}",
   "ARCHIVEENV"        : "${WOV_ARCHIVEENV}",
@@ -345,6 +351,8 @@ EOF
   wov_stage-select ${SECRETFILE}_ STAGE ${WOV_STAGE} clean >> ${SECRETFILE}.7
   ${MV} ${SECRETFILE}.7  ${SECRETFILE}_
 
+  # Specific post-processing of variables
+  fPostBuildSecretsJSON 8 ${SECRETFILE}
 
   # FINAL: move it back into place
   ${MV} ${SECRETFILE}_  ${SECRETFILE}
@@ -384,6 +392,43 @@ EOF
   cp ${SECRETFILE} ${SECRETFILELAST}
 
   return ${SECRETDIFF}
+}
+
+
+# --------------------------------------------------------------------- 
+# Post processing rules
+# --------------------------------------------------------------------- 
+# $1 file to dump to
+# $2 SECRETFILE
+# --------------------------------------------------------------------- 
+function fPostBuildSecretsJSON()
+{
+  local cmd=""
+
+  # make and protect the file
+  echo "" > ${2}.${1}
+  chmod 600 ${2}.${1}
+
+  # build database host values for .DB.host by calling doResName
+  for db in ${DATABASES[@]}; do
+    local subhost=`jq -r ".${db}.subhost" ${2}_`
+    # echo "subhost : ${subhost}"
+    if [ "${cmd}" != "" ]; then cmd+=" | "; fi
+    cmd+=" .${db}.host=\"$(doResName DB ${WOV_CLUSTER} ${subhost})\" "
+    #echo "cmd : ${cmd}"
+  done
+  
+  # run command that adds all the hosts
+  if [ "${cmd}" != "" ]; then 
+    jq "${cmd}" "${2}_" >> ${2}.${1}
+    if [ $? != 0 ]; then
+      echo "ERROR: post build on secrets failed for cmd: '${cmd}'."
+      exit 1
+    fi
+
+    # Success, use the file
+    ${MV} ${2}.${1} ${2}_
+  fi
 }
 
 

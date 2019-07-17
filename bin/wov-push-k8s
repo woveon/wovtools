@@ -20,8 +20,57 @@ pushenvargs=( "$@" )
 set ""
 . wov-env --provider
 . wov-ns-check
+. wov-push-common
 set -- "${pushenvargs[@]}"
 
+
+
+# ---------------------------------------------------------------------
+# $1 cluster
+# ---------------------------------------------------------------------
+function doPushClusterToArchiveChecks()
+{
+  local CLUSTER="$1"
+  local CLUSTERDIR="${WOV_CACHEDIR}/clusters/${CLUSTER}"
+  local ARCHPATH="`getRelativeArchivePath ${CLUSTER}`"
+  local retval=0
+
+  for container in ${RECIPES[@]}; do
+
+    # each container should have a cm
+    if [ ! -e "${WOV_ARCHIVEENV}/${ARCHPATH}/cm/${WOV_PROJECT}${container}" ]; then
+      echo "WARNING: container '${WOV_PROJECT}${container}' has no K8s ConfigMap file.";
+      retval=1;
+    fi
+
+    # each container should have a secrets file
+    if [ ! -e "${WOV_ARCHIVEENV}/${ARCHPATH}/se/${WOV_PROJECT}${container}" ]; then
+      echo "WARNING: container '${WOV_PROJECT}${container}' has no K8s Secrets file.";
+      retval=1;
+    fi
+
+    # each container should have a k8s deployment file
+    if [ ! -e "${WOV_ARCHIVEENV}/${ARCHPATH}/k8s/${WOV_PROJECT}${container}.yaml" ]; then
+      echo "WARNING: container '${WOV_PROJECT}${container}' has no K8s Deployment file.";
+      retval=1;
+    fi
+
+    # each container should have a k8s service file
+    if [ ! -e "${WOV_ARCHIVEENV}/${ARCHPATH}/k8s/${WOV_PROJECT}${container}-service.yaml" ]; then
+      echo "WARNING: container '${WOV_PROJECT}${container}' has no K8s Service file.";
+      retval=1;
+    fi
+
+  done
+
+  # each cluster should have a k8s ingress file
+  if [ ! -e "${WOV_ARCHIVEENV}/${ARCHPATH}/k8s/${WOV_PROJECT}-ingress.yaml" ]; then
+    echo "WARNING: cluster '${WOV_PROJECT}' has no K8s Ingress file ${WOV_PROJECT}-ingress.yaml.";
+    retval=1;
+  fi
+
+  return $retval
+}
 
 
 # ---------------------------------------------------------------------
@@ -123,15 +172,24 @@ if [ "${#CLUSTERS}" == "0" ]; then
   CLUSTERS=( "${WOV_CLUSTER}" )
 fi
 
+# get the names of containers
+fGetContainerRecipes
+
 # ---------------------------------------------------------------------
 # For each named cluster, push to archive
 # ---------------------------------------------------------------------
+RESULT=0
 for cluster in "${CLUSTERS[@]}"; do
-  echo "cluster $cluster"
-  doPushClusterToArchive ${cluster}
+  echo "Push to Archive for Cluster: $cluster"
+  doPushClusterToArchiveChecks ${cluster}
+  if [ $? != 0 ]; then
+    echo "  ... skipping cluster push due to warnings."
+    RESULT=2
+  else
+    doPushClusterToArchive ${cluster}
+  fi
 done
 
 
-
-
-
+# 0 - success, 2- warnings
+exit $RESULT

@@ -1,5 +1,55 @@
 #!/usr/bin/env bash
 
+DOECHO=1
+DOFORCE=0
+DOPUSH=1
+FOLD=$(tput cols)
+BLOCK=0
+DESTDIR=
+SRCDIR=
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function fDisplayOptions()
+{ 
+  DDIR="${DESTDIR}"; if [ "${DDIR}" == "" ]; then DDIR="DESTDIR"; fi
+  SDIR="${SRCDIR}";  if [ "${SDIR}" == "" ]; then SDIR="SRCDIR"; fi
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options] {containercode ...}
+
+Pushes the containers by building and pushing to the archive. Runs the recipe scripts and if there is a change, build the containers.
+
+ex. `basename $0` -f ggg hhh  
+    -> for project iii,  forces the building of containers iiiggg and iiihhh
+
+
+
+The recipes for containers should:
+
+1) copy code from ${SDIR} to the ${DDIR} directory
+  - where SRCDIR is the root of your git and DESTDIR is the root of the container to be built (i.e. wovtools/cache/containers/CONTAINER).
+
+2) create a sub-recipes to insert into the Dockerfile. There are BUILD and RUN stages, where BUILD contains ssh keys to access private repos. RUN tells the container how to run.
+  - ${DDIR}/SECRET/prebuild.docker - called before all files copied into container (do yarn installs here)
+  - ${DDIR}/SECRET/build.docker - all code is in the container
+  - ${DDIR}/SECRET/run.docker - instructions on how to run container
+
+  -p/P : do push, no push
+  -h : this help
+  -l : list containers
+  -f : force build
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+if [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+  fDisplayOptions
+  exit 0
+fi
 
 # --------------------------------------------------------------------- 
 # Import Env 
@@ -14,24 +64,19 @@ set ""
 . wov-env --provider
 . <(wov-env --provider --exports)
 . wov-ns-check
+. wov-push-common
 set -- "${pushcontainersargs[@]}"
 
 
 # For dev and prod, check local code and secrets are checked in and pushed.
 doGitChecksOnFormalStages 1
 
-DOECHO=1
-DOFORCE=0
-DOPUSH=1
-FOLD=$(tput cols)
-BLOCK=0
 
 # Globals
 RECIPES=( )
 CONTAINERNAME=
 CONTAINER=
 SRCDIR=${WOV_BASEDIR}
-DESTDIR=
 ARCHDIR=
 
 # echo "NOTE[$0]: Skipping git checks.... will do on wov-push."
@@ -54,40 +99,6 @@ fi
 
 
 
-# --------------------------------------------------------------------- 
-# --------------------------------------------------------------------- 
-function fDisplayOptions()
-{ 
-  cat <<EOF | fold -w ${FOLD} -s
-
-
-usage: `basename $0` [options] {containercode ...}
-
-Pushes the containers by building and pushing to the archive. Runs the recipe scripts and if there is a change, build the containers.
-
-ex. `basename $0` -f ggg hhh  
-    -> for project iii,  forces the building of containers iiiggg and iiihhh
-
-
-
-The recipes for containers should:
-
-1) copy code from ${SRCDIR} to the ${DESTDIR} directory
-  - where SRCDIR is the root of your git and DESTDIR is the root of the container to be built (i.e. wovtools/cache/containers/CONTAINER).
-
-2) create a sub-recipes to insert into the Dockerfile. There are BUILD and RUN stages, where BUILD contains ssh keys to access private repos. RUN tells the container how to run.
-  - ${DESTDIR}/SECRET/prebuild.docker - called before all files copied into container (do yarn installs here)
-  - ${DESTDIR}/SECRET/build.docker - all code is in the container
-  - ${DESTDIR}/SECRET/run.docker - instructions on how to run container
-
-  -p/P : do push, no push
-  -h : this help
-  -l : list containers
-  -f : force build
-  -q/-v : quiet/verbose
-
-EOF
-}
 
 
 # ---------------------------------------------------------------------
@@ -157,10 +168,10 @@ EOF
   _CONTAINERBASE="WOV_${WOV_PROJECT}${CONTAINERNAME}_containerfrom"
   CONTAINERBASE=${!_CONTAINERBASE}
   if [ "${CONTAINERBASE}" == "null" ] || [ "${CONTAINERBASE}" == "" ]; then
-    printf "\nERROR: Docker container for '${repo}' has no known base to build from in secret: '${WOV_PROJECT}.${CONTAINERNAME}.containerfrom'.\n\n"
+    printf "\nERROR: Docker container for '${repo}' has no known base to build from in secret: 'WOV_${WOV_PROJECT}${CONTAINERNAME}_containerfrom'.\n\n"
     printf "   Check: \n"
-    printf "     - secrets are rebuilt (wov-env-build --local)\n"
-    printf "     - secrets contain entry for '${WOV_PROJECT}.${CONTAINERNAME}.containerfrom'. ('wov-ed -c secrets/current.json')\n"
+    printf "     - secrets are rebuilt\n"
+    printf "     - secrets contain entry for '${WOV_PROJECT}.${CONTAINERNAME}.containerfrom'.\n"
     printf "     - secret file containing that entry is included in this stage (see wovtools/confing.json secrets.${WOV_STAGE})\n\n"
     exit 1
   fi
@@ -501,7 +512,8 @@ if [ "${BLOCK}" == "0" ]; then
 
   RECIPES=( "$@" )
   if [ "${#RECIPES[@]}" == "0" ]; then
-    RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+    # RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+    fGetContainerRecipes
   fi
 #  echo "R: ${RECIPES}"
 
