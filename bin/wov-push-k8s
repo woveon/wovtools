@@ -39,25 +39,25 @@ function doPushClusterToArchiveChecks()
   for container in ${RECIPES[@]}; do
 
     # each container should have a cm
-    if [ ! -e "${WOV_ARCHIVEENV}/${ARCHPATH}/cm/${WOV_PROJECT}${container}" ]; then
+    if [ ! -e "${CLUSTERDIR}/cm/${WOV_PROJECT}${container}" ]; then
       echo "WARNING: container '${WOV_PROJECT}${container}' has no K8s ConfigMap file.";
       retval=1;
     fi
 
     # each container should have a secrets file
-    if [ ! -e "${WOV_ARCHIVEENV}/${ARCHPATH}/se/${WOV_PROJECT}${container}" ]; then
+    if [ ! -e "${CLUSTERDIR}/se/${WOV_PROJECT}${container}" ]; then
       echo "WARNING: container '${WOV_PROJECT}${container}' has no K8s Secrets file.";
       retval=1;
     fi
 
     # each container should have a k8s deployment file
-    if [ ! -e "${WOV_ARCHIVEENV}/${ARCHPATH}/k8s/${WOV_PROJECT}${container}.yaml" ]; then
+    if [ ! -e "${CLUSTERDIR}/k8s/${WOV_PROJECT}${container}.yaml" ]; then
       echo "WARNING: container '${WOV_PROJECT}${container}' has no K8s Deployment file.";
       retval=1;
     fi
 
     # each container should have a k8s service file
-    if [ ! -e "${WOV_ARCHIVEENV}/${ARCHPATH}/k8s/${WOV_PROJECT}${container}-service.yaml" ]; then
+    if [ ! -e "${CLUSTERDIR}/k8s/${WOV_PROJECT}${container}-service.yaml" ]; then
       echo "WARNING: container '${WOV_PROJECT}${container}' has no K8s Service file.";
       retval=1;
     fi
@@ -65,7 +65,7 @@ function doPushClusterToArchiveChecks()
   done
 
   # each cluster should have a k8s ingress file
-  if [ ! -e "${WOV_ARCHIVEENV}/${ARCHPATH}/k8s/${WOV_PROJECT}-ingress.yaml" ]; then
+  if [ ! -e "${CLUSTERDIR}/k8s/${WOV_PROJECT}-ingress.yaml" ]; then
     echo "WARNING: cluster '${WOV_PROJECT}' has no K8s Ingress file ${WOV_PROJECT}-ingress.yaml.";
     retval=1;
   fi
@@ -225,4 +225,8 @@ fi
 
 
 # 0 - success, 2- warnings
+if [ $DOECHO -ge 1 ]; then 
+  if [ $RESULT == 0 ]; then echo "  ... wov-push-k8s success";
+  else echo "  ... wov-push-k8s failed"; fi
+fi
 exit $RESULT

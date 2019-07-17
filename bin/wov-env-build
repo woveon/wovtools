@@ -516,6 +516,13 @@ fBuildClusterDir()
         #      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
         # echo "{\"MS\" : \"${ms}\"}"
         wov-compile -d "{\"MS\" : \"${MS}\"}" ${SECRETFILE} ${SRC} > ${DEST}
+
+        # validate output
+        python -c 'import yaml, sys; yaml.safe_load(sys.stdin)' < ${DEST}
+        if [ $? != 0 ]; then
+          echo "WARNING: generated invalid yaml: ${DEST} from ${SRC}"
+        fi
+
       else
         if [ "$DOECHO" == "2" ]; then echo "  ... skipping ${SRC}"; fi
       fi
