@@ -113,6 +113,12 @@ else
   echo "  ... WARNING: skipping check for database changes that could block the push"
 fi
 
+echo "  ... wov-push-k8s check"
+wov-push-k8s --check ${METAARGS}
+if [ "$?" != "0" ]; then
+  echo "   ... wov-push-k8s check failed"
+  exit 1
+fi
 
 echo "  ... wov-push-container ${METAARGS}"
 wov-push-container ${METAARGS}

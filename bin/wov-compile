@@ -34,17 +34,19 @@ CMT_PRE=""
 CMT_POST=""
 WARNINGLINE=1   # line number to insert message
 DS=
+D="{}"
 
 alloptions=$*
 
 fDisplayOptions()
 {
   echo 
-  echo "Usage : `basename $0` [-v] [-h|--help][-ds] [comment_character] secret_file template_file"
+  echo "Usage : `basename $0` [-v] [-h|--help][-ds X] [comment_character] secret_file template_file"
   echo
   echo "   This is a simple handlebars running script, with some headings."
   echo ""
-  echo "  -ds/--data-set : The --data-set loads the const file from from wovtools/data (ex. X_const.js file) and loads it on 'C'. So if you have X_const.js with   { id : { A : 1 } }, you can use it via {{C.id.A}}."
+  echo "  -ds/--data-set X : The --data-set loads the const file from from wovtools/data (ex. X_const.js file) and loads it on 'C'. So if you have X_const.js with   { id : { A : 1 } }, you can use it via {{C.id.A}}."
+  echo "  -d/--data JSON : uses this data as well"
   echo
 }
 
@@ -72,6 +74,11 @@ while [[ $1 =~ ^- ]]; do
   if [ "$1" == "-v" ]; then
     VERBOSE=1
     shift
+  elif [ "$1" == "-d" ] || [ "$1" == "--data" ]; then
+    shift
+    D="${1}"
+    shift
+
   elif [ "$1" == "-ds" ] || [ "$1" == "--data-set" ]; then
     shift
     DS=$1
@@ -188,12 +195,12 @@ SEDCMD=''$WARNINGLINE"i$WARNING"
 
 #node -e 'console.log("9 : ", Date.now())' 1>&2
 # 1st and 2nd passes at once
-#echo "time wov-hbs" 1>&2
-# echo "wov-hbs calling ${TEMPLATEFILE}"
+# echo "time wov-hbs" 1>&2
+# echo "wov-hbs calling ${TEMPLATEFILE}" 
 if [ "$DS" == "" ]; then
-  wov-hbs -sf $SCF  < $TEMPLATEFILE  | $SED "$SEDCMD"
+  wov-hbs -sf $SCF -d "${D}"  < $TEMPLATEFILE  | $SED "$SEDCMD"
 else
-  wov-hbs -sf $SCF -ds $DS < $TEMPLATEFILE  | $SED "$SEDCMD"
+  wov-hbs -sf $SCF -ds $DS -d "${D}" < $TEMPLATEFILE  | $SED "$SEDCMD"
 fi
 #echo "/time wov-hbs" 1>&2
 

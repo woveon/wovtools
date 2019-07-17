@@ -414,7 +414,7 @@ function fPostBuildSecretsJSON()
     local subhost=`jq -r ".${db}.subhost" ${2}_`
     # echo "subhost : ${subhost}"
     if [ "${cmd}" != "" ]; then cmd+=" | "; fi
-    cmd+=" .${db}.host=\"$(doResName DB ${WOV_CLUSTER} ${subhost})\" "
+    cmd+=" .${db}.hostres=\"$(doResName DB ${WOV_CLUSTER} ${subhost})\" "
     #echo "cmd : ${cmd}"
   done
   
@@ -494,6 +494,12 @@ fBuildClusterDir()
       SRC=${WOV_BASEDIR}/wovtools/k8s/${f}
       DEST=${CLUSTER_DIR}/k8s/${f%.wov}
 
+      # extract microservice out of the filename: (MS-k8sname|MS).yaml.wov -> (MS-k8sname|MS) -> MS
+      MS=( $(echo $f | tr "." "\n") )
+      MS0=$(echo ${MS[0]} | tr "-" "\n")
+      ms=${MS0[0]}
+      #echo "ms '${ms}'  MS0 '${MS0[@]}' MS '${MS[@]}'"
+
       # check if we need to compile
       # ------------------------
       local dowecompile=${DOFORCE}
@@ -508,7 +514,8 @@ fBuildClusterDir()
         if [ "$DOECHO" == "2" ] || [ "$DOECHO" == "2" ]; then echo "  ... build ${SRC}"; fi
         #echo " --- `basename ${DEST}` needs to be built"
         #      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
-        wov-compile ${SECRETFILE} ${SRC} > ${DEST}
+        # echo "{\"MS\" : \"${ms}\"}"
+        wov-compile -d "{\"MS\" : \"${MS}\"}" ${SECRETFILE} ${SRC} > ${DEST}
       else
         if [ "$DOECHO" == "2" ]; then echo "  ... skipping ${SRC}"; fi
       fi

@@ -3,6 +3,7 @@
 DOECHO=1
 DOFORCE=0
 FOLD=`tput cols`
+COMMAND="push"
 
 CONFEXT=
   # added to conf dir names (ex. "-vh" for vh specific)
@@ -146,6 +147,10 @@ while [[ $1 =~ ^- ]]; do
     CONFEXT=$1
     shift
 
+  elif [ "$1" == "--check" ]; then
+    shift
+    COMMAND="check"
+
   elif [ "$1" == "-f" ]; then
     shift
     DOFORCE=1
@@ -175,20 +180,48 @@ fi
 # get the names of containers
 fGetContainerRecipes
 
+
 # ---------------------------------------------------------------------
 # For each named cluster, push to archive
 # ---------------------------------------------------------------------
-RESULT=0
-for cluster in "${CLUSTERS[@]}"; do
-  echo "Push to Archive for Cluster: $cluster"
-  doPushClusterToArchiveChecks ${cluster}
-  if [ $? != 0 ]; then
-    echo "  ... skipping cluster push due to warnings."
-    RESULT=2
-  else
-    doPushClusterToArchive ${cluster}
-  fi
-done
+function doPushK8sPush()
+{
+  local retval=0
+  for cluster in "${CLUSTERS[@]}"; do
+    echo "Push to Archive for Cluster: $cluster"
+    doPushClusterToArchiveChecks ${cluster}
+    if [ $? != 0 ]; then
+      echo "  ... skipping cluster push due to warnings."
+      retval=2
+    else
+      doPushClusterToArchive ${cluster}
+    fi
+  done
+  return $retval
+}
+
+function doPushK8sCheck()
+{
+  local retval=0
+  for cluster in "${CLUSTERS[@]}"; do
+    echo "Check K8s files for Cluster: $cluster"
+    doPushClusterToArchiveChecks ${cluster}
+    if [ $? != 0 ]; then
+      echo "  ... skipping cluster push due to warnings."
+      retval=2
+    fi
+  done
+  return $retval
+}
+
+
+if [ "$COMMAND" == "push" ]; then
+  doPushK8sPush
+  RESULT=$?
+elif [ "$COMMAND" == "check" ]; then
+  doPushK8sCheck
+  RESULT=$?
+fi
 
 
 # 0 - success, 2- warnings
