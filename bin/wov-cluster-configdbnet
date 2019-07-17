@@ -157,7 +157,7 @@ if [ "$CONFIG_DBS" == "1" ]; then
   # --------------------------------------------------------------------- 
   # create security group in Default cluster for database to be created
 
-  DBSG_GroupId=$(aws ec2 describe-security-groups --filters "Name=tag:KubernetesCluster,Values=wov-aws-va-grape.alywan.com" --filters "Name=vpc-id,Values=${DVPCID}" --group-names "${DBSG}" 2> /dev/null |  jq -r ".SecurityGroups[].GroupId") ; DBSG_GroupIde=$?
+  DBSG_GroupId=$(aws ec2 describe-security-groups --filters "Name=tag:KubernetesCluster,Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}" --filters "Name=vpc-id,Values=${DVPCID}" --group-names "${DBSG}" 2> /dev/null |  jq -r ".SecurityGroups[].GroupId") ; DBSG_GroupIde=$?
   # echo "DBSG_GroupId: '${DBSG_GroupId}' '${DBSG_GroupIde}'"
   if [[ ${DBSG_GroupIde} -ne 0 ]]; then printf "\n\nERROR: failed to query the security group.\n"; exit 1; fi
   if [ "${DBSG_GroupId}" == "" ]; then

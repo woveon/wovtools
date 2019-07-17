@@ -9,6 +9,7 @@ pushdbenvargs=( "$@" )
 set ""
 . <(wov-env --exports -e)
 . wov-env-common
+. wov-db-common
 set -- "${pushdbenvargs[@]}"
 
 DOECHO=1
@@ -19,6 +20,9 @@ DB_OP=
 DB_FILE=
 
 DB_HEADEROPTIONS=
+
+
+
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
@@ -40,6 +44,7 @@ DBSERVER - the name of a database server in the project (created via wov-cluster
   -c [command]  : run a DB command
   -f [file]     : load file of SQL commands into a DB
   --schema      : return the DB's schema
+  --info        : reports about the database
 
  Data Mods:
   -d [database] : changes the database name (DB inside the DB server)
@@ -50,12 +55,19 @@ DBSERVER - the name of a database server in the project (created via wov-cluster
   --data-schema/-ds : reloads the database schema (clearing existing data)
   --data-clear/-dc  : clears data in the database
   --data-data/-dd   : loads the database data
+  --data-reload/-dr : reloads the database data (clear and data)
   --data-full/-df   : loads a full DataSet by loading schema, clear and load data
 
  Local Postgres via Docker:
   --docker-postgres-start : start a local Postgres database via Docker
   --docker-postgres-stop  : stop a local Postgres database in Docker
 
+ DB Management: (note: change namespace or turn off local to change databases)
+  --db-init    : initialize the database for WovTools
+  --db-ver     : returns the current 
+  --db-log     : returns the log of commits for the database
+  --db-wait    : wait for a database to come online after creation
+  -l/--list       : list all databases
 
 NOTE:
 About commands (-c)... you have to be careful about quotes as both bash and psql are very particular. Here, use single quotes so '*' is not expanded, and quote the single quote so mydatabase is interpret properly by postgres.
@@ -65,8 +77,17 @@ ex. -c 'SELECT * FROM logs WHERE database=\'mydatabase\' ORDER BY id DESC LIMIT 
 EOF
 }
 
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doDBList()
+{
+  local DATABASES=( $(doFindDatabases) )
+  echo "${DATABASES[@]}"
+}
+
 # Help command catch here
 if [ "$1" == "-h" ] || [ "$1" == "--help" ]; then fDisplayOptions; exit 0; fi
+if [ "$1" == "-l" ] || [ "$1" == "--list" ]; then doDBList; exit 0; fi
 
 
 # Set the default commands
@@ -83,34 +104,53 @@ shift
 # --------------------------------------------------------------------- 
 # Set config from env vars and project type
 # --------------------------------------------------------------------- 
-DB_TYPE=WOV_${DATABASESERVER}_type
-DB_DATABASE=WOV_${DATABASESERVER}_database
-DB_USERNAME=WOV_${DATABASESERVER}_username
-DB_PASSWORD=WOV_${DATABASESERVER}_password
-DB_HOST=WOV_${DATABASESERVER}_host
-DB_PORT=WOV_${DATABASESERVER}_port
+doSetDBData()
+{
+  DB_SUBHOST=WOV_${DATABASESERVER}_subhost
+  DB_TYPE=WOV_${DATABASESERVER}_type
+  DB_DATABASE=WOV_${DATABASESERVER}_database
+  DB_USERNAME=WOV_${DATABASESERVER}_username
+  DB_PASSWORD=WOV_${DATABASESERVER}_password
+#  DB_HOST=WOV_${DATABASESERVER}_host
+  DB_HOST=localhost
+  DB_PORT=WOV_${DATABASESERVER}_port
+  DB_INSTANCEAVAILABILITYZONE=WOV_${DATABASESERVER}_instanceAvailabilityZone
+  DB_INSTANCEAVAILABILITYZONEALT=WOV_${DATABASESERVER}_instanceAvailabilityZoneAlt
+  DB_INSTANCE_CLASS=WOV_${DATABASESERVER}_instance_class
+  DB_INSTANCE_STORAGE=WOV_${DATABASESERVER}_instance_storage
+  DB_VERSION=WOV_${DATABASESERVER}_version
 
-DB_HEADEROPTIONS=-t
+  DB_HEADEROPTIONS=-t
 
-## if in Plugin and using default database, default to the mongodb
-#if [[ ( "$DATABASESERVER" == "" ) || ( "$DATABASESERVER" == "${WOV_PROJECT}db" ) ]] && [[ "${WOV_PROJECTTYPE}" == "pl" ]]; then
-#  # echo "...defaulting to plugin mongodb."
-#  DB_TYPE=WOV_we_db_type
-#  DB_DATABASE=WOV_we_db_collection
-#  DB_USERNAME=WOV_we_db_user
-#  DB_PASSWORD=WOV_we_db_password
-#  DB_HOST=WOV_we_db_url
-#  DB_PORT=WOV_we_db_port
-#  DATABASESERVER=${WOV_PROJECT}db
-#fi
+  ## if in Plugin and using default database, default to the mongodb
+  #if [[ ( "$DATABASESERVER" == "" ) || ( "$DATABASESERVER" == "${WOV_PROJECT}db" ) ]] && [[ "${WOV_PROJECTTYPE}" == "pl" ]]; then
+  #  # echo "...defaulting to plugin mongodb."
+  #  DB_TYPE=WOV_we_db_type
+  #  DB_DATABASE=WOV_we_db_collection
+  #  DB_USERNAME=WOV_we_db_user
+  #  DB_PASSWORD=WOV_we_db_password
+  #  DB_HOST=WOV_we_db_url
+  #  DB_PORT=WOV_we_db_port
+  #  DATABASESERVER=${WOV_PROJECT}db
+  #fi
 
-# Set variables to values of the name
-DB_TYPE=${!DB_TYPE}
-DB_DATABASE=${!DB_DATABASE}
-DB_USERNAME=${!DB_USERNAME}
-DB_PASSWORD=${!DB_PASSWORD}
-DB_HOST=${!DB_HOST}
-DB_PORT=${!DB_PORT}
+  # Set variables to values of the name
+  DB_SUBHOST=${!DB_SUBHOST}
+  DB_TYPE=${!DB_TYPE}
+  DB_DATABASE=${!DB_DATABASE}
+  DB_USERNAME=${!DB_USERNAME}
+  DB_PASSWORD=${!DB_PASSWORD}
+#  DB_HOST=${!DB_HOST}
+  DB_PORT=${!DB_PORT}
+  DB_INSTANCEAVAILABILITYZONE=${!DB_INSTANCEAVAILABILITYZONE}
+  DB_INSTANCEAVAILABILITYZONEALT=${!DB_INSTANCEAVAILABILITYZONEALT}
+  DB_INSTANCE_CLASS=${!DB_INSTANCE_CLASS}
+  DB_INSTANCE_STORAGE=${!DB_INSTANCE_STORAGE}
+  DB_VERSION=${!DB_VERSION}
+}
+
+# 1st call
+doSetDBData
 
 
 # NOTE: using bastion so this overrides cluster settings
@@ -215,6 +255,138 @@ function setAsAdmin()
 
 
 # ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doDBInit()
+{
+  mkdir -p ${WOV_BASEDIR}/wovtools/db/archive
+
+  # Create 'wovtools' database in db server if it does not exist
+  export PGPASSWORD=${DB_PASSWORD}
+  psql -h localhost -U ${DB_USERNAME} -tc "SELECT 1 FROM pg_database WHERE datname = 'wovtools'" | grep -q 1 || psql -U ${DB_USERNAME} -h localhost -c "CREATE DATABASE wovtools"
+
+  # in 'wovtools', create the logs table, and insert a row
+  psql -U ${DB_USERNAME} -h localhost -d wovtools -tc "CREATE TABLE IF NOT EXISTS logs (id SERIAL NOT NULL PRIMARY KEY, database varchar, wovtoolsver varchar, label varchar, pver integer, sver integer, snapshot varchar, schema varchar DEFAULT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() );"
+
+  # first delta is that it exists
+  cat <<EOF >> ${WOV_BASEDIR}/wovtools/db/${DATABASESERVER}.deltas
+# ---------------------------------------------------------------------
+# doInitDB called for: ${DATABASESERVER}
+# ---------------------------------------------------------------------
+# 1) create wovtools database if not exist
+# 2) create the logs database in wovtools
+# ---------------------------------------------------------------------
+EOF
+
+  # Init the archive for it
+  if [ ! -e "${WOV_BASEDIR}/wovtools/db/archive/${DATABASESERVER}.json" ]; then
+    cat <<EOF >> ${WOV_BASEDIR}/wovtools/db/archive/${DATABASESERVER}.json
+{
+  "wovtoolsversion": "0",
+  "versions": {}
+}
+EOF
+  fi
+
+}
+
+
+# ---------------------------------------------------------------------
+# returns 0 on success
+# ---------------------------------------------------------------------
+function doDBGetVer()
+{
+  local retval=1
+
+  R=$(PGPASSWORD=${DB_PASSWORD} psql -h localhost -d wovtools -U ${DB_USERNAME} --tuples-only -c "SELECT * from logs order by id DESC limit 1;" 2> /dev/null ) ; Re=$?
+  if [ ${Re} == "0" ] ; then
+    if [ "${R}" == "" ]; then echo "None"; 
+    else 
+      echo "${R}" | cut -d'|' -f5 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+    fi
+    retval=0
+  else
+    echo "Uninited"
+  fi
+
+  return $retval
+}
+
+
+# ---------------------------------------------------------------------
+# returns 0 on success
+# ---------------------------------------------------------------------
+function doDBGetLog()
+{
+  local retval=1
+
+  R=$(PGPASSWORD=${DB_PASSWORD} psql -h localhost -d wovtools -U ${DB_USERNAME} --tuples-only -c "SELECT * from logs order by id DESC;" 2> /dev/null ) ; Re=$?
+  if [ ${Re} == "0" ] ; then
+    if [ "${R}" == "" ]; then echo "None"; 
+    else echo $R; fi
+    retval=0
+  else
+    echo "Uninited"
+  fi
+
+  return $retval
+}
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doInfo()
+{
+#  . <(wov-env -c wov-aws-va-grape --exports)
+#  doSetDBData
+
+  cat <<EOF
+
+DB Information
+---------------------------------------------------------------------
+  AWS Server : $(doResName DB ${WOV_CLUSTER} ${DB_SUBHOST}):${DB_PORT}
+    Database : ${DB_DATABASE}  User: ${DB_USERNAME} PASSWORDXXX
+        Type : ${DB_TYPE} ${DB_VERSION}, ${DB_INSTANCE_STORAGE} GB, ${DB_INSTANCE_CLASS}, zones: ${AWS_REGION}${DB_INSTANCEAVAILABILITYZONE} ${AWS_REGION}${DB_INSTANCEAVAILABILITYZONEALT}
+
+  WovTools Version: $(doDBGetVer)
+  
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# Wait for db to get address, meaning it is ready to go
+# $1=[dbname]
+# ---------------------------------------------------------------------
+function doDBWait()
+{
+
+  if [ "$1" == "localhost" ]; then
+    echo "ERROR: asking to wait for localhost database. Turn off local database in config/local.json secretsmods.local."
+    exit 1
+  fi
+
+  # check for existence
+  S=$(aws rds describe-db-instances --db-instance-identifier $(doResName DB ${WOV_CLUSTER} ${1}) --query 'DBInstances[0].Endpoint.Address' --output text) ; Se=$?
+  if [ $Se == 255 ]; then echo "ERROR: unknown database."; exit 1; fi
+
+
+  # wait for it to get an address
+  while [ "$(aws rds describe-db-instances --db-instance-identifier $(doResName DB ${WOV_CLUSTER} ${1}) --query 'DBInstances[0].Endpoint.Address' --output text)" == "None" ]; do
+    echo "    ... waiting for database to get address."
+    sleep 5
+  done
+
+  # wait for it to be available
+  while [ "$(aws rds describe-db-instances --db-instance-identifier $(doResName DB ${WOV_CLUSTER} ${1}) --query 'DBInstances[0].DBInstanceStatus' --output text)" != "available" ]; do
+    echo "    ... waiting for database to come online."
+    sleep 5
+  done
+}
+
+
+
+
+# ---------------------------------------------------------------------
 # Handle Params
 # ---------------------------------------------------------------------
 while [[ $1 =~ ^- ]]; do
@@ -231,6 +403,10 @@ while [[ $1 =~ ^- ]]; do
     shift
     read DB_PASSWORD
     shift
+
+  elif [ "$1" == "--info" ]; then
+    doInfo
+    exit 0
 
   elif [ "$1" == "--admin" ]; then
     shift
@@ -299,6 +475,14 @@ while [[ $1 =~ ^- ]]; do
     exit 0
     shift
 
+  elif [ "$1" == "--data-reload" ] || [ "$1" == "-dr" ]; then
+    shift
+    doDBDataBuild $1
+    doDBDataCommand $1 'clear'
+    doDBDataCommand $1 'data'
+    exit 0
+    shift
+
   elif [ "$1" == "--data-full" ] || [ "$1" == "-df" ]; then
     shift
     doDBDataBuild $1
@@ -313,7 +497,12 @@ while [[ $1 =~ ^- ]]; do
     pg_isready -p 5432 -h localhost 2>&1  > /dev/null
     A=$?
     if [ "$A" == "0" ]; then echo "ERROR: postgres already accepting connections. Try --docker-postgres-stop."; exit 1; fi
-    docker run --rm --name postgres-local -e POSTGRES_PASSWORD=${DB_PASSWORD} -d -p 5432:5432 postgres
+
+    # match major/minor versions
+    pgsplit=( $(echo $DB_VERSION | tr "." "\n") )
+    pgmajorminor="${pgsplit[0]}.${pgsplit[1]}"
+
+    docker run --rm --name postgres-local -e POSTGRES_PASSWORD=${DB_PASSWORD} -d -p 5432:5432 "postgres:${pgmajorminor}"
     I=0
     while [ "$(pg_isready -p 5432 -h localhost 2>&1 > /dev/null ; echo $?)" != "0" ]; do
       sleep 1 # sleep to account for time for it to spin up
@@ -329,6 +518,31 @@ while [[ $1 =~ ^- ]]; do
     shift
     docker stop postgres-local > /dev/null
     if [ "$?" == "0" ]; then echo "  ... success"; exit 0; fi
+    exit 0
+
+  elif [ "$1" == "--db-init" ]; then
+    shift
+    doDBInit
+    exit 0
+
+  elif [ "$1" == "--db-ver" ]; then
+    shift
+    doDBGetVer
+    exit 0
+
+  elif [ "$1" == "--db-log" ]; then
+    shift
+    doDBGetLog
+    exit 0
+
+  elif [ "$1" == "--db-wait" ]; then
+    shift
+    doDBWait ${DB_SUBHOST}
+    exit 0
+
+  elif [ "$1" == "-l" ] || [ "$1" == "--list" ]; then
+    shift
+    doDBList
     exit 0
 
   elif [ "$1" == "-H" ]; then
@@ -391,10 +605,16 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #      PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\"
 #    fi
 
-    PGPASSWORD="${DB_PASSWORD}" psql ${DB_HEADEROPTIONS} -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"
+    R=$(PGPASSWORD="${DB_PASSWORD}" psql ${DB_HEADEROPTIONS} -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"  2>&1 ) ; Re=$?
     #PGPASSWORD=${DB_PASSWORD} psql --tuples-only -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"
-    if [ "$?" != "0" ]; then
-      printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
+    if [ "${Re}" != "0" ]; then
+      if [ "$R" == "psql: FATAL:  database \"wovtools\" does not exist" ]; then
+        printf "\n${R}\nERROR: did you init the database? 'wov-db-connect ${DATABASESERVER} --db-init'\n"
+        exit 1
+      fi
+      printf "${R}\n"
+      printf "\n\nERROR(${Re}): could not connect... have you tunneled to the bastion server?\n\n"
+      exit 1
     fi
 
 
@@ -408,8 +628,9 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
 #    fi
     PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
-    if [ "$?" != "0" ]; then
-      printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
+    PGPASSWORDe=$?
+    if [ "$PGPASSWORDe" != "0" ]; then
+      printf "\n\nERROR(${PGPASSWORDe}): could not connect... have you tunneled to the bastion server?\n\n"
       exit 1
     fi
 

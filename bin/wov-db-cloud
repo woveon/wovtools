@@ -2,6 +2,7 @@
 
 THISCMD=$(basename $0)
 
+DEPRECATED - moving this functionality to wov-db-connect (probably rename to wov-db soon)
 
 # ---------------------------------------------------------------------
 # Import Env

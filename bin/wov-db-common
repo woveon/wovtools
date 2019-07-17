@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+
+# --------------------------------------------------------------------- 
+# Create a list of databases to look at
+# 1. take from command line if they have it
+# 2. else, from all deltas files and archive files
+# 
+#  Call by : DATABASES=( $(doFindDatabases $*) )
+# --------------------------------------------------------------------- 
+function doFindDatabases()
+{
+  DATABASES=$*
+  if [ ! -e ${WOV_BASEDIR}/wovtools/db ]; then
+    printf "\n\nERROR: no database directory in wovtools: '${WOV_BASEDIR}/wovtools/db' missing.\n" 1>&2
+    fFailedDBConnection 1
+
+  elif [ ! -e ${WOV_BASEDIR}/wovtools/db/archive ]; then
+    printf "\n\nERROR: no database archive in wovtools/db: '${WOV_BASEDIR}/wovtools/db/archive' missing.\n" 1>&2
+    fFailedDBConnection 1
+
+  elif [ "$DATABASES" == "" ]; then
+    DATABASES=()
+    D1=()
+    D2=()
+    DELTAS=( $(cd ${WOV_BASEDIR}/wovtools/db && ls *.deltas 2> /dev/null ) )
+    for d in "${DELTAS[@]}"; do
+      D1+=("${d%.deltas}")
+    done
+    REGFILES=( $(cd ${WOV_BASEDIR}/wovtools/db/archive && ls *.json 2> /dev/null ) )
+    for f in "${REGFILES[@]}"; do
+      D2+=("${f%.json}")
+    done
+
+    # Make sure only one entry : so add y, then every z not in y
+#    echo "D1: ${D1[@]}" 1>&2
+#    echo "D2: ${D2[@]}" 1>&2
+    i=0
+    for y in ${D2[@]}
+    do
+      DATABASES[i++]="$y"
+    done
+
+    # add in z's if not in y
+    for z in ${D1[@]}
+    do
+#      DATABASES[i++]="$z"
+      doskip=0
+      for y in ${D2[@]}
+      do
+        if [ "$z" == "$y" ]; then
+          doskip=1
+        fi
+      done
+      if [ "${doskip}" == "0" ]; then
+#        echo "adding $z"
+        DATABASES[i++]="$z"
+      fi
+    done
+  fi
+#  echo "${DATABASES[@]}" 1>&2
+  echo "${DATABASES[@]}"
+#  exit 1
+}
+

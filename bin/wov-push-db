@@ -12,6 +12,7 @@ fi
 pushenvargs=( "$@" )
 set ""
 . wov-env --provider
+. wov-db-common
 . wov-ns-check
 set -- "${pushenvargs[@]}"
 
@@ -48,6 +49,7 @@ By default, checks all database delta files that exist.
 Switches:
   --checksum
   --skip-git-checks  : ignores unchecked git changes of secrets and code (dev and prod stages will override this). Does not skip archive checks.
+  --snapshot X : a snapshot to use for this push (i.e. a new checkpoint, not a delta)
   -pc|--push-check|--any-push-blockage : checks if the database changes are checked in for pver, and ready to push to archive
   -h : this help
   -q/-v : quiet/verbose
@@ -61,8 +63,8 @@ function fFailedDBConnection()
   local RET=$1
   if [ "$2" != "" ]; then
     printf "  > Is db inited?\n"
-    printf "    - init>        'wov-db-cloud -D ${2} -I'\n"   
-    printf "    - get version> 'wov-db-cloud -D $2 --ver'\n"
+    printf "    - init>        'wov-db-connect ${2} -db-init'\n"   
+    printf "    - get version> 'wov-db-connect $2 --db-ver'\n"
     printf "\n"
     printf "\n"
   fi
@@ -117,15 +119,21 @@ function doHashDBSchema()
 function doGetDBPVER()
 {
   local retval=1
-  local DBRAW=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null)
-  local r=$?
-  if [ "$r" != "0" ]; then 
-    printf "\n\nERROR: failed to connect to database wovtools, table logs, on database server $1.\n\n"; 
-    fFailedDBConnection 1 $1
+  R=$(wov-db-connect $1 --db-ver 2>&1) ; Re=$?
+  if [ $Re -eq 0 ]; then
+    local DB_PVER=`echo ${R} | cut -d'|' -f5`
+    retval=0;
   fi
-#  echo "DBRAW ${DBRAW}" 1>&2
-  local DB_PVER=`echo ${DBRAW} | cut -d'|' -f5`
-  retval=$?
+
+#  DBRAW=$(wov-db-connect $i -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2>&1) ; DBRAWe=$?
+#  if [ "$DBRAWe" != "0" ]; then 
+#    printf "${DBRAW}\n"
+#    printf "\nERROR: failed to connect to database wovtools, table logs, on database server $1.\n\n"; 
+#    fFailedDBConnection 1 $1
+#  fi
+#  # echo "DBRAW ${DBRAW}" 1>&2
+#  local DB_PVER=`echo ${DBRAW} | cut -d'|' -f5`
+#  retval=$?
 
   echo "${DB_PVER}"
   return $retval
@@ -147,64 +155,6 @@ function doGetDBLastLogEntry()
   fi
 
   return $retval
-}
-
-# Create a list of databases to look at
-# 1. take from command line if they have it
-# 2. else, from all deltas files and archive files
-function doFindDatabases()
-{
-  DATABASES=$*
-  if [ ! -e ${WOV_BASEDIR}/wovtools/db ]; then
-    printf "\n\nERROR: no database directory in wovtools: '${WOV_BASEDIR}/wovtools/db' missing.\n" 1>&2
-    fFailedDBConnection 1
-
-  elif [ ! -e ${WOV_BASEDIR}/wovtools/db/archive ]; then
-    printf "\n\nERROR: no database archive in wovtools/db: '${WOV_BASEDIR}/wovtools/db/archive' missing.\n" 1>&2
-    fFailedDBConnection 1
-
-  elif [ "$DATABASES" == "" ]; then
-    DATABASES=()
-    D1=()
-    D2=()
-    DELTAS=( $(cd ${WOV_BASEDIR}/wovtools/db && ls *.deltas 2> /dev/null ) )
-    for d in "${DELTAS[@]}"; do
-      D1+=("${d%.deltas}")
-    done
-    REGFILES=( $(cd ${WOV_BASEDIR}/wovtools/db/archive && ls *.json 2> /dev/null ) )
-    for f in "${REGFILES[@]}"; do
-      D2+=("${f%.json}")
-    done
-
-    # Make sure only one entry : so add y, then every z not in y
-#    echo "D1: ${D1[@]}" 1>&2
-#    echo "D2: ${D2[@]}" 1>&2
-    i=0
-    for y in ${D2[@]}
-    do
-      DATABASES[i++]="$y"
-    done
-
-    # add in z's if not in y
-    for z in ${D1[@]}
-    do
-#      DATABASES[i++]="$z"
-      doskip=0
-      for y in ${D2[@]}
-      do
-        if [ "$z" == "$y" ]; then 
-          doskip=1
-        fi
-      done
-      if [ "${doskip}" == "0" ]; then
-#        echo "adding $z"
-        DATABASES[i++]="$z"
-      fi
-    done
-  fi
-#  echo "${DATABASES[@]}" 1>&2
-  echo "${DATABASES[@]}"
-#  exit 1
 }
 
 
@@ -240,14 +190,14 @@ function doPushCheck()
   if [ "$retval" == "0" ]; then
     if [ $DOECHO -ge 1 ]; then printf "... retrieve db hash.\n"; fi
     DB_HASH=$(doHashDBSchema $1) ; local A=$?
-    #echo "db hash: $A '${DB_HASH}'"
+    # echo "db hash: $A '${DB_HASH}'"
     if [ $A -ne 0 ]; then
       echo "${DB_HASH}"
       fFailedDBConnection 2 $1
     fi
     DB_PVER=$(doGetDBPVER $1)
     if [ "$?" != "0" ] || [ "$DB_PVER" == "" ]; then
-      printf "\n\nERROR: could not get database version.\n"
+      printf "${DB_PVER}\nERROR: could not get database version.\n"
       fFailedDBConnection 2 $1
     elif [ ! -e ${WOV_BASEDIR}/wovtools/db/archive/${1}.json ]; then 
       printf "\nERROR: no archive/${1}.json.\n"; 
@@ -397,24 +347,39 @@ function doCommitDB()
 
   # get current db wovtools pver
   DB_ENTRY=$(doGetDBLastLogEntry $1)
-#  DB_PVER=$(doGetDBPVER $1)
   if [ "$?" != "0" ]; then
     printf "\n\n***ERROR: database not inited.\n"
     fFailedDBConnection 1 $1
-  elif [ "${DB_ENTRY}" == "" ]; then
-    printf "\n\n***ERROR: database has no parent.\n"
-    fFailedDBConnection 2 $1
   fi
 #  printf "\nDB_ENTRY '${DB_ENTRY}'\n"
-  OLDIFS=$IFS
-  IFS='|'
-  # CAW - just commented out dbverarray=( $(wov-db-cloud -D ${WOVDB_DBNAME} --ver)  )
-  DB_ENTRY=( $(echo "${DB_ENTRY[@]}") )
-  IFS=$OLDIFS
-#  printf "\nDB_ENTRY '${DB_ENTRY[*]}'\n"
-  DB_PVER="$( echo -e "${DB_ENTRY[4]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+
+
+  # No parent, consider this the first entry
+  if [ "${DB_ENTRY}" == "" ]; then
+    if [ "${DB_SNAPSHOT}" == "" ]; then
+      printf "\nERROR: need to provide a snapshot for first commit of database. Use --snapshot X. ex. rds:wov-aws-va-ant-db-alywandev-2017-07-17-07-20.\n"
+      fFailedDBConnection 3 $1
+    fi
+    DB_PVER=${WOV_PVER}
+    DB_snapshot="${DB_SNAPSHOT}"
+  else
+    OLDIFS=$IFS
+    IFS='|'
+    DB_ENTRY=( $(echo "${DB_ENTRY[@]}") )
+    IFS=$OLDIFS
+    DB_PVER="$( echo -e "${DB_ENTRY[4]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    DB_snapshot="$( echo -e "${DB_ENTRY[6]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  fi
 
   if [ "$retval" == "0" ]; then
+
+    # validate json file first
+    R=$(cat ${WOV_BASEDIR}/wovtools/db/archive/$1.json | jq empty 2>&1) ; Re=$?
+    if [ $Re != 0 ]; then
+      echo "${R}"
+      echo "ERROR: wovtools/db/archive/$1.json file is not valid JSON. Exiting."
+      exit 3
+    fi
 
     # get current db checksum
     CHKSUM=$(doHashDBSchema $1)
@@ -469,23 +434,25 @@ EOF
 }
 EOF
     fi
+
+
     # append this entry
     jq " .versions.\"${WOV_PVER}\"={ \"checksum\": \"${CHKSUM}\", \"parent\": { \"type\": \"pver\", \"pver\": \"${DB_PVER}\" } }" \
        ${WOV_BASEDIR}/wovtools/db/archive/$1.json > ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/archive/$1.json && rm ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$
-    DB_snapshot="$( echo -e "${DB_ENTRY[6]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
     #echo "DBENTRY snapshot : ${DB_snapshot}" 1>&2
     if [ "$DB_snapshot" != "" ]; then
-      echo "DBENTRY append snapshot : ${DB_snapshot}" 1>&2
+      echo "    ... append snapshot : ${DB_snapshot}" 1>&2
       jq " .versions.\"${WOV_PVER}\".parent.snapshot=\"${DB_snapshot}\"" \
        ${WOV_BASEDIR}/wovtools/db/archive/$1.json > ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/archive/$1.json && rm ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$
     fi
 
 
-    # - 4. update archive database pver number, with checksum ------------
+    # - 4. update archive database log pver number, snapshot, checksum ----
     # --------------------------------------------------------------------- 
-    echo "  ... update archive database pver number, with checksum"
-    R=$(wov-db-connect $1 -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver ) VALUES ( '$1', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER} );")
+    echo "  ... update archive database logs"
+    R=$(wov-db-connect $1 -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( '$1', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER}, '${DB_snapshot}' );")
     if [ "$?" != "0" ]; then
+      printf "${R}"
       printf "\n\nERROR: failed updating archive database pver number with checksum.\n"
       fFailedDBConnection 3 $1
     fi
@@ -521,6 +488,11 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--checksum" ]; then
     shift
     DOACTION="checksum"
+
+  elif [ "$1" == "--snapshot" ]; then
+    shift
+    DB_SNAPSHOT=$1
+    shift
 
   elif [ "$1" == "--any-push-blockage" ] || [ "$1" == "-pc" ] || [ "$1" == "--push-check" ]; then
     shift

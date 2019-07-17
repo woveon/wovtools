@@ -44,7 +44,8 @@ function doResName()
 
     # Database Name
     elif [ "$1" == "DB" ]; then
-      echo "${2}-db-${3}"
+      if [ "$3" == "localhost" ]; then echo "localhost"; 
+      else echo "${2}-db-${3}" ; fi
 
     # Peered connection from default VPC to cluster's, for the db
     elif [ "$1" == "PEERCONN" ]; then
