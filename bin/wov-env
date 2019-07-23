@@ -50,6 +50,7 @@ Command Options:
   -E            : echo the output on one line (bash executable)
   -p/--provider : run cluster config as well (queries cloud provider via wov-env-PROVIDER)
   --health      : check routes of a deployment
+    --health-no-tls/--health-tls : force http/https on routes
 
   Resource Names:
   --res SN RES ZONE  : subnet name
@@ -483,10 +484,14 @@ function fConfGeneration()
 # --------------------------------------------------------------------- 
 # Check routes
 #  NOTE: This is pretty limited since it only has 3 vars.
+# $1= if exists, use it's value for http/https (otherwise, use http/https as specified)
 # --------------------------------------------------------------------- 
 doHealthChecks() 
 {
-  local routes=( `cat ${WOV_BASEDIR}/wovtools/cache/.merged.json | jq -r ".health.routes[]"` )
+  local routes=( "/healthz" $(cat ${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/secrets.json | jq -r '.. | select( type=="object" ) | select(.healthpath != null) | .healthpath' 2> /dev/null) ) ; Re=$?
+#  local routes=$(cat ${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/secrets.json | jq -r ".health.routes[]" 2> /dev/null ); Re=$?
+  if [ $Re != 0 ] || [ "$routes" == "" ]; then printf "ERROR: failed finding .*.healthroutes in secrets.\n"; exit 1; fi
+
   local retval=0
   local MSG=
   local PROTO=
@@ -494,16 +499,22 @@ doHealthChecks()
   local CT=
   local SERVER=
 
+  if [[ ${DOECHO} -ge 2 ]]; then echo "Health Routes: ${routes[@]}"; fi
+
   for r in ${routes[@]}; do
     local URL=`echo "${r}" | sed  \
       -e 's/{WOV_STAGE}/'"${WOV_STAGE}"'/g' \
       -e 's/{WOV_ME}/'"${WOV_ME}"'/g' \
       -e 's/{WOV_PROJECT}/'"${WOV_PROJECT}"'/g'`
     # echo " check route ${r}: ${URL}"
+    local domain="$(wov-env --var WOV_www_api_url)"
+    local schema="$(wov-env --var WOV_www_api_urlscheme)"
+    if [ "${1}" != "" ]; then local schema=$1; fi
+    local URL="${schema}://${domain}${URL}"
 
     local CMD="curl -sS $URL"
-    #printf "  ... health check:\n    - ${URL}'\n"
-    printf "  ... ${URL}\n"
+    printf "  ... health check: ${URL}'\n"
+    #printf "  ... ${URL}\n"
     local R=$(${CMD} 2>&1)
     local RR=$?
     # echo " '$R:$RR' "
@@ -532,7 +543,7 @@ doHealthChecks()
       MSG=${MSG/$'\r'/} # remove \r that gets match in sed above
 
       if [[ ${CT} = application/json* ]]; then
-        printf "    - "
+        printf "    - application/json: '${PROTO}' '${STATUS}' "
         echo "$R" | jq -c
       elif [[ ${CT} = text/html* ]]; then
         # curl -sI ${URL}
@@ -545,8 +556,17 @@ doHealthChecks()
           echo "$R"
           retval=1
         fi
+      elif [[ ${CT} = text/plain* ]]; then
+        if [ "${STATUS}" == "200" ]; then
+          printf "    - text/plain: '${PROTO}' '${STATUS}' '${MSG}'\n"
+        else
+          printf "\n*** ERROR: Failed retreiving ${CT}: ${STATUS} ${MSG}\n"
+          echo "$R"
+          retval=1
+        fi
       else
-        printf "\n*** ERROR: Unknown content type : '${CT}'\n"
+        printf "\nRESULT(${RR}): $R\n"
+        printf "*** ERROR: Unknown content type : '${CT}'\n"
         curl -sI ${URL}
         retval=1
       fi
@@ -684,8 +704,16 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == '-v' ] || [ "$1" == '--version' ]; then
     echo $WOV_VERSION
 
+
   elif [ "$1" == '--health' ]; then
     doHealthChecks
+
+  elif [ "$1" == '--health-tls' ]; then
+    doHealthChecks https
+
+  elif [ "$1" == '--health-no-tls' ]; then
+    doHealthChecks http
+
 
   elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
     fWovEnvDisplayOptions

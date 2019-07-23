@@ -42,6 +42,8 @@ _compWovComplete()
   if [ "${COMP_WORDS[1]}" == "-c" ]; then
 #    echo "...matching to cache" >> /tmp/wovcomplete
     tmp=$tmp/cache
+  elif [ "${COMP_WORDS[1]}" == "-ccl" ]; then
+    tmp=$tmp/cache/clusters/$(wov-env --var WOV_CLUSTER)
   fi
   tmp=$tmp/$1
 #  echo "tmp : '${tmp}'  COMP_CWORD ${COMP_CWORD} '${COMP_WORDS[@]}'" >> /tmp/wovcomplete

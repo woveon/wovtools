@@ -1,0 +1,304 @@
+#!/usr/bin/env bash
+
+FOLD=`tput cols`
+DOECHO=1
+
+CVPCID=
+HOSTEDZONEID=
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDeployDNSDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+usage: `basename $0` [options]
+
+This handles checks on DNS routes to nodes for each microservice and DNS zone in general.
+
+  --zone-id                   - returns the hosted zone id
+  --records HOSTEDZONEID      - get the resource record sets
+  --apidns                    - Returns the project dns record (from WOV_www_api_url)
+  --lb                        - finds the AWS Load Balancer that serves the K8s cluster nodes
+  --create-dns               - create/upsert the project dns record set
+  --ingress                   - load stable/nginx-ingress for the Ingress
+
+EOF
+
+}
+
+
+if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then fDeployDNSDisplayOptions; exit 0; fi
+
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+envddnsargs=( "$@" )
+set ""
+. wov-env-loader
+set -- "${envddnsargs[@]}"
+
+WOV_cluster_dns_domain=`wov-env --var WOV_cluster_dns_domain`
+WOV_www_api_url=`wov-env --var WOV_www_api_url`
+
+
+
+# ---------------------------------------------------------------------
+# Sets the HOSTEDZONEID globally and echoes it
+# ---------------------------------------------------------------------
+function fGetZoneID()
+{
+  local HOSTEDZONEIDS=$(aws route53 list-hosted-zones  | jq -r ".HostedZones[] | select(.Name==\"${WOV_cluster_dns_domain}.\") | .Id" ) ; HOSTEDZONEIDSe=$?
+  if [ $HOSTEDZONEIDSe != 0 ]; then echo "ERROR: failed asking aws route53 for hosted zones."; exit 1; fi
+
+  local s=( $(echo $HOSTEDZONEIDS | tr '/' '\n') )
+  HOSTEDZONEID=${s[1]}
+  echo ${HOSTEDZONEID}
+}
+
+
+# --------------------------------------------------------------------- 
+# $1 - zoneid
+# --------------------------------------------------------------------- 
+function fGetResourceRecordSets()
+{
+  local R=$(aws route53 list-resource-record-sets --hosted-zone-id $1); Re=$?
+  if [ $Re != 0 ]; then echo "ERROR: failed asking aws route53 for resource record sets."; exit 1; fi
+
+  echo $R | jq -r .
+}
+
+
+# --------------------------------------------------------------------- 
+# Returns the record for ${name}-${STAGE}.${DNS}
+# $1 - zoneid
+# --------------------------------------------------------------------- 
+function fGetAPIRecord()
+{
+  if [ "${HOSTEDZONEID}" == "" ]; then fGetZoneID; fi
+
+  local R=$(fGetResourceRecordSets ${HOSTEDZONEID}) ; Re=$?
+  if [ $Re != 0 ]; then echo "ERROR: failed asking aws route53 for resource record sets."; exit 1; fi
+  # echo $R | jq . 1>&2
+  # echo "looking : ${WOV_www_api_url}" 1>&2
+
+  RECORD=$(echo $R | jq -r ".ResourceRecordSets[]  | select( .Name==\"${WOV_www_api_url}.\" ) | select( .Type==\"CNAME\" )") ; Re=$?
+  if [ $Re != 0 ]; then echo "ERROR: searching for '${WOV_www_api_url}'."; exit 1; fi
+  # echo "Record: $RECORD" 1>&2
+  echo $RECORD
+}
+
+
+# Finds the AWS Load balancer that serves the nodes. Created by helm chart stable/nginx-ingress.
+function fGetNodesLoadBalancerEntry()
+{
+  # Cluster VPC
+  CVPCID=`aws ec2 describe-vpcs --filters "Name=tag-key, Values=Name, Name=tag-value, Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}" | jq -r ".Vpcs[].VpcId"`
+  #echo "Cluster VPC: ${CVPCID}"
+
+  local R=$(aws elb describe-load-balancers | jq -r ".LoadBalancerDescriptions[] | select( .VPCId==\"${CVPCID}\")" )  ; Re=$?
+  if [ $Re != 0 ]; then echo "ERROR: failed asking for load balancers."; exit 1; fi
+  # echo $R | jq -r .
+
+  
+  #echo "Looking for LB : '${WOV_PROJECT}-${WOV_STAGE}/ing-${WOV_NS}-nginx-ingress-controller'"
+
+  local LBNames=( $(echo $R | jq -r ".LoadBalancerName") )
+  local LBName=
+  local LB=
+  for lbn in ${LBNames[@]}; do
+    local LBTags=$(aws elb describe-tags --load-balancer-names $lbn) ; LBTagse=$?
+    if [ $LBTagse != 0 ]; then echo "ERROR: failed asking load balancer tags."; exit 1; fi
+
+    #echo $LBTags | jq -r ".TagDescriptions[].Tags[]"
+    local LBTagKeys=(   $(echo $LBTags | jq  -r ".TagDescriptions[].Tags[].Key") )
+    local LBTagValues=( $(echo $LBTags | jq  -r ".TagDescriptions[].Tags[].Value") )
+
+    m=${#LBTagKeys[@]}
+    #echo "${m} : ${LBTagKeys[@]}"
+    i=0
+    while [ $i -lt $m ]; do
+      #echo "$lbn: ${LBTagKeys[$i]} ${LBTagValues[$1]}"
+      if [ "${LBTagKeys[$i]}" == "kubernetes.io/service-name" ] && \
+         [ "${LBTagValues[$i]}" == "${WOV_PROJECT}-${WOV_STAGE}/ing-${WOV_NS}-nginx-ingress-controller" ]; then
+        #>&2 echo "Found load balancer : $lbn" 
+        local LBName=$lbn
+        LB=$(echo $R | jq -r "select( .LoadBalancerName==\"$lbn\" )")
+        #>&2 echo "Found load balancer entry : $LB" 
+        break
+      fi
+      ((i++))
+    done
+
+    if [ "${LBName}" != "" ]; then break; fi
+  done
+  #>&2 echo "Returning load balancer entry : $LB" 
+  echo "${LB}"
+}
+
+function fGetNodesLoadBalancerName()
+{
+  local LBE=$(fGetNodesLoadBalancerEntry) ; Re=$?
+  if [ $Re -ne 0 ]; then echo "ERROR: failed to find load balancer for cluster's nodes. Is ingress running?"; echo "  See https://sourceforge.net/p/wovtools/wiki/Cluster%20Creation/#ingress"; exit 1; fi
+
+  local LBName=$(echo $LBE | jq -r ".LoadBalancerName")
+  echo $LBName
+}
+
+
+function fCreateProjectDNSRecordSet()
+{
+  if [ "${HOSTEDZONEID}" == "" ]; then fGetZoneID > /dev/null; fi
+#  echo "HOSTEDZONEID: ${HOSTEDZONEID}"
+
+  local LBE=$(fGetNodesLoadBalancerEntry) ; Re=$?
+  if [ $Re -ne 0 ]; then echo "ERROR: failed to find load balancer for cluster's nodes. Is ingress running?"; echo "  See https://sourceforge.net/p/wovtools/wiki/Cluster%20Creation/#ingress"; exit 1; fi
+  local LBEName=$(echo ${LBE} | jq -r .DNSName)
+  if [ "${LBEName}" == "" ]; then
+    echo "ERROR: failed finding .DNSName in : '${LBE}'."
+    exit 1
+  fi
+
+#  echo "zone project: ${HOSTEDZONEID}"
+  DNSR=$(fGetAPIRecord ${HOSTEDZONEID}) ; Re=$?
+  if [ $Re -ne 0 ]; then echo "ERROR: failed finding API Record for '${WOV_www_api_url}'."; exit 1; fi
+
+  if [ "${DNSR}" != "" ]; then
+    if [ ${DOECHO} -ge 1 ]; then echo "...existing DNS record found."; echo $DNSR | jq -r '.'; fi
+    DNSLB=$(echo $DNSR | jq -r '.ResourceRecords[0].Value')
+
+    # echo "DNSLB ${DNSLB}  LBEName ${LBEName}"
+    if [ "${DNSLB}" == "${LBEName}" ]; then
+      if [ ${DOECHO} -ge 1 ]; then echo "... DNS Record already going to load balancer... success."; fi
+    else
+      if [ ${DOECHO} -ge 1 ]; then echo "... DNS Record going to wrong load balancer." ; fi
+      _fCreateProjectDNSRecordSet ${LBEName}
+    fi
+  else
+    if [ ${DOECHO} -ge 1 ]; then echo "... no DNS Record for load balancer."; fi
+    _fCreateProjectDNSRecordSet ${LBEName}
+  fi
+}
+
+function _fCreateProjectDNSRecordSet()
+{
+  if [ "${HOSTEDZONEID}" == "" ]; then fGetZoneID > /dev/null; fi
+  # echo "HOSTEDZONEID: ${HOSTEDZONEID}"
+
+  F="${WOV_BASEDIR}/wovtools/cache/dnsrecordset.json"
+
+#  local LBE=$(fGetNodesLoadBalancerEntry) ; Re=$?
+#  if [ $Re -ne 0 ]; then echo "ERROR: failed to find load balancer for cluster's nodes. Is ingress running?"; echo "  See https://sourceforge.net/p/wovtools/wiki/Cluster%20Creation/#ingress"; exit 1; fi
+  #echo "Entry:"
+  #echo $LBE | jq -r .
+  #local LBName=$(echo $LBE | jq -r ".LoadBalancerName")
+#  local LBDNS=$(echo $LBE | jq -r ".DNSName")
+
+  cat << EOF > "$F"
+{
+  "Comment": "CREATE/UPSERT a record ",
+  "Changes": [{
+  "Action": "UPSERT",
+  "ResourceRecordSet": {
+    "Name" : "${WOV_www_api_url}",
+    "Type": "CNAME",
+    "TTL": 300,
+    "ResourceRecords": [{ "Value": "${1}"}]
+  }}]
+}
+EOF
+  if [ ${DOECHO} -ge 1 ]; then cat $F ; fi
+
+  aws route53 change-resource-record-sets --hosted-zone-id ${HOSTEDZONEID} --change-batch "file://${F}"
+  Re=$?
+  if [ $Re -ne 0 ]; then echo "ERROR: failed updating record set."; exit 1; fi
+}
+
+
+# Starts ingress
+# NOTE: run 'helm init --upgrade' if the helm is not up to date
+function fStartIngress()
+{
+  INGNAME="ing-${WOV_NS}"
+  # check first
+  if [ "$(helm list ${INGNAME})" != "" ]; then
+    echo "ERROR: running ingress helm chart. To delete it, 'helm delete ing-${WOV_NS} --purge'."
+    exit 1
+  fi
+
+  local ARN=$(aws acm list-certificates | jq -r '.CertificateSummaryList[] | select( .DomainName | contains("'${WOV_cluster_dns_domain}'" )) | .CertificateArn') ; ARNe=$?
+
+  if [[ $ARNe -ne 0 ]]; then echo "ERROR: failed finding certificate in AWS Certificate Manager for domain '${WOV_cluster_dns_domain}'."; exit 1; fi
+
+  # From : https://hub.helm.sh/charts/stable/nginx-ingress / AWS L7 ELB with SSL Termination
+  helm install stable/nginx-ingress --name ${INGNAME} --set rbac.create=true \
+    --set controller.service.enableHttp=false \
+    --set controller.service.targetPorts.http="http" \
+    --set controller.service.targetPorts.https="http" \
+    --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-ssl-cert"="${ARN}" \
+    --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-backend-protocol"="http" \
+    --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-ssl-ports"="https" \
+    --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-connection-idle-timeout"="3600"
+
+  # helm install stable/nginx-ingress --name ${INGNAME} --set rbac.create=true --set controller.service.enableHttp=false --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-backend-protocol"=http --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-ssl-cert"="${ARN}" --set  controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-ssl-ports"="https" --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-connection-idle-timeout"="3600"
+
+    _fCreateProjectDNSRecordSet
+}
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-q" ]; then
+    shift
+    DOECHO=0
+
+  elif [ "$1" == "-v" ]; then
+    shift
+    DOECHO=2
+
+  elif [ "$1" == "--zone-id" ]; then
+    fGetZoneID
+    shift
+
+  elif [ "$1" == "--records" ]; then
+    shift
+    fGetResourceRecordSets $1
+    shift
+
+  elif [ "$1" == "--apidns" ]; then
+    shift
+    fGetAPIRecord
+
+  elif [ "$1" == "--lb" ]; then
+    shift
+    fGetNodesLoadBalancer
+
+  elif [ "$1" == "--lbn" ]; then
+    shift
+    fGetNodesLoadBalancerName
+
+  elif [ "$1" == "--create-dns" ]; then
+    shift
+    fCreateProjectDNSRecordSet
+
+  elif [ "$1" == '--help' ] || [ "$1" == '-h' ]; then
+    fDeployDNSDisplayOptions
+    exit 0
+
+  elif [ "$1" == "--ingress" ]; then
+    fStartIngress
+    fCreateProjectDNSRecordSet
+    exit 0
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDeployDNSDisplayOptions
+    exit 1
+  fi
+done
+

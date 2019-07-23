@@ -2,6 +2,7 @@
 
 # --------------------------------------------------------------------- 
 # This is a light-weight env variable loader. Used by wov-env and wov-env-build.
+#  NOTE: This does not contain secrets variables. 
 # --------------------------------------------------------------------- 
 
 

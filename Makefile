@@ -6,7 +6,7 @@ BINS-CLI=wov-aws wov-cd wov-bastion wov-bastion-connection wov-cmd wov-ed wov-ls
 	       wov-hash wov-enc wov-dec wov-log wov-context
 BINS-VH=wov-vh wov-vh-pushgit wov-vh-pulldir
 BINS-PUSH=wov-push-common wov-push-container wov-push-container-check wov-push-k8s wov-push-db wov-push
-BINS-DEPLOY=wov-deploy-service wov-deploy-info wov-deploy
+BINS-DEPLOY=wov-deploy-service wov-deploy-info wov-deploy wov-deploy-dns
 
 #BINS-GLOBAL=wovg-dir
 ##BINS-UTIL=wov-ns wov-p wov-plog wov-init wov-service wov-ed wov-ls wov-vh wov-pwait \

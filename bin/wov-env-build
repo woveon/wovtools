@@ -496,7 +496,7 @@ fBuildClusterDir()
 
       # extract microservice out of the filename: (MS-k8sname|MS).yaml.wov -> (MS-k8sname|MS) -> MS
       MS=( $(echo $f | tr "." "\n") )
-      MS0=$(echo ${MS[0]} | tr "-" "\n")
+      MS0=( $(echo ${MS[0]} | tr "-" "\n") )
       ms=${MS0[0]}
       #echo "ms '${ms}'  MS0 '${MS0[@]}' MS '${MS[@]}'"
 
@@ -515,7 +515,7 @@ fBuildClusterDir()
         #echo " --- `basename ${DEST}` needs to be built"
         #      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
         # echo "{\"MS\" : \"${ms}\"}"
-        wov-compile -d "{\"MS\" : \"${MS}\"}" ${SECRETFILE} ${SRC} > ${DEST}
+        wov-compile -d "{\"MS\" : \"${ms}\"}" ${SECRETFILE} ${SRC} > ${DEST}
 
         # validate output
         python -c 'import yaml, sys; yaml.safe_load(sys.stdin)' < ${DEST}

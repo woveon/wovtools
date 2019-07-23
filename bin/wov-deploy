@@ -248,7 +248,7 @@ function doCheckContainersExist()
     fi
   done
 
-  if [ "${#imgissues}" != "0" ]; then echo "" ; echo "  run: 'wov-push-container ${imgissues[*]}'"; echo ""; fi
+  if [ "${#imgissues}" != "0" ]; then echo "" ; echo "  run (minus the '${WOV_PROJECT}'): 'wov-push-container ${imgissues[*]}'"; echo ""; fi
 }
 
 
@@ -414,7 +414,12 @@ function doPatchDeployments()
     fi
 
     # get container and remove trailing tag
-    cntr=`kubectl get deployment $d -o json | jq -r '.spec.template.spec.containers[0].image'`
+    cntr_raw=$(kubectl get deployment $d -o json) ; cntr_rawe=$?
+    if [ $cntr_rawe != 0 ]; then
+      echo "ERROR: failed to find existing deployment to patch. Do a full deploy."
+      exit 1
+    fi
+    cntr=$(echo ${cntr_raw} | jq -r '.spec.template.spec.containers[0].image')
     cntr_bits=(${cntr//:/ })
     #echo "${cntr_bits[@]}"
     unset 'cntr_bits[${#cntr_bits[@]}-1]'

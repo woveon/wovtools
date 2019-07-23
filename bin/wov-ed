@@ -42,6 +42,7 @@ NOTE: this will test for '.wov' extension if needed.
   -s : edit the src file
   -x : open in new window
   -c : edit the cached file
+  -ccl : edit the cached cluster file
   -h : this help
 
 EOF
@@ -77,6 +78,10 @@ while [[ $1 =~ ^- ]]; do
     shift
     EDPATH='cache/'
 
+  elif [ "$1" == "-ccl" ]; then
+    shift
+    EDPATH="cache/clusters/${WOV_CLUSTER}/"
+
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
     exit 0
@@ -99,7 +104,7 @@ fi
 
 if [[ $1 == conf/* ]]     || [[ $1 == k8s/* ]]  || [[ $1 == containers/* ]] || 
    [[ $1 == services/* ]] || [[ $1 == cmds/* ]] || [[ $1 == secrets/* ]] ||
-   [[ $1 == db/* ]]; then
+   [[ $1 == clusters/* ]] || [[ $1 == db/* ]]; then
   
   if [ "$#" != "1" ]; then
     printf "\nERROR: bad number of arguments for 'secrets'.\n"
@@ -111,7 +116,7 @@ if [[ $1 == conf/* ]]     || [[ $1 == k8s/* ]]  || [[ $1 == containers/* ]] ||
   if [ ! -e ${P} ] && [ "${DONEW}" == "0" ]; then
     P=${WOV_BASEDIR}/wovtools/${EDPATH}$1.wov
     if [ ! -e ${P} ]; then
-      printf "\nERROR: no WovTools file '${1}'. Use '-n' to create a new file of that name.\n\n"
+      printf "\nERROR: no WovTools file '${1}' in '${P}'. Use '-n' to create a new file of that name.\n\n"
       ls ${WOV_BASEDIR}/wovtools/${EDPATH}$(dirname ${1})
       exit 1
     fi
