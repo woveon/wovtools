@@ -146,6 +146,8 @@ function doSetCluster
      [ "${HOME}/.kube/config"            -nt "${WOV_SECRETFILE}" ] ||
      [ "${WOV_CONFIGFILE_MERGED}"        -nt "${WOV_SECRETFILE}" ] || 
      [ "${WOV_BASEDIR}/wovtools/secrets" -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_BASEDIR}/wovtools/config.json" -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_BASEDIR}/wovtools/local.json" -nt "${WOV_SECRETFILE}" ] ||
      [ "${WOV_BASEDIR}/.git/config"      -nt "${WOV_SECRETFILE}" ]; then
     
     fBuildClusterSecrets force 
@@ -617,13 +619,13 @@ function doResVerify()
 # --------------------------------------------------------------------- 
 # NOTE: this passes arguments
 . wov-env-loader
-doSetCluster "local"
-
-# --------------------------------------------------------------------- 
-# Load common functionality
-# --------------------------------------------------------------------- 
 . wov-env-common
 . wov-db-common
+
+retreiveLocalContextCluster
+doSetCluster ${LOCALCONTEXT}
+# "local"
+echo 
 
 
 # --------------------------------------------------------------------- 

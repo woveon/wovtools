@@ -169,8 +169,9 @@ function fBuildLocalSecrets()
 # --------------------------------------------------------------------- 
 # Store the local context cluster (from merged raw file) in $LOCALCONTEXT
 # --------------------------------------------------------------------- 
-function retreiveLocalContextCluster()
-{ if [ "${LOCALCONTEXT}" == "" ]; then LOCALCONTEXT=`jq -r ".localcontext" ${WOV_CONFIGFILE_MERGED}`; fi }
+#function retreiveLocalContextCluster()
+#{ if [ "${LOCALCONTEXT}" == "" ]; then LOCALCONTEXT=`jq -r ".localcontext" ${WOV_BASEDIR}/wovtools/local.json`; fi }
+# { if [ "${LOCALCONTEXT}" == "" ]; then LOCALCONTEXT=`jq -r ".localcontext" ${WOV_CONFIGFILE_MERGED}`; fi }
 
 
 # --------------------------------------------------------------------- 
@@ -362,17 +363,18 @@ EOF
 
   # Update local context if this was it
   retreiveLocalContextCluster
+  echo "LOCAL CLUSTER ${LOCALCONTEXT} ${CLUSTER}"
   if [ "${LOCALCONTEXT}" == "${CLUSTER}" ]; then
     if [ "$DOECHO" == "2" ]; then echo "  ... updating local context"; fi
-    mkdir -p     "${WOV_CACHEDIR}/clusters/local"
-    chmod -R 700 "${WOV_CACHEDIR}/clusters/local"
-    if [ "${LOCALCONTEXT}" != "local" ]; then
-      cp "${WOV_CACHEDIR}/clusters/${LOCALCONTEXT}/secrets.json" "${WOV_CACHEDIR}/clusters/local/secrets.json" 2> /dev/null
-      if [ "$?" != "0" ]; then
-        echo "ERROR: failed copy of secrets to cache dir 'clusters/local/secrets.json'." 1>&2
-        exit 1
-      fi
-    fi
+    mkdir -p     "${WOV_CACHEDIR}/clusters/${LOCALCONTEXT}"
+    chmod -R 700 "${WOV_CACHEDIR}/clusters/${LOCALCONTEXT}"
+#    if [ "${LOCALCONTEXT}" != "local" ]; then
+#      cp "${WOV_CACHEDIR}/clusters/${LOCALCONTEXT}/secrets.json" "${WOV_CACHEDIR}/clusters/local/secrets.json" 2> /dev/null
+#      if [ "$?" != "0" ]; then
+#        echo "ERROR: failed copy of secrets to cache dir 'clusters/local/secrets.json'." 1>&2
+#        exit 1
+#      fi
+#    fi
   fi
 
   # Is secret different from last run?

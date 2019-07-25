@@ -2,6 +2,15 @@
 
 
 
+# ---------------------------------------------------------------------
+# Store the local context cluster (from merged raw file) in $LOCALCONTEXT
+# Only checks wovtools/local.json
+# ---------------------------------------------------------------------
+function retreiveLocalContextCluster()
+{ if [ "${LOCALCONTEXT}" == "" ]; then LOCALCONTEXT=`jq -r ".localcontext" ${WOV_BASEDIR}/wovtools/local.json`; fi }
+
+
+
   # [res] [dbserver]
 # NOTE: DB is for the RDS databse name, and 1st part of hostname
 # return : 0=success,1=fail
