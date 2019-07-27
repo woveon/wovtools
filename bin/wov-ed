@@ -104,7 +104,8 @@ fi
 
 if [[ $1 == conf/* ]]     || [[ $1 == k8s/* ]]  || [[ $1 == containers/* ]] || 
    [[ $1 == services/* ]] || [[ $1 == cmds/* ]] || [[ $1 == secrets/* ]] ||
-   [[ $1 == clusters/* ]] || [[ $1 == db/* ]]; then
+   [[ $1 == clusters/* ]] || [[ $1 == data/* ]] || [[ $1 == db/* ]] ||
+   [[ $1 == config.json ]] || [[ $1 == local.json ]] ; then
   
   if [ "$#" != "1" ]; then
     printf "\nERROR: bad number of arguments for 'secrets'.\n"
