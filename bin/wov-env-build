@@ -257,7 +257,8 @@ EOF
   for sf in ${SRCSECRETFILES[*]}; do
     # echo "looking for ${WOV_BASEDIR}/wovtools/secrets/$sf"
     if [ ! -e ${WOV_BASEDIR}/wovtools/secrets/$sf ]; then
-      printf "\n\nERROR: file for secret build does not exist: 'wovtools/secrets/$sf'.\n"
+      printf "ERROR: file for secret build does not exist: 'wovtools/secrets/$sf'.\n"
+      printf "  : Your wovtools/{config|local}.json has entries for files @: '.secrets.${WOV_STAGE}'.\n"
       exit 1
     fi
   done
@@ -363,7 +364,7 @@ EOF
 
   # Update local context if this was it
   retreiveLocalContextCluster
-  echo "LOCAL CLUSTER ${LOCALCONTEXT} ${CLUSTER}"
+#  echo "LOCAL CLUSTER ${LOCALCONTEXT} ${CLUSTER}"
   if [ "${LOCALCONTEXT}" == "${CLUSTER}" ]; then
     if [ "$DOECHO" == "2" ]; then echo "  ... updating local context"; fi
     mkdir -p     "${WOV_CACHEDIR}/clusters/${LOCALCONTEXT}"
@@ -518,6 +519,10 @@ fBuildClusterDir()
         #      echo "SHOULD CALL: wov-compile ${SECRETFILE} ${SRC} > ${DEST}"
         # echo "{\"MS\" : \"${ms}\"}"
         wov-compile -d "{\"MS\" : \"${ms}\"}" ${SECRETFILE} ${SRC} > ${DEST}
+        if [ $? != 0 ]; then
+          echo "ERROR: failed to compile file : ${SRC}"
+          exit 1
+        fi
 
         # validate output
         python -c 'import yaml, sys; yaml.safe_load(sys.stdin)' < ${DEST}

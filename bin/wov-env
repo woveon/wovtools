@@ -624,8 +624,6 @@ function doResVerify()
 
 retreiveLocalContextCluster
 doSetCluster ${LOCALCONTEXT}
-# "local"
-echo 
 
 
 # --------------------------------------------------------------------- 
