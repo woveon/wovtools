@@ -109,6 +109,7 @@ function doDBConfigCheck()
 # ---------------------------------------------------------------------
 function doConnect()
 {
+  echo "connect to '${CL}-bastion'"
   ssh "${CL}-bastion"
   local r=$?
   if [ "$r" == "255" ]; then
