@@ -43,7 +43,7 @@ install : preinstall /usr/local/etc/bash_completion.d/wovtools
 		cp -r $(CURDIR)/bin/$$b $(HOME)/Library/Scripts/Applications/Terminal/$$b; \
 	done
 	@echo "  ... install node modules."
-	@npm install -g argparse handlebars ssh-config dotenv minimist bcryptjs crypto-js
+	@yarn add argparse handlebars ssh-config dotenv minimist bcryptjs crypto-js
 	@echo
 	@echo "NOTE!!!"
 	@echo "... for wcd to work, add this to your .bash_profile"
