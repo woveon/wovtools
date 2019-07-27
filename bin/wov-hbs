@@ -58,13 +58,30 @@ function readInputStream(s, done) {
 
 
 readInputStream(process.stdin, function(err, tmpl) {
+
+
+  // NOTE: place this function in node_modules/handlebars/dist/cjs/handlebars/runtime.js : line 95
+  //       until they fix it.
+  /*
+  function strict(obj, name) {
+    if ( obj == null ) { throw new _exception2['default']('"' + name + '" not defined as parent is null'); }
+    if ( !(name in obj)) {
+      throw new _exception2['default']('"' + name + '" not defined in ' + obj);
+    }
+    return obj[name];
+  }
+  */
+
   /**
+   * @param {String} tmpl - template
+   * @param {Object} args - arguments to it
+   * @return {String}
    */
   function handle(tmpl, args) {
 
     h.registerHelper('include', function(file, _context, opt) {
       let context = null == _context ? args : _context;
-      let f = fs.readFileSync(file);
+      let f = fs.readFileSync(file); // eslint-disable-line security/detect-non-literal-fs-filename
       return handle(f, context);
     });
 
@@ -93,12 +110,19 @@ readInputStream(process.stdin, function(err, tmpl) {
               }[operator];
     });
 
+
     // This does 2 passes, so stage can be handled.
-    let pass1template= h.compile(tmpl.toString());
+    let pass1template= h.compile(tmpl.toString(), {strict : true});
     let pass1result = pass1template(args);
-    let pass2template= h.compile(pass1result);
+    let pass2template= h.compile(pass1result, {strict : true});
     let pass2result = pass2template(args);
     return pass2result;
   }
-  process.stdout.write(handle(tmpl, args));
+  try {
+    process.stdout.write(handle(tmpl, args));
+  }
+  catch (e) {
+    console.error('Templating Error: ', e.message);
+    process.exit(1);
+  }
 });

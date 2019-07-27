@@ -197,10 +197,11 @@ SEDCMD=''$WARNINGLINE"i$WARNING"
 # 1st and 2nd passes at once
 # echo "time wov-hbs" 1>&2
 # echo "wov-hbs calling ${TEMPLATEFILE}" 
+# >&2 echo "TEMPLATEFILE : ${TEMPLATEFILE}  SED ${SEDCMD}" 
 if [ "$DS" == "" ]; then
-  wov-hbs -sf $SCF -d "${D}"  < $TEMPLATEFILE  | $SED "$SEDCMD"
+  wov-hbs -sf $SCF -d "${D}"  < $TEMPLATEFILE && exit 1  | $SED "$SEDCMD"
 else
-  wov-hbs -sf $SCF -ds $DS -d "${D}" < $TEMPLATEFILE  | $SED "$SEDCMD"
+  wov-hbs -sf $SCF -ds $DS -d "${D}" < $TEMPLATEFILE && exit 1  | $SED "$SEDCMD"
 fi
 #echo "/time wov-hbs" 1>&2
 
