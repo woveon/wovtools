@@ -20,7 +20,7 @@ DB_OP=
 DB_FILE=
 
 DB_HEADEROPTIONS=
-
+DATASETFILES=( 'schema' 'data' 'clear' )
 
 
 
@@ -52,22 +52,23 @@ DBSERVER - the name of a database server in the project (created via wov-cluster
   -p            : prompt for a password
 
  DataSets : non-production data management:
-  --data-schema/-ds : reloads the database schema (clearing existing data)
-  --data-clear/-dc  : clears data in the database
-  --data-data/-dd   : loads the database data
-  --data-reload/-dr : reloads the database data (clear and data)
-  --data-full/-df   : loads a full DataSet by loading schema, clear and load data
+  -ldbs               : list all DataSets
+  --data-schema/-ds X : with DataSet X, reloads the database schema (clearing existing data)
+  --data-clear/-dc  X : with DataSet X, clears data in the database
+  --data-data/-dd   X : with DataSet X, loads the database data
+  --data-reload/-dr X : with DataSet X, reloads the database data (clear and data)
+  --data-full/-df   X : with DataSet X, loads a full DataSet by loading schema, clear and load data
 
  Local Postgres via Docker:
   --docker-postgres-start : start a local Postgres database via Docker
   --docker-postgres-stop  : stop a local Postgres database in Docker
 
  DB Management: (note: change namespace or turn off local to change databases)
+  -ldb         : list all databases
   --db-init    : initialize the database for WovTools
   --db-ver     : returns the current 
   --db-log     : returns the log of commits for the database
   --db-wait    : wait for a database to come online after creation
-  -l/--list       : list all databases
 
 NOTE:
 About commands (-c)... you have to be careful about quotes as both bash and psql are very particular. Here, use single quotes so '*' is not expanded, and quote the single quote so mydatabase is interpret properly by postgres.
@@ -85,9 +86,37 @@ function doDBList()
   echo "${DATABASES[@]}"
 }
 
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doDBListSet()
+{
+#  local S=$(IFS=, ; echo "${DATASETFILES[*]}")
+
+  local fname=()
+  local fname2=()
+
+  # find files
+  for s in ${DATASETFILES[@]}; do
+    fname+=( $(cd ${WOV_BASEDIR}/wovtools/data ; ls -- *_$s.sql* ) )
+  done
+#  echo "fname: '${fname[@]}'"
+
+  # find roots
+  for f in ${fname[@]}; do
+    local F=( ${f//_/ } )
+    fname2+=( "${F[0]}" )
+  done
+#  echo "fname2: '${fname2[@]}'"
+
+  # uniq them
+  local fnamen=( $(echo "${fname2[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' ') )
+  echo "${fnamen[@]}"
+}
+
 # Help command catch here
 if [ "$1" == "-h" ] || [ "$1" == "--help" ]; then fDisplayOptions; exit 0; fi
-if [ "$1" == "-l" ] || [ "$1" == "--list" ]; then doDBList; exit 0; fi
+if [ "$1" == "-ldb" ]; then doDBList; exit 0; fi
+if [ "$1" == "-ldbs" ]; then doDBListSet; exit 0; fi
 
 
 # Set the default commands
@@ -165,7 +194,6 @@ function doDBDataBuild()
 {
   if [ "$1" == "" ]; then echo "ERROR: need a data set name parameter to wov-db-connect::doDBDataBuild."; exit 1; fi
 
-  local DATASETFILES=( 'schema' 'data' 'clear' )
 
   # Make the target directory
   mkdir -m 700 -p ${WOV_BASEDIR}/wovtools/cache/data
@@ -540,9 +568,14 @@ while [[ $1 =~ ^- ]]; do
     doDBWait ${DB_SUBHOST}
     exit 0
 
-  elif [ "$1" == "-l" ] || [ "$1" == "--list" ]; then
+  elif [ "$1" == "-ldb" ]; then
     shift
     doDBList
+    exit 0
+
+  elif [ "$1" == "-ldbs" ]; then
+    shift
+    doDBListSet
     exit 0
 
   elif [ "$1" == "-H" ]; then
