@@ -5,3 +5,4 @@ bin/wov-context.app
 bin/wov-gui-*.app
 bin/dev
 tests/WovTools_test_tp1
+node_modules
