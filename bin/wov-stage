@@ -26,21 +26,156 @@ function fDisplayOptions()
 
 usage: `basename $0` [options] stage
 
-Push the WovTools system to a new stage. This involves changing the git branch and Kubernetes context. Fails if either switches do not work. Can leave system in an error state.
+Switch stages. This involves changing the git branch and Kubernetes context. Fails if either switches do not work. Can leave system in an error state.
 
   stage - name of the stage to switch to. Predefined stages are 'dev' and 'prod'.
 
   -f : force push
   -h : this help
+  --list-stages     : list stages
+  --list-namespaces : list namespaces
+  --test-stage X    : tests that a stage X is ready for development
+  -s|--set X        : sets the stage to X (NOTE: -s assumed if no other command, so just X is enough)
   -q/-v : quiet/verbose
 
 EOF
 }
 
 
+# List all stages in this project (Kubernetes contexts)
+function doListStages()
+{
+  local R=$(kubectl config get-contexts --no-headers=true -o name | grep "${WOV_CLUSTER}-${WOV_PROJECT}-") ; Re=$?
+  if [ "$Re" != 0 ]; then echo "ERROR: failed listing stages."; exit 1; fi
+
+  for s in ${R[@]}; do
+#    echo "$s"
+    local parts=( ${s//-/ } )
+#    echo "parts: ${parts[@]}"
+    echo "${parts[5]}"
+  done
+}
+
+
+# List all namespaces in this project
+function doListNamespaces()
+{
+  local R=$(kubectl get namespaces --no-headers=true -o name | grep "${WOV_PROJECT}-") ; Re=$?
+  if [ "$Re" != 0 ]; then echo "ERROR: failed listing namespaces."; exit 1; fi
+
+  for s in ${R[@]}; do
+    local parts=( ${s//-/ } )
+    echo "${WOV_PROJECT}-${parts[1]}"
+  done
+}
+
+
+# Test if a stage is valid
+# $1 stage name
+function doTestStage()
+{
+  local retval=0
+
+  # Test that it can build env for a cluster for the stage it is shifting into
+  R=$(wov-env-build -n ${WOV_PROJECT}-${1} -c ${WOV_CLUSTER} ) ; Re=$?
+  if [ $Re != 0 ]; then
+    >&2 echo "WARNING: can't build environment for : ${WOV_CLUSTER}-${WOV_PROJECT}-${1}"
+    >&2 echo "  : try yourself with 'wov-env-build -n ${WOV_PROJECT}-${1} -c ${WOV_CLUSTER}'"
+    retval=1
+  fi
+
+
+  # Test for Kubernetes Context
+  if [ ${DOECHO} -ge 2 ]; then echo "... checking for Kubernetes Context '${WOV_CLUSTER}-${WOV_PROJECT}-${1}'."; fi
+  local STAGE=$(doListStages | grep $1) ; Re=$?
+  if [ "$Re" != 0 ]; then retval=1;
+  else
+#    echo ${STAGE}
+    if [ "$STAGE" == "" ]; then 
+      >&2 echo "WARNING: stage $1 does not have a Kubernetes context. Create one in ~/.kube/config."
+      retval=1
+    fi
+  fi
+
+  # Test for Kubernetes Namespace
+  if [ ${DOECHO} -ge 2 ]; then echo "... checking for Kubernetes Namespace '${WOV_PROJECT}-${1}'."; fi
+  local NSPS=$(doListNamespaces | grep $1) ; Re=$?
+  if [ "$Re" != 0 ]; then retval=1;
+  else
+#    echo ${NSPS}
+    if [ "$NSPS" == "" ]; then 
+      >&2 echo "WARNING: stage $1 does not have a Kubernetes namespace. Create one by 'kubectl create namespace ${WOV_PROJECT}-$1'."
+      retval=1
+    fi
+  fi
+
+  # Test for Git Repo
+  if [ ${DOECHO} -ge 2 ]; then echo "... checking for git branch '${1}'."; fi
+  local ISBRANCH=$(git rev-parse --verify ${1} &> /dev/null) ; Re=$?
+  if [ "${Re}" != "0" ]; then
+    >&2 echo "WARNING: stage $1 does not have a git branch '$1'."
+    echo "   'git checkout -b $1'                -> to create a branch"
+    echo "   'git push --set-upstream origin $1' -> places branch into Git repo"
+    wov-git-check -q
+    if [ $? != 0 ]; then
+      echo "  NOTE: you need to check in all changes to your current branch first, before running above commands."
+    fi
+    FAILURE=1
+  fi
+
+  # Output spew
+  if [ "$retval" == 0 ]; then
+    if [ ${DOECHO} -ge 1 ]; then echo "  ... stage $1 ready"; fi
+  else
+    if [ ${DOECHO} -ge 1 ]; then echo "  ... stage $1 errors"; fi
+  fi
+
+  return $retval
+}
+
+
+# Tests then sets the stage. Tests first so we don't leave in a bad state
+function doSetStage()
+{
+  local retval=1
+  doTestStage $1 > /dev/null ; Re=$?
+  if [ $Re != 0 ]; then
+    echo "ERROR: stage '$1' not ready."
+    retval=1
+  else
+
+    if [ ${DOECHO} -ge 1 ]; then echo "... switching Kubernetes context to '${WOV_CLUSTER}-${WOV_PROJECT}-${1}'."; fi
+    local R1=$(kubectl config use-context ${WOV_CLUSTER}-${WOV_PROJECT}-${1}) ; Re=$?
+    if [ ${Re} != 0 ]; then
+      >&2 echo "ERROR: failed to switch to Kubernetes context '${WOV_CLUSTER}-${WOV_PROJECT}-${1}'."
+      >&2 echo "  : ${R1}"
+    else
+      if [ ${DOECHO} -ge 2 ]; then echo "  ... success."; fi
+    fi
+
+    if [ ${DOECHO} -ge 1 ]; then echo "... switching git branch to '${1}'."; fi
+    git checkout ${1} 
+    if [ "$?" != "0" ]; then
+      >&2 echo "ERROR: failed to switch to git branch '${1}'."
+    else
+      if [ ${DOECHO} -ge 2 ]; then echo "  ... success."; fi
+    fi
+
+    retval=0
+  fi
+
+  # Run this again in case this is included in a script
+  set ""
+  . wov-env
+  . wov-ns-check
+
+  return $retval
+}
+
 # ---------------------------------------------------------------------
 # Handle Params
 # ---------------------------------------------------------------------
+DIDCOMMAND=0
 while [[ $1 =~ ^- ]]; do
 
   if [ "$1" == "-q" ]; then
@@ -51,12 +186,36 @@ while [[ $1 =~ ^- ]]; do
     shift
     DOECHO=2
 
+  elif [ "$1" == "--list-stages" ]; then
+    shift
+    doListStages
+    DIDCOMMAND=1
+
+  elif [ "$1" == "--list-namespaces" ]; then
+    shift
+    doListNamespaces
+    DIDCOMMAND=1
+
+  elif [ "$1" == "--test-stage" ]; then
+    shift
+    doTestStage $1
+    if [ $? != 0 ]; then exit 1; fi
+    shift
+    DIDCOMMAND=1
+
+  elif [ "$1" == "--set" ] || [ "$1" == "-s" ]; then
+    shift
+    doSetStage $1
+    shift
+    DIDCOMMAND=1
+
   elif [ "$1" == "-f" ]; then
     shift
     DOFORCE=1
 
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
+    DIDCOMMAND=1
     exit 0
 
   else
@@ -68,74 +227,7 @@ while [[ $1 =~ ^- ]]; do
   fi
 done
 
-
-if [ "$#" != "1" ]; then
-  echo 
-  echo 
-  echo "ERROR: bad number of arguments."
-  echo 
-  fDisplayOptions
-  exit 1
+if [ $DIDCOMMAND == 0 ]; then
+  doSetStage $1
 fi
 
-NEWSTAGE=$1
-
-
-# echo "NEWSTAGE: ${NEWSTAGE}"
-
-
-if [ ${DOECHO} -ge 2 ]; then echo "... checking for Kubernetes namespace '${WOV_PROJECT}-${NEWSTAGE}'."; fi
-FAILURE=0
-ISNS=$(kubectl get namespaces --no-headers=true ${WOV_PROJECT}-${NEWSTAGE} &> /dev/null ; echo "$?")
-# echo "ISNS: ${ISNS}"
-if [ "$ISNS" != "0" ]; then
-  echo "ERROR: failed to set stage to '${NEWSTAGE}' due to missing Kubernetes namespace '${WOV_PROJECT}-${NEWSTAGE}'."
-  FAILURE=1
-else
-  if [ ${DOECHO} -ge 2 ]; then echo "  ... success."; fi
-fi
-
-if [ ${DOECHO} -ge 2 ]; then echo "... checking for Kubernetes context '${WOV_CLUSTER}-${WOV_PROJECT}-${NEWSTAGE}'."; fi
-ISCONTEXT=$(kubectl config get-contexts --no-headers=true -o name | grep ${WOV_CLUSTER}-${WOV_PROJECT}-${NEWSTAGE})
-# echo "ISCONTEXT=${ISCONTEXT}"
-if [ "$ISCONTEXT" != "${WOV_CLUSTER}-${WOV_PROJECT}-${NEWSTAGE}" ]; then
-  echo "ERROR: failed to set stage to '${NEWSTAGE}' due to missing Kubernetes context '${WOV_CLUSTER}-${WOV_PROJECT}-${NEWSTAGE}'."
-  FAILURE=1
-else
-  if [ ${DOECHO} -ge 2 ]; then echo "  ... success."; fi
-fi
-
-if [ ${DOECHO} -ge 2 ]; then echo "... checking for git branch '${NEWSTAGE}'."; fi
-ISBRANCH=$(git rev-parse --verify ${NEWSTAGE} &> /dev/null ; echo "$?")
-# echo "ISBRANCH: ${ISBRANCH}"
-if [ "${ISBRANCH}" != "0" ]; then
-  echo "ERROR: failed to set stage to '${NEWSTAGE}' due to missing git branch '${NEWSTAGE}'."
-  FAILURE=1
-else
-  if [ ${DOECHO} -ge 2 ]; then echo "  ... success."; fi
-fi
-
-# If no failure, switch stage
-if [ "$FAILURE" == "0" ]; then
-
-  if [ ${DOECHO} -ge 1 ]; then echo "... switching Kubernetes context to '${WOV_CLUSTER}-${WOV_PROJECT}-${NEWSTAGE}'."; fi
-  kubectl config use-context ${WOV_CLUSTER}-${WOV_PROJECT}-${NEWSTAGE}
-  if [ "$?" != "0" ]; then
-    echo "ERROR: failed to switch to Kubernetes context '${WOV_CLUSTER}-${WOV_PROJECT}-${NEWSTAGE}'."
-  else
-    if [ ${DOECHO} -ge 2 ]; then echo "  ... success."; fi
-  fi
-
-  if [ ${DOECHO} -ge 1 ]; then echo "... switching git branch to '${NEWSTAGE}'."; fi
-  git checkout ${NEWSTAGE} 
-  if [ "$?" != "0" ]; then
-    echo "ERROR: failed to switch to git branch '${NEWSTAGE}'."
-  else
-    if [ ${DOECHO} -ge 2 ]; then echo "  ... success."; fi
-  fi
-
-  # Run this again in case this is included in a script
-  set ""
-  . wov-env
-  . wov-ns-check
-fi
