@@ -19,12 +19,27 @@ if [ "$1" == '-g' ] || [ "$1" == '--global' ]; then shift; GLOBALCOMMAND=$1; shi
 if [ "$1" == "--vh-label" ]; then echo "${WOV_VH_VERSION}"; exit 0; fi
 
 # --------------------------------------------------------------------- 
+# Returns 1 if this is a WovTools project
+# --------------------------------------------------------------------- 
+function isProject()
+{
+  let retval=1
+  if [      "$WOV_BASEDIR" == "" ]; then echo "  WARNING: not in wovtools project (no git)."; retval=0; fi
+  if [ ! -d "$WOV_BASEDIR/wovtools" ]; then echo "  WARNING: not in wovtools project (no wovtools directory)."; retval=0; fi
+  if [ ! -f "${WOV_BASEDIR}/wovtools/config.json" ]; then echo "  WARNING: not in wovtools project (no wovtools/config.json file)."; retval=0; fi
+  return $retval;
+}
+
+# --------------------------------------------------------------------- 
 # git vars
 # --------------------------------------------------------------------- 
-export WOV_BASEDIR="$(git rev-parse --show-toplevel)"
-if [      "$WOV_BASEDIR" == "" ]; then echo "ERROR: not in wovtools project (no git)."; exit 1; fi
-if [ ! -d "$WOV_BASEDIR/wovtools" ]; then echo "ERROR: not in wovtools project (no wovtools directory)."; exit 1; fi
-if [ ! -f "${WOV_BASEDIR}/wovtools/config.json" ]; then echo "ERROR: not in wovtools project (no wovtools/config.json file)."; exit 1; fi
+export WOV_BASEDIR="$(git rev-parse --show-toplevel 2> /dev/null)"
+R=( "$(isProject)" )
+if [ $? != 1 ]; then
+  echo "ERROR: not in a WovTools project. Try using wov-init to create a project here."
+  ( IFS=$'\n'; echo "${R[*]}" )
+  exit 1
+fi
 export WOV_PVER="$(git rev-list --count $(git rev-parse --abbrev-ref HEAD))"
 export WOV_SVER="$(cd ${WOV_BASEDIR}/wovtools/secrets && git rev-list --count $(git rev-parse --abbrev-ref HEAD))"
 export WOV_USERNAME="$(git config user.name)"
