@@ -5,6 +5,7 @@ DOECHO=1
 
 CVPCID=
 HOSTEDZONEID=
+INGRESSNAMESPACE='nginx-ingress'
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
@@ -118,9 +119,9 @@ function fGetNodesLoadBalancerEntry()
     #echo "${m} : ${LBTagKeys[@]}"
     i=0
     while [ $i -lt $m ]; do
-      #echo "$lbn: ${LBTagKeys[$i]} ${LBTagValues[$1]}"
+      #>&2 echo "$lbn: ${LBTagKeys[$i]} ${LBTagValues[$1]}"
       if [ "${LBTagKeys[$i]}" == "kubernetes.io/service-name" ] && \
-         [ "${LBTagValues[$i]}" == "${WOV_PROJECT}-${WOV_STAGE}/ing-${WOV_NS}-nginx-ingress-controller" ]; then
+         [ "${LBTagValues[$i]}" == "${INGRESSNAMESPACE}/ing-${WOV_NS}-nginx-ingress-controller" ]; then
         #>&2 echo "Found load balancer : $lbn" 
         local LBName=$lbn
         LB=$(echo $R | jq -r "select( .LoadBalancerName==\"$lbn\" )")
@@ -171,7 +172,7 @@ function fCreateProjectDNSRecordSet()
     if [ "${DNSLB}" == "${LBEName}" ]; then
       if [ ${DOECHO} -ge 1 ]; then echo "... DNS Record already going to load balancer... success."; fi
     else
-      if [ ${DOECHO} -ge 1 ]; then echo "... DNS Record going to wrong load balancer." ; fi
+      if [ ${DOECHO} -ge 1 ]; then echo "... DNS Record going to wrong load balancer. Fixing..." ; fi
       _fCreateProjectDNSRecordSet ${LBEName}
     fi
   else
@@ -230,8 +231,13 @@ function fStartIngress()
 
   if [[ $ARNe -ne 0 ]]; then echo "ERROR: failed finding certificate in AWS Certificate Manager for domain '${WOV_cluster_dns_domain}'."; exit 1; fi
 
+  # Just ensure it's there
+  kubectl create namespace ${INGRESSNAMESPACE} 2> /dev/null 
+
   # From : https://hub.helm.sh/charts/stable/nginx-ingress / AWS L7 ELB with SSL Termination
-  helm install stable/nginx-ingress --name ${INGNAME} --set rbac.create=true \
+  helm install  \
+    --namespace "${INGRESSNAMESPACE}" \
+    stable/nginx-ingress --name ${INGNAME} --set rbac.create=true \
     --set controller.service.enableHttp=false \
     --set controller.service.targetPorts.http="http" \
     --set controller.service.targetPorts.https="http" \
@@ -240,9 +246,24 @@ function fStartIngress()
     --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-ssl-ports"="https" \
     --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-connection-idle-timeout"="3600"
 
+  #  --set controller.scope.enabled=true \
+  #  --set controller.scope.namespace="${WOV_NS}" \
+
   # helm install stable/nginx-ingress --name ${INGNAME} --set rbac.create=true --set controller.service.enableHttp=false --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-backend-protocol"=http --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-ssl-cert"="${ARN}" --set  controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-ssl-ports"="https" --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-connection-idle-timeout"="3600"
 
-    _fCreateProjectDNSRecordSet
+  local lbn='';
+  while [ "$lbn" == '' ]; do
+    lbn=$(fGetNodesLoadBalancerName) ; Re=$?
+    if [ $Re != 0 ]; then
+      >&2 echo "ERROR: failed finding Nodes Load Balancer Name."
+      exit 1
+    fi
+    if [ "$lbn" == "" ]; then echo "...waiting for load balancer to come online"; sleep 3; fi
+  done
+
+  echo "...found load balancer '${lbn}'"
+
+  _fCreateProjectDNSRecordSet ${lbn}
 }
 
 
