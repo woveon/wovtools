@@ -41,10 +41,12 @@ DBSERVER - the name of a database server in the project (created via wov-cluster
   -q/-v : quiet/verbose
 
  Database Commands:
-  -c [command]  : run a DB command
-  -f [file]     : load file of SQL commands into a DB
-  --schema      : return the DB's schema
-  --info        : reports about the database
+  -c [command]    : run a DB command
+  -f [file]       : load file of SQL commands into a DB
+  --schema        : return the DB's schema
+  --schema-hash   : return the DB's schema hash
+  --schema-diff X : compare the database's current schema against a past schema
+  --info          : reports about the database
 
  Data Mods:
   -d [database] : changes the database name (DB inside the DB server)
@@ -482,6 +484,16 @@ while [[ $1 =~ ^- ]]; do
     shift
     DB_OP="schema"
 
+  elif [ "$1" == "--schema-hash" ]; then
+    shift
+    DB_OP="schemahash"
+
+  elif [ "$1" == "--schema-diff" ]; then
+    shift
+    DB_OP="schemadiff"
+    SCHEMADIFFVER=$1
+    shift
+
   elif [ "$1" == "--data-schema" ] || [ "$1" == "-ds" ]; then
     shift
     doDBDataBuild $1
@@ -625,6 +637,44 @@ if [ "${DB_TYPE}" == "postgres" ]; then
       exit 1
     fi
 
+  elif [ "${DB_OP}" == "schemadiff" ]; then
+
+    SDF="${WOV_BASEDIR}/wovtools/db/archive/${DATABASESERVER}/schemas/${SCHEMADIFFVER}.schema"
+    if [ ! -e ${SDF} ]; then echo "ERROR: no schema for database '${DATABASESERVER}', schema version '${SCHEMADIFFVER}'."; exit 1; fi
+
+    SDF1="${WOV_BASEDIR}/wovtools/cache/.schemadiff.$$"
+    rm -f ${SDF1} > /dev/null
+    touch ${SDF1}
+    chmod 600 ${SDF1}
+
+    PGPASSWORD="${DB_PASSWORD}" pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s >> ${SDF1} ; Re=$?
+    if [ $Re != 0 ]; then
+      printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
+      exit 1
+    fi
+    diff ${SDF} ${SDF1}
+    rm ${SDF1}
+
+  elif [ "${DB_OP}" == "schemahash" ]; then
+    SDF1="${WOV_BASEDIR}/wovtools/cache/.schemahash.$$"
+    rm -f ${SDF1} > /dev/null
+    touch ${SDF1}
+    chmod 600 ${SDF1}
+
+    PGPASSWORD="${DB_PASSWORD}" pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s >> ${SDF1} ; Re=$?
+    if [ $Re != 0 ]; then
+      printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
+      exit 1
+    fi
+
+    HASH=$(cat "${SDF1}" | shasum -a 256 | cut -d' ' -f1) ; Re=$?
+    if [ $Re != 0 ]; then
+      echo "ERROR: failed calling 'shasum' on database schema."
+      exit 1
+    fi
+    echo $HASH
+    rm ${SDF1}
+
   elif [ "${DB_OP}" == "command" ]; then
     # Log into pod 'vh', run psql
 #    echo "dbcommand  : \"${DB_COMMAND}\""
@@ -648,6 +698,8 @@ if [ "${DB_TYPE}" == "postgres" ]; then
       printf "${R}\n"
       printf "\n\nERROR(${Re}): could not connect... have you tunneled to the bastion server?\n\n"
       exit 1
+    else
+      echo $R
     fi
 
 
@@ -681,6 +733,9 @@ if [ "${DB_TYPE}" == "postgres" ]; then
       printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
       exit 1
     fi
+  else
+    echo "ERROR: unknown DB operation '${DB_OP}'."
+    exit 1
   fi
 
 elif [ "${DB_TYPE}" == "mongo" ]; then
