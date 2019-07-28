@@ -4,6 +4,9 @@
 DOECHO=1
 FOLD=140
 DIDCOMMAND=0
+SHOWPERSIST=1
+SHOWSYSTEM=1
+SHOWKUBE=0
 
 
 # ---------------------------------------------------------------------
@@ -14,6 +17,12 @@ function fDisplayOptions()
 
 
 usage: `basename $0` 
+
+Displays status of WovTools environment.
+
+  --commands : show commands
+
+  --(show|hide)-kube : show/hide Kubernetes on status
 
 EOF
 }
@@ -103,6 +112,71 @@ EOF
 }
 
 
+function doDisplayStatus()
+{
+  . wov-env-loader
+  . <(wov-env --exports)
+  . wov-push-common
+  echo ""
+  figlet ${WOV_PROJECT}
+  echo "WovTools Project '${WOV_PROJECT}' - "${WOV_PROJECTTITLE}""
+  echo "  Stage   : ${WOV_STAGE}"
+  echo "  Version : ${WOV_PVER}$(wov-git-check -q ; if [ $? != 0 ]; then echo "*"; fi )_${WOV_SVER}$(cd ${WOV_BASEDIR}/wovtools/secrets ; wov-git-check -q ; if [ $? != 0 ]; then echo "*"; fi )"
+
+  if [ $SHOWPERSIST -eq 1 ]; then
+    echo ""
+    echo " Persistent Storage:"
+    echo " ---"
+    echo "  Data Sets : $(wov-db-connect -ldbs)"
+    echo "  Databases :"
+    DBS=( ${WOV_DATABASES} )
+    for k in ${DBS[@]}; do
+      local dd=
+      if [ -e "${WOV_BASEDIR}/wovtools/db/${k}.deltas" ]; then dd="no"; else dd="has"; fi
+      echo "    ${k} running(v$(wov-db-connect ${k} --db-ver)) : ${dd} deltas"
+    done
+  fi
+
+  if [ $SHOWSYSTEM -eq 1 ]; then
+    echo ""
+    echo " System:"
+    echo " ---"
+    echo "  Cluster       : ${WOV_CLUSTER} - ${WOV_cluster_dns_domain}"
+    DEPNS=$(kubectl get namespaces alywan-cw  -o json)
+    echo "  Configured    : v$(echo ${DEPNS} | jq -r .metadata.labels.WOV_PVER)_$(echo ${DEPNS} | jq -r .metadata.labels.WOV_SVER) : deployed($(date -r $(echo ${DEPNS} | jq -r .metadata.labels.WOV_DEPLOYED)))"
+    echo "  Microservices :"
+
+    fGetContainerRecipes
+    for r in ${RECIPES[@]}; do
+      #echo "r: ${r}"
+      local depraw=$(kubectl get deployment "${WOV_PROJECT}${r}" -o json)
+      local depimage=$(echo ${depraw} | jq -r '.spec.template.spec.containers[0].image')
+      local depimagebits=( ${depimage//:/ } )
+      #echo "depimagebits: ${depimagebits[@]}"
+
+      local selector=`kubectl get services alywandata -o json | jq -r ".spec.selector.app"`
+      if [ "${selector}" == "${WOV_PROJECT}${r}" ]; then selector="self"; fi
+
+      echo "    ${WOV_PROJECT}${r} image(${depimagebits[1]}) serviceRouting(${selector})"
+    done
+fi
+
+
+  if [ $SHOWKUBE -eq 1 ]; then
+    echo ""
+    echo " Kubernetes:"
+    echo " ---"
+    echo "  Deployments:" ; kubectl get deployments
+    echo "  Pods       :" ; kubectl get pods 
+    echo "  Services   :" ; kubectl get services
+  fi
+
+  echo ""
+
+#  show database archive and deltas
+#  show repos
+}
+
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
@@ -115,6 +189,20 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-v" ]; then
     shift
     DOECHO=2
+
+  elif [ "$1" == "--commands" ]; then
+    shift
+    fDisplayCommands
+    DIDCOMMAND=1
+
+
+  elif [ "$1" == "--show-kube" ]; then
+    shift
+    SHOWKUBE=1
+  elif [ "$1" == "--hide-kube" ]; then
+    shift
+    SHOWKUBE=0
+
 
   elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
     fDisplayOptions
@@ -132,5 +220,5 @@ done
 
 
 if [ "$DIDCOMMAND" == "0" ]; then
-  fDisplayCommands
+  doDisplayStatus
 fi

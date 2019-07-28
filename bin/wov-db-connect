@@ -67,7 +67,8 @@ DBSERVER - the name of a database server in the project (created via wov-cluster
 
  DB Management: (note: change namespace or turn off local to change databases)
   -ldb         : list all databases
-  --db-init    : initialize the database for WovTools
+  --db-init    : initialize the database for WovTools (does not create)
+  --db-create  : if database (not server) does not exist, creates
   --db-ver     : returns the current 
   --db-log     : returns the log of commits for the database
   --db-wait    : wait for a database to come online after creation
@@ -251,6 +252,7 @@ function doDBDataCommand()
   if [ ${DOECHO} -ge 1 ]; then echo "  ... loaded ${1}_${2}.sql"; fi
   if [ "$Re" != "0" ]; then
     printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
+    printf "  : have you created the datbase : 'wov-db-connect --db-create'\n"
     exit 1
   fi
 }
@@ -284,6 +286,13 @@ function setAsAdmin()
 }
 
 
+function doDBCreateIfMissing() 
+{
+  # Check that the user's databae exists
+  export PGPASSWORD=${DB_PASSWORD}
+  psql -h localhost -p ${DB_PORT} -U ${DB_USERNAME} -tc "SELECT 1 FROM pg_database WHERE datname = '${DB_DATABASE}'" | grep -q 1 || psql -U ${DB_USERNAME} -h localhost -p ${DB_PORT} -p ${DB_PORT} -c "CREATE DATABASE ${DB_DATABASE}"
+}
+
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 function doDBInit()
@@ -292,10 +301,10 @@ function doDBInit()
 
   # Create 'wovtools' database in db server if it does not exist
   export PGPASSWORD=${DB_PASSWORD}
-  psql -h localhost -U ${DB_USERNAME} -tc "SELECT 1 FROM pg_database WHERE datname = 'wovtools'" | grep -q 1 || psql -U ${DB_USERNAME} -h localhost -c "CREATE DATABASE wovtools"
+  psql -h localhost -U ${DB_USERNAME} -p ${DB_PORT} -tc "SELECT 1 FROM pg_database WHERE datname = 'wovtools'" | grep -q 1 || psql -U ${DB_USERNAME} -h localhost -p ${DB_PORT} -c "CREATE DATABASE wovtools"
 
   # in 'wovtools', create the logs table, and insert a row
-  psql -U ${DB_USERNAME} -h localhost -d wovtools -tc "CREATE TABLE IF NOT EXISTS logs (id SERIAL NOT NULL PRIMARY KEY, database varchar, wovtoolsver varchar, label varchar, pver integer, sver integer, snapshot varchar, schema varchar DEFAULT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() );"
+  psql -U ${DB_USERNAME} -h localhost -p ${DB_PORT} -d wovtools -tc "CREATE TABLE IF NOT EXISTS logs (id SERIAL NOT NULL PRIMARY KEY, database varchar, wovtoolsver varchar, label varchar, pver integer, sver integer, snapshot varchar, schema varchar DEFAULT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() );"
 
   # first delta is that it exists
   cat <<EOF >> ${WOV_BASEDIR}/wovtools/db/${DATABASESERVER}.deltas
@@ -317,6 +326,7 @@ EOF
 EOF
   fi
 
+  doDBCreateIfMissing
 }
 
 
@@ -327,7 +337,7 @@ function doDBGetVer()
 {
   local retval=1
 
-  R=$(PGPASSWORD=${DB_PASSWORD} psql -h localhost -d wovtools -U ${DB_USERNAME} --tuples-only -c "SELECT * from logs order by id DESC limit 1;" 2> /dev/null ) ; Re=$?
+  R=$(PGPASSWORD=${DB_PASSWORD} psql -h localhost -d wovtools -p ${DB_PORT} -U ${DB_USERNAME} --tuples-only -c "SELECT * from logs order by id DESC limit 1;" 2> /dev/null ) ; Re=$?
   if [ ${Re} == "0" ] ; then
     if [ "${R}" == "" ]; then echo "None"; 
     else 
@@ -349,7 +359,7 @@ function doDBGetLog()
 {
   local retval=1
 
-  R=$(PGPASSWORD=${DB_PASSWORD} psql -h localhost -d wovtools -U ${DB_USERNAME} --tuples-only -c "SELECT * from logs order by id DESC;" 2> /dev/null ) ; Re=$?
+  R=$(PGPASSWORD=${DB_PASSWORD} psql -h localhost -d wovtools -p ${DB_PORT} -U ${DB_USERNAME} --tuples-only -c "SELECT * from logs order by id DESC;" 2> /dev/null ) ; Re=$?
   if [ ${Re} == "0" ] ; then
     if [ "${R}" == "" ]; then echo "None"; 
     else echo $R; fi
@@ -549,7 +559,7 @@ while [[ $1 =~ ^- ]]; do
       I=$((I + 1))
       if [ $I -gt 10 ]; then echo "ERROR: failed to connect to local postgres." ; exit 1; fi
     done
-    PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -c "create database ${DB_DATABASE}"  > /dev/null
+    PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USERNAME} -c "create database ${DB_DATABASE}"  > /dev/null
     if [ "$?" != "0" ]; then echo "ERROR: could not create database of '${DB_DATABASE}'."; exit 1; fi
     echo "  ... success"
     exit 0
@@ -563,6 +573,11 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--db-init" ]; then
     shift
     doDBInit
+    exit 0
+
+  elif [ "$1" == "--db-create" ]; then
+    shift
+    doDBCreateIfMissing
     exit 0
 
   elif [ "$1" == "--db-ver" ]; then
@@ -730,7 +745,9 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #    fi
     PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
     if [ "$?" != "0" ]; then
-      printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
+      printf "\nERROR: could not connect... have you tunneled to the bastion server?\n"
+      printf "  : is the db inited? 'wov-db-connect --db-init'\n"
+      printf "  : is the db created? 'wov-db-connect --db-create'\n"
       exit 1
     fi
   else

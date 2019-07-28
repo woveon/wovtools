@@ -138,6 +138,7 @@ function doTestStage()
 function doSetStage()
 {
   local retval=1
+  local OLDSTAGE=${WOV_STAGE}
   doTestStage $1 > /dev/null ; Re=$?
   if [ $Re != 0 ]; then
     echo "ERROR: stage '$1' not ready."
@@ -164,10 +165,17 @@ function doSetStage()
     retval=0
   fi
 
+  # clear cache
+  rm -Rf ${WOV_BASEDIR}/wovtools/cache
+  mkdir -p ${WOV_BASEDIR}/wovtools/cache
+
+
   # Run this again in case this is included in a script
   set ""
   . wov-env
   . wov-ns-check
+
+  echo "WARNING: if needed, remember to 'git merge ${OLDSTAGE}'."
 
   return $retval
 }

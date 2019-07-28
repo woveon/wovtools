@@ -156,7 +156,7 @@ function fCreateProjectDNSRecordSet()
   if [ $Re -ne 0 ]; then echo "ERROR: failed to find load balancer for cluster's nodes. Is ingress running?"; echo "  See https://sourceforge.net/p/wovtools/wiki/Cluster%20Creation/#ingress"; exit 1; fi
   local LBEName=$(echo ${LBE} | jq -r .DNSName)
   if [ "${LBEName}" == "" ]; then
-    echo "ERROR: failed finding .DNSName in : '${LBE}'."
+    echo "ERROR: failed finding .DNSName in : '${LBE}'. Did you crated ingress? 'wov-deploy-dns --ingress'"
     exit 1
   fi
 

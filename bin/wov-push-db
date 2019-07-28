@@ -278,6 +278,7 @@ function doPushCheck()
         printf "FAILED: if you have db schema changes, you need to have deltas in archive to account.\n"
         printf "\n  run: 'wov-push-db -v --any-push-blockage' for more info.\n"
         printf "\nTo get current schema of database X: 'wov-db-connect DBNAME --schema' (ex. apidb)\n"
+        printf "To diff schema to old version X : 'wov-db-connect DBNAME --schema-diff X'\n"
   #    elif [ "${chk_4}" == "T" ]; then # 1 is false then
   #      printf "FAILED: if you have deltas in archive, you need to have db schema changes to account.\n"
       fi
