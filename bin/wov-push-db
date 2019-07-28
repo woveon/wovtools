@@ -334,6 +334,8 @@ function doCommitDB()
 {
   local retval=0
 
+#  echo "commit db $1"
+
   # check deltas exist
   deltafile=${WOV_BASEDIR}/wovtools/db/$1.deltas
   if [ ! -e $deltafile ]; then
