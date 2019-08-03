@@ -11,10 +11,14 @@ FOLD=80
 wovstageargs=( "$@" )
 set ""
 . wov-env
-. wov-ns-check
 set -- "${wovstageargs[@]}"
 
-
+wov-ns-check 2> /dev/null
+if [ $? != 0 ]; then
+  echo "WARNING: Conflicting K8s/wovtools context. Using WovTool's config project '${WOV_WPROJECT}'. i.e. you're probably shifting from another environment."
+  WOV_PROJECT="${WOV_WPROJECT}"
+  WOV_STAGE="${WOV_GSTAGE}"
+fi
 
 
 # ---------------------------------------------------------------------
@@ -48,10 +52,10 @@ function doListStages()
   local R=$(kubectl config get-contexts --no-headers=true -o name | grep "${WOV_CLUSTER}-${WOV_PROJECT}-") ; Re=$?
   if [ "$Re" != 0 ]; then echo "ERROR: failed listing stages."; exit 1; fi
 
+  if [ "${R[@]}" == "" ]; then echo "None"; fi
+
   for s in ${R[@]}; do
-#    echo "$s"
     local parts=( ${s//-/ } )
-#    echo "parts: ${parts[@]}"
     echo "${parts[5]}"
   done
 }
@@ -62,6 +66,8 @@ function doListNamespaces()
 {
   local R=$(kubectl get namespaces --no-headers=true -o name | grep "${WOV_PROJECT}-") ; Re=$?
   if [ "$Re" != 0 ]; then echo "ERROR: failed listing namespaces."; exit 1; fi
+
+  if [ "${R[@]}" == "" ]; then echo "None"; fi
 
   for s in ${R[@]}; do
     local parts=( ${s//-/ } )
@@ -116,11 +122,21 @@ function doTestStage()
     >&2 echo "WARNING: stage $1 does not have a git branch '$1'."
     echo "   'git checkout -b $1'                -> to create a branch"
     echo "   'git push --set-upstream origin $1' -> places branch into Git repo"
-    wov-git-check -q
     if [ $? != 0 ]; then
       echo "  NOTE: you need to check in all changes to your current branch first, before running above commands."
     fi
     FAILURE=1
+  fi
+  wov-git-check -q ; Re=$?
+  if [ "${Re}" != "0" ]; then
+    if [ "${Re}" == "1" ]; then
+      >&2 echo "WARNING: changes in git repo need to be committed."
+    elif [ "${Re}" == "2" ]; then
+      >&2 echo "WARNING: changes in git repo need to be pushed."
+    else
+      >&2 echo "WARNING: git repo has issues. Fix."
+      wov-git-check -v
+    fi
   fi
 
   # Output spew
@@ -139,43 +155,58 @@ function doSetStage()
 {
   local retval=1
   local OLDSTAGE=${WOV_STAGE}
-  doTestStage $1 > /dev/null ; Re=$?
-  if [ $Re != 0 ]; then
-    echo "ERROR: stage '$1' not ready."
-    retval=1
+  local NEWSTAGE=${1}
+
+  if [ "${WOV_KPROJECT}" == "${WOV_WPROJECT}" ] &&
+    [ "${WOV_KSTAGE}" == "${WOV_GSTAGE}" ] &&
+    [ "${WOV_KPROJECT}" != "" ] &&
+    [ "${WOV_KSTAGE}" != "" ] &&
+    [ "${WOV_KSTAGE}" == "$1" ]; then
+    echo "  ... keeping same stage"
+    retval=0
   else
 
-    if [ ${DOECHO} -ge 1 ]; then echo "  ... switching Kubernetes context to '${WOV_CLUSTER}-${WOV_PROJECT}-${1}'."; fi
-    local R1=$(kubectl config use-context ${WOV_CLUSTER}-${WOV_PROJECT}-${1}) ; Re=$?
-    if [ ${Re} != 0 ]; then
-      >&2 echo "ERROR: failed to switch to Kubernetes context '${WOV_CLUSTER}-${WOV_PROJECT}-${1}'."
-      >&2 echo "  : ${R1}"
+    doTestStage $1 > /dev/null ; Re=$?
+    if [ $Re != 0 ]; then
+      echo "ERROR: stage '$1' not ready."
+      retval=1
     else
-      if [ ${DOECHO} -ge 2 ]; then echo "    ... success."; fi
+
+      if [ ${DOECHO} -ge 1 ]; then echo "  ... switching Kubernetes context to '${WOV_CLUSTER}-${WOV_PROJECT}-${1}'."; fi
+      local R1=$(kubectl config use-context ${WOV_CLUSTER}-${WOV_PROJECT}-${1}) ; Re=$?
+      if [ ${Re} != 0 ]; then
+        >&2 echo "ERROR: failed to switch to Kubernetes context '${WOV_CLUSTER}-${WOV_PROJECT}-${1}'."
+        >&2 echo "  : ${R1}"
+      else
+        if [ ${DOECHO} -ge 2 ]; then echo "    ... success."; fi
+      fi
+
+      if [ ${DOECHO} -ge 1 ]; then echo "  ... switching git branch to '${1}'."; fi
+      git checkout ${1} 
+      if [ "$?" != "0" ]; then
+        >&2 echo "ERROR: failed to switch to git branch '${1}'."
+      else
+        if [ ${DOECHO} -ge 2 ]; then echo "    ... success."; fi
+      fi
+
+      retval=0
     fi
 
-    if [ ${DOECHO} -ge 1 ]; then echo "  ... switching git branch to '${1}'."; fi
-    git checkout ${1} 
-    if [ "$?" != "0" ]; then
-      >&2 echo "ERROR: failed to switch to git branch '${1}'."
-    else
-      if [ ${DOECHO} -ge 2 ]; then echo "    ... success."; fi
-    fi
+    # clear cache
+    rm -Rf ${WOV_BASEDIR}/wovtools/cache
+    mkdir -p ${WOV_BASEDIR}/wovtools/cache
 
-    retval=0
+
+    # Run this again in case this is included in a script
+    set ""
+    . wov-env-loader
+    . wov-env-build -c ${WOV_CLUSTER}
+    . wov-ns-check
+
+    # echo "WARNING: if needed, remember to 'git merge ${OLDSTAGE}'."
+    echo "... merging git repo '${OLDSTAGE}' into '${NEWSTAGE}'."
+    git merge ${OLDSTAGE}
   fi
-
-  # clear cache
-  rm -Rf ${WOV_BASEDIR}/wovtools/cache
-  mkdir -p ${WOV_BASEDIR}/wovtools/cache
-
-
-  # Run this again in case this is included in a script
-  set ""
-  . wov-env
-  . wov-ns-check
-
-  echo "WARNING: if needed, remember to 'git merge ${OLDSTAGE}'."
 
   return $retval
 }
@@ -185,15 +216,30 @@ function doSelectStage()
   local STAGES=$(doListStages) ; Re=$?
   if [ "$Re" != 0 ]; then echo "ERROR: failed getting stages."; exit 1; fi
 
+  if [ "${STAGES}" == "None" ]; then
+    >&2 echo "ERROR: No valid project stage in git/Kubernetes environment that matches: '${WOV_PROJECT}_${WOV_STAGE}'."
+    git branch
+    local KNS=$(kubectl get namespaces -o name | grep ${WOV_PROJECT})
+    if [ "$KNS" == "" ]; then
+      echo "ERROR: no Kubernetes namespaces for project."
+    else
+      echo "WARNING: current Kubernetes namespaces for project do not include : '${WOV_PROJECT}_${WOV_STAGE}'."
+      echo "  : ${KNS}"
+    fi
+
+    echo "  : Try running 'wov-stage STAGE ${WOV_ME}'"
+    exit 1
+  fi
+
   local OPTIONS=""
   for st in ${STAGES[@]}; do
     OPTIONS+=" ${st} '${WOV_PROJECT}-${st}' "
   done
 
-  exec 3>&1; result=$(dialog --keep-tite --title 'Stage Selection' --menu 'Select a stage' 15 80 6 ${OPTIONS} 2>&1 1>&3); ret=$? ; exec 3>&-
+  exec 3>&1; result=$(dialog --keep-tite --title "${WOV_PROJECT}-${WOV_STAGE}" --menu 'Select a new stage:' 15 80 6 ${OPTIONS} 2>&1 1>&3); ret=$? ; exec 3>&-
   # echo "result ($ret): ${result} "
   if [ "$ret" == "0" ]; then
-    if [ ${DOECHO} -ge 1 ]; then echo "... setting stage to ${result} : ${WOV_PROJECT}_${result}"; fi
+    if [ ${DOECHO} -ge 1 ]; then echo "... setting stage to ${result} : ${WOV_PROJECT}_${result} (from ${WOV_PROJECT}_${WOV_STAGE})"; fi
     doSetStage $result
   else
     exit $ret
