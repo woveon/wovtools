@@ -6,7 +6,7 @@ FOLD=140
 DIDCOMMAND=0
 SHOWPERSIST=1
 SHOWSYSTEM=1
-SHOWKUBE=0
+SHOWKUBE=1
 
 
 # ---------------------------------------------------------------------
@@ -142,21 +142,23 @@ function doDisplayStatus()
     echo " System:"
     echo " ---"
     echo "  Cluster       : ${WOV_CLUSTER} - ${WOV_cluster_dns_domain}"
-    DEPNS=$(kubectl get namespaces alywan-cw  -o json)
+    DEPNS=$(kubectl get namespaces ${WOV_PROJECT}-${WOV_STAGE}  -o json)
     echo "  Configured    : v$(echo ${DEPNS} | jq -r .metadata.labels.WOV_PVER)_$(echo ${DEPNS} | jq -r .metadata.labels.WOV_SVER) : deployed($(date -r $(echo ${DEPNS} | jq -r .metadata.labels.WOV_DEPLOYED)))"
     echo "  Microservices :"
 
     fGetContainerRecipes
     for r in ${RECIPES[@]}; do
       #echo "r: ${r}"
-      local depraw=$(kubectl get deployment "${WOV_PROJECT}${r}" -o json)
+      local depraw=$(kubectl get deployment "${WOV_PROJECT}${r}" -o json 2> /dev/null)
       local depimage=$(echo ${depraw} | jq -r '.spec.template.spec.containers[0].image')
       local depimagebits=( ${depimage//:/ } )
       #echo "depimagebits: ${depimagebits[@]}"
 
-      local selector=`kubectl get services alywandata -o json | jq -r ".spec.selector.app"`
+      local selector=`kubectl get services "${WOV_PROJECT}${r}" -o json 2> /dev/null | jq -r ".spec.selector.app"`
       if [ "${selector}" == "${WOV_PROJECT}${r}" ]; then selector="self"; fi
 
+      if [ "${depimagebits[1]}" == "" ]; then depimagebits[1]='not running'; fi
+      if [ "${selector}" == "" ]; then selector='not running'; fi
       echo "    ${WOV_PROJECT}${r} image(${depimagebits[1]}) serviceRouting(${selector})"
     done
 fi
@@ -166,9 +168,9 @@ fi
     echo ""
     echo " Kubernetes:"
     echo " ---"
-    echo "  Deployments:" ; kubectl get deployments
-    echo "  Pods       :" ; kubectl get pods 
-    echo "  Services   :" ; kubectl get services
+    echo "  Deployments:" ; kubectl get deployments | sed 's/^/    /'
+    echo "  Pods       :" ; kubectl get pods        | sed 's/^/    /'
+    echo "  Services   :" ; kubectl get services    | sed 's/^/    /'
   fi
 
   echo ""
