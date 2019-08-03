@@ -4,6 +4,8 @@ DOECHO=1
 DOFORCE=0
 FOLD=$(tput cols)
 
+# Don't have this yet
+WOV_BASEDIR=$(git rev-parse --show-toplevel)
 
 echo ""
 echo "`basename $0`"
@@ -111,7 +113,6 @@ function InitProject()
   read A
   if [ "${A}" != "" ]; then WOV_USEREMAIL="${A}"; fi
 
-  WOV_BASEDIR=$(git rev-parse --show-toplevel)
 
   # Ensure data is updated
   git config user.name  "${WOV_USERNAME}"
@@ -126,13 +127,16 @@ function InitProject()
     if ! grep -qF "${f}" .gitignore ; then echo "${f}" >> .gitignore ; fi
   done
 
+  WOV_BASEDIR=$(git rev-parse --show-toplevel)
 
   echo "... create wovtools directory structure"
   # ---------------------------------------------------------------------
   # Create conf, k8s and containers directories
   mkdir -p ${WOV_BASEDIR}/wovtools/cache
-  mkdir -p ${WOV_BASEDIR}/wovtools/cmds
+  mkdir -p ${WOV_BASEDIR}/wovtools/data
   mkdir -p ${WOV_BASEDIR}/wovtools/containers
+  mkdir -p ${WOV_BASEDIR}/wovtools/cmds
+  mkdir -p ${WOV_BASEDIR}/wovtools/services
 
 
   # ---------------------------------------------------------------------
@@ -370,9 +374,68 @@ EOF
 
 
   # set project version from initing to a value
+}
 
 
+function InitDBArchive()
+{
+echo ""
+if [ -e "${WOV_BASEDIR}/wovtools/db" ] &&
+   [ -e "${WOV_BASEDIR}/wovtools/db/archive" ] &&
+   [ -e "${WOV_BASEDIR}/wovtools/db/archive/.git" ] &&
+   [ -e "${WOV_BASEDIR}/wovtools/db/archive/.gitignore" ] &&
+   [ -e "${WOV_BASEDIR}/wovtools/db/archive/.git/config" ]; then
+  echo "ARCHIVE> Database Registry exists (at wovtools/db/archive)"
+else
 
+  # ensure directory
+  if [ ! -e "${WOV_BASEDIR}/wovtools/db/archive" ]; then
+    mkdir -p ${WOV_BASEDIR}/wovtools/db/archive
+  fi
+  chmod -R 700 "${WOV_BASEDIR}/wovtools/db"
+
+  # make gitignore
+  if [ ! -e "${WOV_BASEDIR}/wovtools/db/archive/.gitignore" ]; then
+    cat <<EOF > ${WOV_BASEDIR}/wovtools/db/archive/.gitignore
+  *.swp
+EOF
+  fi
+
+  WOV_DBREGISTRY=`git config --get remote.origin.url`
+  if [ "$?" != "0" ]; then
+    printf "\nERROR: remote origin is not set for this repository.\n"
+    printf "  Use 'git remote add origin X' to set your remote repository.\n\n"
+    exit 1
+  fi
+  #  WOV_DBREGISTRY="${WOV_DBREGISTRY::-4}_archive.git"
+
+  read -r -p "ARCHIVE> Database Registry git location: (\"${WOV_DBREGISTRY}\") ... Correct? [Y/n] " A
+  if [ "${A}" != "" ]; then WOV_DBREGISTRY="${A}"; fi
+
+  # make git repository
+  cd ${WOV_BASEDIR}/wovtools/db/archive && git init -q
+
+  # configure it
+  cat <<EOF > ${WOV_BASEDIR}/wovtools/db/archive/.git/config
+[core]
+  repositoryformatversion = 0
+  filemode = true
+  bare = false
+  logallrefupdates = true
+  ignorecase = true
+  precomposeunicode = true
+[remote "origin"]
+  url = ${WOV_DBREGISTRY}
+  fetch = +refs/heads/*:refs/remotes/origin/*
+[user]
+  name = ${WOV_USERNAME}
+  email = ${WOV_USEREMAIL}
+[branch "master"]
+  remote = origin
+  merge = refs/heads/master
+EOF
+
+fi
 }
 
 
@@ -440,9 +503,15 @@ if [ "$(wov-env &> /dev/null ; echo $?)" == "1" ]; then
   InitProject
 else
   echo "... updating project: ${PROJECT}"
+  WOV_BASEDIR=$(git rev-parse --show-toplevel)
 fi
 
+
+# Ensure DB structure so wov-env can run
+InitDBArchive
+
 echo "... loading WovTools values."
+pwd
 initargs=( "$@" )
 set ""
 . wov-env
@@ -505,56 +574,6 @@ jq ' .ver='${WOV_VERSION}' | .project.type="'"${WOV_PROJECTTYPE}"'" | .project.p
 rm ${WOV_BASEDIR}/wovtools/.config.json.*
 
 
-
-echo ""
-if [ -e "${WOV_BASEDIR}/wovtools/db" ] && 
-   [ -e "${WOV_BASEDIR}/wovtools/db/archive" ] &&
-   [ -e "${WOV_BASEDIR}/wovtools/db/archive/.git" ] &&
-   [ -e "${WOV_BASEDIR}/wovtools/db/archive/.git/config" ]; then
-  echo "ARCHIVE> Database Registry exists (at wovtools/db/archive)"
-else
-  mkdir -p ${WOV_BASEDIR}/wovtools/db/archive/.git
-
-  # make gitignore
-  cat <<EOF > ${WOV_BASEDIR}/wovtools/db/archive/.gitignore
-*.swp
-EOF
-
-  WOV_DBREGISTRY=`git config --get remote.origin.url`
-  if [ "$?" != "0" ]; then
-    printf "\nERROR: remote origin is not set for this repository.\n"
-    printf "  Use 'git remote add origin X' to set your remote repository.\n\n"
-    exit 1
-  fi
-  #  WOV_DBREGISTRY="${WOV_DBREGISTRY::-4}_archive.git"
-
-  read -r -p "ARCHIVE> Database Registry git location: (\"${WOV_DBREGISTRY}\") ... Correct? [Y/n] " A
-  if [ "${A}" != "" ]; then WOV_DBREGISTRY="${A}"; fi
-
-  # make git repository
-  cd ${WOV_BASEDIR}/wovtools/db/archive && git init -q
-
-  # configure it
-  cat <<EOF > ${WOV_BASEDIR}/wovtools/db/archive/.git/config
-[core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = false
-	logallrefupdates = true
-	ignorecase = true
-	precomposeunicode = true
-[remote "origin"]
-	url = ${WOV_DBREGISTRY}
-	fetch = +refs/heads/*:refs/remotes/origin/*
-[user]
-	name = ${WOV_USERNAME}
-	email = ${WOV_USEREMAIL}
-[branch "master"]
-	remote = origin
-	merge = refs/heads/master
-EOF
-
-fi
 
 echo "... test Git remote repo configuration/existence"
 #  cd ${WOV_BASEDIR}/wovtools/db/archive && git remote -v
