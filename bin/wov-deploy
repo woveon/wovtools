@@ -48,7 +48,12 @@ function doAddLabels()
     exit 1
   fi
   printf "  ..."
-  kubectl label namespace ${WOV_NS} -v=0 --overwrite WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+  kubectl label --overwrite namespace ${WOV_NS} -v=0 WOV_DEPLOYED=`date +%s` WOV_PVER=${WOV_PVER} WOV_SVER=${WOV_SVER}
+  if [ "$?" != "0" ]; then
+    printf "\n\nERROR: failed to label namespace '${WOV_NS}'.\n"
+    exit 1
+  fi
+
    # --quiet=true
 }
 
