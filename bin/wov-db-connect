@@ -14,7 +14,7 @@ set -- "${pushdbenvargs[@]}"
 
 DOECHO=1
 FOLD=$(tput cols)
-DATABASESERVER=
+DATABASESERVER=               # NOTE: badly named variable. it's the datbase name, or database instance
 DB_COMMAND=
 DB_OP=
 DB_FILE=
@@ -61,6 +61,7 @@ DBSERVER - the name of a database server in the project (created via wov-cluster
   --data-reload/-dr X : with DataSet X, reloads the database data (clear and data)
   --data-full/-df   X : with DataSet X, loads a full DataSet by loading schema, clear and load data
 
+
  Local Postgres via Docker:
   --docker-postgres-start : start a local Postgres database via Docker
   --docker-postgres-stop  : stop a local Postgres database in Docker
@@ -68,10 +69,12 @@ DBSERVER - the name of a database server in the project (created via wov-cluster
  DB Management: (note: change namespace or turn off local to change databases)
   -ldb         : list all databases
   --db-init    : initialize the database for WovTools (does not create)
-  --db-create  : if database (not server) does not exist, creates
+  --db-create  : if database instance on server does not exist, creates
   --db-ver     : returns the current 
   --db-log     : returns the log of commits for the database
   --db-wait    : wait for a database to come online after creation
+  --db-deltas  : edit the current database schema deltas file (i.e. add SQL that you use to change things)
+ 
 
 NOTE:
 About commands (-c)... you have to be careful about quotes as both bash and psql are very particular. Here, use single quotes so '*' is not expanded, and quote the single quote so mydatabase is interpret properly by postgres.
@@ -100,7 +103,7 @@ function doDBListSet()
 
   # find files
   for s in ${DATASETFILES[@]}; do
-    fname+=( $(cd ${WOV_BASEDIR}/wovtools/data ; ls -- *_$s.sql* ) )
+    fname+=( $(cd ${WOV_BASEDIR}/wovtools/data ; ls -- *_$s.sql* 2> /dev/null ) )
   done
 #  echo "fname: '${fname[@]}'"
 
@@ -251,12 +254,24 @@ function doDBDataCommand()
   if [ ${DOECHO} -ge 2 ]; then echo "${R}"; fi
   if [ ${DOECHO} -ge 1 ]; then echo "  ... loaded ${1}_${2}.sql"; fi
   if [ "$Re" != "0" ]; then
-    printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
-    printf "  : have you created the datbase : 'wov-db-connect --db-create'\n"
+    showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n  : have you created the datbase : 'wov-db-connect --db-create\n'"
     exit 1
   fi
 }
 
+
+# $1 - port
+# $2 - error message
+function showConnectionFailure()
+{
+  if [ "${1}" == "" ]; then
+    >&2 printf "ERROR: No port specified. Configuration error.\n"
+  elif [ $(wov-bastion-connection -q --test-port ${1}) -eq 1 ]; then
+    >&2 printf "ERROR: Port ${1} is not open. Is your bastion connection open?\n"
+  else
+    >&2 printf"$2"
+  fi
+}
 
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
@@ -337,6 +352,12 @@ function doDBGetVer()
 {
   local retval=1
 
+  if [ "$DB_PORT" == "" ]; then >&2 echo "ERROR: no port specified."; retval=2; fi
+  if [ "$DB_USERNAME" == "" ]; then >&2 echo "ERROR: no username specified."; retval=2; fi
+  if [ "$DB_PASSWORD" == "" ]; then >&2 echo "ERROR: no password specified."; retval=2; fi
+
+  if [ $retval -eq 2 ]; then exit 1; fi
+
   R=$(PGPASSWORD=${DB_PASSWORD} psql -h localhost -d wovtools -p ${DB_PORT} -U ${DB_USERNAME} --tuples-only -c "SELECT * from logs order by id DESC limit 1;" 2> /dev/null ) ; Re=$?
   if [ ${Re} == "0" ] ; then
     if [ "${R}" == "" ]; then echo "None"; 
@@ -345,7 +366,14 @@ function doDBGetVer()
     fi
     retval=0
   else
-    echo "Uninited"
+    wov-bastion-connection -q --test-port "${DB_PORT}" ; Re=$?
+    if [ $Re -eq 1 ]; then
+      >&2 echo "ERROR: DB port ${DB_PORT} is not open. Is your bastion connection open?"
+    elif [ $Re -eq 2 ]; then
+      >&2 echo "ERROR: Failed testing bastion connection."
+    else
+      echo "Uninited"
+    fi
   fi
 
   return $retval
@@ -383,11 +411,11 @@ function doInfo()
 
 DB Information
 ---------------------------------------------------------------------
-  AWS Server : $(doResName DB ${WOV_CLUSTER} ${DB_SUBHOST}):${DB_PORT}
-    Database : ${DB_DATABASE}  User: ${DB_USERNAME} PASSWORDXXX
-        Type : ${DB_TYPE} ${DB_VERSION}, ${DB_INSTANCE_STORAGE} GB, ${DB_INSTANCE_CLASS}, zones: ${AWS_REGION}${DB_INSTANCEAVAILABILITYZONE} ${AWS_REGION}${DB_INSTANCEAVAILABILITYZONEALT}
+  AWS Server : $(doResName DB ${WOV_CLUSTER} ${DB_SUBHOST}):$([ "${DB_PORT}" != "" ] && echo ${DB_PORT} || echo "undefined")
+    Database : $(EUndef ${DB_DATABASE})  User: ${DB_USERNAME} PASSWORDXXX
+        Type : $(EUndef ${DB_TYPE})  Ver: $(EUndef ${DB_VERSION})  Storage: $(EUndef ${DB_INSTANCE_CLASS}), $(EUndef ${DB_INSTANCE_STORAGE}) GB, zones: $(EUndef "${AWS_REGION}${DB_INSTANCEAVAILABILITYZONE}") $(EUndef "${AWS_REGION}${DB_INSTANCEAVAILABILITYZONEALT}")
 
-  WovTools Version: $(doDBGetVer)
+  WovTools Version: $(EUndef $(doDBGetVer))
   
 EOF
 }
@@ -424,6 +452,24 @@ function doDBWait()
 }
 
 
+# Edit the deltas file for the database instance.
+function doDBDeltas()
+{
+
+  if [ "${EDITOR}" == "" ]; then
+    printf "ERROR: environment variable EDITOR not defined.\n"
+    exit 1
+  fi
+
+  local P=${WOV_BASEDIR}/wovtools/db/${DATABASESERVER}.deltas
+
+  if [ "${NEWWINDOW}" == "1" ]; then
+    x $EDITOR ${P}
+  else
+    $EDITOR ${P}
+  fi
+
+}
 
 
 # ---------------------------------------------------------------------
@@ -542,6 +588,11 @@ while [[ $1 =~ ^- ]]; do
     exit 0
     shift
 
+  elif [ "$1" == "--db-deltas" ]; then
+    shift
+    doDBDeltas
+    exit 0
+
   elif [ "$1" == "--docker-postgres-start" ]; then
     shift
     pg_isready -p 5432 -h localhost 2>&1  > /dev/null
@@ -648,7 +699,7 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 
     PGPASSWORD="${DB_PASSWORD}" pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
     if [ "$?" != "0" ]; then
-      printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
+      showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n"
       exit 1
     fi
 
@@ -664,7 +715,7 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 
     PGPASSWORD="${DB_PASSWORD}" pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s >> ${SDF1} ; Re=$?
     if [ $Re != 0 ]; then
-      printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
+      showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n"
       exit 1
     fi
     diff ${SDF} ${SDF1}
@@ -678,7 +729,7 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 
     PGPASSWORD="${DB_PASSWORD}" pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s >> ${SDF1} ; Re=$?
     if [ $Re != 0 ]; then
-      printf "\n\nERROR: could not connect... have you tunneled to the bastion server?\n\n"
+      showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n"
       exit 1
     fi
 
@@ -711,7 +762,7 @@ if [ "${DB_TYPE}" == "postgres" ]; then
         exit 1
       fi
       printf "${R}\n"
-      printf "\n\nERROR(${Re}): could not connect... have you tunneled to the bastion server?\n\n"
+      showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n"
       exit 1
     else
       echo $R
@@ -730,7 +781,7 @@ if [ "${DB_TYPE}" == "postgres" ]; then
     PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
     PGPASSWORDe=$?
     if [ "$PGPASSWORDe" != "0" ]; then
-      printf "\n\nERROR(${PGPASSWORDe}): could not connect... have you tunneled to the bastion server?\n\n"
+      showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n"
       exit 1
     fi
 
@@ -745,9 +796,7 @@ if [ "${DB_TYPE}" == "postgres" ]; then
 #    fi
     PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
     if [ "$?" != "0" ]; then
-      printf "\nERROR: could not connect... have you tunneled to the bastion server?\n"
-      printf "  : is the db inited? 'wov-db-connect --db-init'\n"
-      printf "  : is the db created? 'wov-db-connect --db-create'\n"
+      showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n  : is the db inited? 'wov-db-connect --db-init'\n  : is the db created? 'wov-db-connect --db-create'\n"
       exit 1
     fi
   else
