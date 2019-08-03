@@ -43,6 +43,7 @@ This does the following:
 2. move 'wovtools/db/*.deltas' into archive 
 3. update archive entry for this pver
 4. update database pver number 
+5. push the git repo of the database archive
 
 By default, checks all database delta files that exist.
 
@@ -329,7 +330,12 @@ function doCommit()
 # - 2-4 --------------------------------------------------------------- 
 # TODO: make these transactional, since if these don't complete, system 
 #       can be in a bad state
-# returns: 0 on success, 1-not inited, 2-database has no parent, 3-could not update database with this commit
+# returns: 
+#   0 on success
+#   1-not inited
+#   2-database has no parent
+#   3-could not update database with this commit
+#   4-git issues in Database Archive
 # --------------------------------------------------------------------- 
 function doCommitDB()
 {
@@ -410,7 +416,7 @@ function doCommitDB()
 EOF
     cat ${deltafile} >> ${appendfile}
 
-    echo "  ... cache deltas locally (in case of screw up)"
+    echo "  ... cache deltas locally (in case of screw up): wovtools/cache/db/$1.${WOV_PVER}.$(date +%s).deltas"
     mv ${deltafile} ${WOV_BASEDIR}/wovtools/cache/db/$1.${WOV_PVER}.$(date +%s).deltas
 
 
@@ -459,6 +465,42 @@ EOF
       printf "\n\nERROR: failed updating archive database pver number with checksum.\n"
       fFailedDBConnection 3 $1
     fi
+
+    # - 5. push db git repo
+
+    if [ ${DOECHO} -ge 1 ]; then echo "  ... commit changes to Database Archive (git repo)"; fi
+    if [ ${DOECHO} -ge 1 ]; then echo "    ... add ${1}/schemas/${WOV_PVER}.schema"; fi
+    local R=$(cd ${WOV_BASEDIR}/wovtools/db/archive ; git add ${1}/schemas/${WOV_PVER}.schema) ; Re=$?
+    if [ $Re != 0 ]; then
+      echo "ERROR: failed to add schemas file : ${1}/schemas/${WOV_PVER}.schema"
+      echo "${R}"
+      fFailedDBConnection 4 $1
+    fi
+
+    if [ ${DOECHO} -ge 1 ]; then echo "    ... add ${1}/${WOV_PVER}.deltas"; fi
+    local R=$(cd ${WOV_BASEDIR}/wovtools/db/archive ; git add ${1}/${WOV_PVER}.deltas) ; Re=$?
+    if [ $Re != 0 ]; then
+      echo "ERROR: failed to add deltas file : ${1}/${WOV_PVER}.deltas"
+      echo "${R}"
+      fFailedDBConnection 4 $1
+    fi
+
+    if [ ${DOECHO} -ge 1 ]; then echo "    ... git commit Database Archive"; fi
+    git -C ${WOV_BASEDIR}/wovtools/db/archive commit -a ; Re=$?
+    if [ $Re != 0 ]; then
+      echo "ERROR: failed to commit Database Archive git repo in: ${WOV_BASEDIR}/wovtools/db/archive"
+      fFailedDBConnection 4 $1
+    fi
+
+    if [ ${DOECHO} -ge 1 ]; then echo "    ... git push Database Archive"; fi
+    git -C ${WOV_BASEDIR}/wovtools/db/archive push  > /dev/null; Re=$?
+    if [ $Re != 0 ]; then
+      echo "ERROR: failed to push Database Archive git repo in: ${WOV_BASEDIR}/wovtools/db/archive"
+      fFailedDBConnection 4 $1
+    fi
+
+    if [ ${DOECHO} -ge 1 ]; then echo "    ... git success"; fi
+
   fi
 
   return $retval
@@ -581,7 +623,7 @@ elif [ "$DOACTION" == "commit" ]; then
 
   doCommit
   retval=$?
-  echo $R
+  # echo $R
 else
   printf "\n\nERROR: unknown action to take!?! '$DOACTION'.\n"
   fDisplayOptions

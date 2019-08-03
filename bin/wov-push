@@ -21,6 +21,27 @@ set ""
 set -- "${pushargs[@]}"
 
 
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Formal push of a version into the archive. This is a macro command that pushes containers, Kubernetes and database changes at once.
+
+  --skip-db-checks : skip the checks for database inconsistencies (DB checks are slow)
+
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+if [ "$1" == "-h" ] || [ "$1" == "--help" ]; then fDisplayOptions; exit 0; fi
+
+
 printf "\n"
 figlet wov-push
 printf " version: ${WOV_STAGE}_${WOV_PVER}_${WOV_SVER}\n\n"
@@ -50,25 +71,6 @@ fi
 
 
 
-
-# ---------------------------------------------------------------------
-# ---------------------------------------------------------------------
-function fDisplayOptions()
-{
-  cat <<EOF | fold -w ${FOLD} -s
-
-
-usage: `basename $0` [options]
-
-Formal push of a version into the archive. This is a macro command that pushes containers, Kubernetes and database changes at once.
-
-  --skip-db-checks : skip the checks for database inconsistencies (DB checks are slow)
-
-  -h : this help
-  -q/-v : quiet/verbose
-
-EOF
-}
 
 METAARGS=""
 

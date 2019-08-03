@@ -54,11 +54,12 @@ fi
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
-wov-env-build -q --local
-if [ "$?" != "0" ]; then
-  exit 1
-fi
+#wov-env-build -q --local
+#if [ "$?" != "0" ]; then
+#  exit 1
+#fi
 
+echo "wov-push-container pre : ${WOV_PVER}"
 pushcontainersargs=( "$@" )
 set ""
 . wov-env --provider
@@ -67,6 +68,7 @@ set ""
 . wov-push-common
 set -- "${pushcontainersargs[@]}"
 
+echo "wov-push-container post : ${WOV_PVER}"
 
 # For dev and prod, check local code and secrets are checked in and pushed.
 doGitChecksOnFormalStages 1
@@ -405,6 +407,7 @@ function doPushContainer()
       if [ "${NEEDSBUILD}" == "1" ] || [ "${NEEDSBUILD}" == "5" ] || [ "${DOFORCE}" == "1" ]; then
         if [ $DOECHO -ge 1 ]; then echo "  ... container push needed"; fi
         if [ $DOECHO -ge 2 ]; then echo "    ... tag repo"; fi
+        echo "CMD: docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
         docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
 
         if [ $DOECHO -ge 2 ]; then echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"; fi
