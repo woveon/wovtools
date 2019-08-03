@@ -25,15 +25,15 @@ fi
 #echo "WOV_KSTAGE : $WOV_KSTAGE"
 #echo "WOV_GSTAGE : $WOV_GSTAGE"
 if [ "$WOV_KSTAGE" == "" ]; then
-  echo "ERROR: unknown WOV_KSTAGE";
+  >&2 echo "ERROR: unknown WOV_KSTAGE";
   exit 1
 elif [ "$WOV_GSTAGE" == "" ]; then
-  echo "ERROR: unknown WOV_GSTAGE";
+  >&2 echo "ERROR: unknown WOV_GSTAGE";
   exit 2
 elif [[ $WOV_GSTAGE == "${WOV_KSTAGE}-local" ]]; then
   echo "...matched local stage"
 elif [ "$WOV_KSTAGE" != "$WOV_GSTAGE" ]; then
-  echo "ERROR: STAGE missmatch. Kubernetes (WOV_KSTAGE)=${WOV_KSTAGE}, Git (WOV_GSTAGE)=${WOV_GSTAGE}.";
+  >&2 echo "ERROR: STAGE missmatch. Kubernetes (WOV_KSTAGE)=${WOV_KSTAGE}, Git (WOV_GSTAGE)=${WOV_GSTAGE}.";
   exit 3
 fi
 
@@ -45,13 +45,13 @@ fi
 #echo "WOV_KPROJECT: $WOV_KPROJECT"
 #echo "WOV_WPROJECT: $WOV_WPROJECT"
 if [[ -z "$WOV_KPROJECT" ]]; then
-  echo "ERROR: unknown WOV_KPROJECT";
+  >&2 echo "ERROR: unknown WOV_KPROJECT";
   exit 4
 elif [[ -z "$WOV_WPROJECT" ]]; then
-  echo "ERROR: unknown WOV_WPROJECT";
+  >&2 echo "ERROR: unknown WOV_WPROJECT";
   exit 5
 elif [ "$WOV_KPROJECT" != "$WOV_WPROJECT" ]; then
-  echo "ERROR: PROJECT miss-match. (WOV_KPROJECT=${WOV_KPROJECT}) (WOV_WPROJECT=${WOV_WPROJECT}).";
+  >&2 echo "ERROR: PROJECT miss-match. (WOV_KPROJECT=${WOV_KPROJECT}) (WOV_WPROJECT=${WOV_WPROJECT}).";
   exit 6
 fi
 

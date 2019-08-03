@@ -87,7 +87,8 @@ for p in ${PATHS}; do
     # Check local changes are pushed
     # ---------------------------------------------------------------------
     # check code/env
-    R=$(cd ${p} && git push -nq)
+    # R=$(cd ${p} && git push -nq)
+    R=$(cd ${p} && test "$(git rev-parse @{u})" = "$(git rev-parse HEAD)" )
     RR=${?}
     if [ "$RR" != "0" ] || [ "$R" != "" ]; then
       if [ $DOECHO -ge 1 ]; then
