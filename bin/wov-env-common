@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 
 
+# Echo Undefined if ""
+function EUndef()
+{
+  if [ "$1" != "" ]; then
+    echo "${1}"
+  else
+    echo "undefined"
+  fi
+}
+
 
 # ---------------------------------------------------------------------
 # Store the local context cluster (from merged raw file) in $LOCALCONTEXT
@@ -54,6 +64,7 @@ function doResName()
     # Database Name
     elif [ "$1" == "DB" ]; then
       if [ "$3" == "localhost" ]; then echo "localhost"; 
+      elif [ "$3" == "" ]; then echo "undefined"; 
       else echo "${2}-db-${3}" ; fi
 
     # Peered connection from default VPC to cluster's, for the db
