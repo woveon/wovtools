@@ -29,7 +29,8 @@ DEPLOYCONF_EXT=
 WOV_CUR_PVER=${WOV_PVER}
 WOV_CUR_SVER=${WOV_SVER}
 
-RECIPES=()
+# Recipes for ConfigMaps and Secrets, read from cache directory
+#RECIPES=
 RECIPESCM=()
 RECIPESSE=()
 
@@ -69,16 +70,14 @@ function doBuildRecipes()
   shift
 
   # New microservice for each container if you give them on the command line, or just read the directory
-  RECIPES=( "$@" )
-  if [ "${#RECIPES[@]}" == "0" ]; then
+  if [ "${#@}" == "0" ]; then
     #echo "CMDIR: ${CMDIR}"
-  #  RECIPES=( $(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null) )
     RECIPESCM=( $(cd ${CMDIR} && find * -maxdepth 0 -type f 2> /dev/null) )
     RECIPESSE=( $(cd ${SEDIR} && find * -maxdepth 0 -type f 2> /dev/null) )
   else
-    for f in "${RECIPES[@]}"; do
-      RECIPESCM+=( "${WOV_PROJECT}${f}" )
-      RECIPESSE+=( "${WOV_PROJECT}${f}" )
+    for r in "${@}"; do
+      RECIPESCM+=( "${r}" )
+      RECIPESSE+=( "${r}" )
     done
     # RECIPESCM=$RECIPES
     # RECIPESSE=$RECIPES
@@ -109,7 +108,7 @@ function doDeployConf()
 
   doBuildRecipes ${DEPLOYSRC} $@
 
-  # Add is project project level CM/SE
+  # Add in project level CM/SE
   RECIPESCM+=( "${WOV_PROJECT}" )
   RECIPESSE+=( "${WOV_PROJECT}" )
 
@@ -117,7 +116,6 @@ function doDeployConf()
   # --------------------------------------------------------------------- 
   for f in "${RECIPESCM[@]}"; do
 
-    # local MSNAME=${WOV_PROJECT}${f}
     local MSNAME=${f}
     local CMFILE="${CMDIR}/${MSNAME}"          # full path to file
     # echo "CMFILE1: ${CMFILE}"
@@ -156,7 +154,6 @@ function doDeployConf()
   # --------------------------------------------------------------------- 
   for f in "${RECIPESSE[@]}"; do
 
-    #local MSNAME=${WOV_PROJECT}${f}${FILEEXT}
     local MSNAME=${f}${FILEEXT}
     local SEFILE="${SEDIR}/${MSNAME}"          # full path to file
 
@@ -214,9 +211,8 @@ function doCheckContainersExist()
     k8sfiles=( $(cd ${rdir} && ls *.yaml) ) ; k8sfilese=$?
     if [ $k8sfilese != 0 ]; then echo "ERROR: failed to find k8s files."; exit 1; fi
   else
-    for f in ${*}; do
-      k8sfiles+=( "deployment-${f}.yaml" )
-      # k8sfiles+=( "${WOV_PROJECT}${f}.yaml" )
+    for ms in ${*}; do
+      k8sfiles+=( "deployment-${ms}.yaml" )
     done
   fi
 
@@ -397,20 +393,15 @@ function doPatchDeployments()
     exit 1
   fi
 
-  local DEPS=( "$@" )
-  if [ "${#DEPS[@]}" == "0" ]; then
-    DEPS=( $(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null) )
-    # DEPS+=( "" )
-  fi
-  #local DEPS=( `kubectl get --no-headers=true deployments | awk '{print $1}'` )
-  # echo "DEPS: '${DEPS[*]}'"
+  # use recipes from args, or just read them in
+  RECIPES=( "$@" ) ; if [ ${#RECIPES[@]} -eq 0 ]; then fGetMicroserviceRecipes; fi
 
-  # for each Deployment, patch it
-  for c in "${DEPS[@]}"; do
+  # for each Microservice (aka Deployment), patch it
+  for r in "${RECIPES[@]}"; do
 
-    local d="${WOV_PROJECT}${c}"
+    local d="${r}"
 
-    #echo "Deployment: $d, container: $c"
+    #echo "Deployment: $d, ms : $r"
 
     # NOTE: using ^ and $ for exact match of string
     if [ "$(jq '.nodeploy[] | test("'"^${d}$"'")' ${WOV_CONFIGFILE_MERGED})" == "true" ]; then

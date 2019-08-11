@@ -6,7 +6,8 @@ FOLD=$(tput cols)
 BLOCK=0
 SKIPDBCHECKS=0
 
-wov-env-build -q --local 
+# Force build as git won't force a change
+wov-env-build -q -f -c `wov-env --var WOV_CLUSTER`
 if [ "$?" != "0" ]; then
   exit 1
 fi

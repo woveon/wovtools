@@ -2,7 +2,7 @@
   
 
 DOECHO=1
-FOLD=140
+FOLD=$(tput cols)
 DIDCOMMAND=0
 SHOWPERSIST=1
 SHOWSYSTEM=1
@@ -51,7 +51,7 @@ function fDisplayCommands()
 - wov-ed         - Opens an editor to edit the project's WovTools src or compiled resource file.
 - wov-ls         - Lists information of the current file space.
 - wov-ns         - Display namespace information
-- wov-db-connect - Connect to a database via SSL tunnelling through the bastion host and has db utilities.
+- wov-db         - Connect to a database via SSL tunnelling through the bastion host and has db utilities.
 - wov-db-cloud   - Manages database cloud resources.
 - wov-p          - Takes a k8s pod stem and returns the name of the matching pod in a namespace (--ith n, to match *nth* pod).
 - wov-plog       - Connects to a running pod (via podstem) and logs its data, with a -f to follow it.
@@ -78,7 +78,7 @@ function fDisplayCommands()
 
 # INTERNAL:
 - wov-git-check - Checks that the git archives on path(s) are committed and pushed to origin.
-- wov-push-container-check - Checks if the arg1 container needs to be built and pushed.
+- wov-push-container-buildcheck - Checks if the arg1 container needs to be built.
 - wov-ns-check  - Ensures that the Kubernets namespace and git branch align
 - wov-compile
 - wov-pwait     - Waits for a pod (full name) to enter the running state, by continuous polling. 
@@ -127,13 +127,13 @@ function doDisplayStatus()
     echo ""
     echo " Persistent Storage:"
     echo " ---"
-    echo "  Data Sets : $(wov-db-connect -ldbs)"
+    echo "  Data Sets : $(wov-db -ldbs)"
     echo "  Databases :"
     DBS=( ${WOV_DATABASES} )
     for k in ${DBS[@]}; do
       local dd=
       if [ -e "${WOV_BASEDIR}/wovtools/db/${k}.deltas" ]; then dd="no"; else dd="has"; fi
-      echo "    ${k} running(v$(wov-db-connect ${k} --db-ver)) : ${dd} deltas"
+      echo "    ${k} running(v$(wov-db ${k} --wdb-ver)) : ${dd} deltas"
     done
   fi
 
@@ -146,20 +146,20 @@ function doDisplayStatus()
     echo "  Configured    : v$(echo ${DEPNS} | jq -r .metadata.labels.WOV_PVER)_$(echo ${DEPNS} | jq -r .metadata.labels.WOV_SVER) : deployed($(date -r $(echo ${DEPNS} | jq -r .metadata.labels.WOV_DEPLOYED)))"
     echo "  Microservices :"
 
-    fGetContainerRecipes
+    fGetMicroserviceRecipes
     for r in ${RECIPES[@]}; do
       #echo "r: ${r}"
-      local depraw=$(kubectl get deployment "${WOV_PROJECT}${r}" -o json 2> /dev/null)
+      local depraw=$(kubectl get deployment "${r}" -o json 2> /dev/null)
       local depimage=$(echo ${depraw} | jq -r '.spec.template.spec.containers[0].image')
       local depimagebits=( ${depimage//:/ } )
       #echo "depimagebits: ${depimagebits[@]}"
 
-      local selector=`kubectl get services "${WOV_PROJECT}${r}" -o json 2> /dev/null | jq -r ".spec.selector.app"`
-      if [ "${selector}" == "${WOV_PROJECT}${r}" ]; then selector="self"; fi
+      local selector=`kubectl get services "${r}" -o json 2> /dev/null | jq -r ".spec.selector.app"`
+      if [ "${selector}" == "${r}" ]; then selector="self"; fi
 
       if [ "${depimagebits[1]}" == "" ]; then depimagebits[1]='not running'; fi
       if [ "${selector}" == "" ]; then selector='not running'; fi
-      echo "    ${WOV_PROJECT}${r} image(${depimagebits[1]}) serviceRouting(${selector})"
+      echo "    ${r} image(${depimagebits[1]}) serviceRouting(${selector})"
     done
 fi
 

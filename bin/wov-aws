@@ -1,46 +1,6 @@
 #!/usr/bin/env bash
 
 # ---------------------------------------------------------------------
-# Import Env
-# ---------------------------------------------------------------------
-wovawsvargs=( "$@" )
-set ""
-. wov-env --provider
-#. <(wov-env --provider --exports)
-. wov-ns-check
-set -- "${wovawsvargs[@]}"
-DOECHO=1
-FOLD=$(tput cols)
-EXIT=1
-
-export WOV_cluster_dns_domain=`wov-env --var WOV_cluster_dns_domain`
-
-
-# TODO: fill this function in, and remove from WIAAS
-#function doCluster()
-#{
-#  RANCLUSTER=1
-#  export CL_REGION="${AWS_REGION}"
-#  export CL_ZONES="${AWS_ZONES}"
-#  export CL_VPC="${AWS_VPC}"
-#}
-
-
-# ---------------------------------------------------------------------
-function fConvertRegionCodeAWS()
-{
-  case $1 in
-    va) cRC='us-east-1' ;;
-    iad) cRC='us-east-1' ;;
-    *)
-      echo
-      echo "***ERROR: unknown AWS region code of '$1'."
-      exit 1
-  esac
-}
-
-
-# ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 function fDisplayOptions()
 {
@@ -49,6 +9,9 @@ function fDisplayOptions()
 
 usage: `basename $0` [command]
 
+TODO - read the code for now
+
+  convertrc X
   volume-
     describe
     id
@@ -61,21 +24,72 @@ EOF
 
 }
 
+. wov-env-ops fDisplayOptions $* 
+
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+. <(wov-env --envs --provider)
+. provider-wov-env-aws
+#wovawsvargs=( "$@" )
+#set ""
+#. <(wov-env --provider)
+##. <(wov-env --provider --exports)
+##. wov-ns-check
+#set -- "${wovawsvargs[@]}"
+
+DOECHO=1
+FOLD=$(tput cols)
+EXIT=1
+
+#export WOV_cluster_dns_domain=`wov-env --var WOV_cluster_dns_domain`
+
+
+# TODO: fill this function in, and remove from WIAAS
+#function doCluster()
+#{
+#  RANCLUSTER=1
+#  export CL_REGION="${AWS_REGION}"
+#  export CL_ZONES="${AWS_ZONES}"
+#  export CL_VPC="${AWS_VPC}"
+#}
+
+
+# NOTE: in provider-wov-env-aws
+# ---------------------------------------------------------------------
+#function fConvertRegionCodeAWS()
+#{
+#  echo "fConvertREgionCodeAWS $1"
+#  case $1 in
+#    va) cRC='us-east-1' ;;
+#    iad) cRC='us-east-1' ;;
+#    *)
+#      echo
+#      echo "***ERROR: unknown AWS region code of '$1'."
+#      exit 1
+#  esac
+#}
+
+
+
 function doVolumeDescribe() 
 {
   local VOLNAME=$1
+  echo "do 1"
   aws ec2 describe-volumes --filter Name="tag:Name",Values=\"${VOLNAME}\" | jq '.Volumes[0]' -r
 }
 
 function doVolumeID() 
 {
   local VOLNAME=$1
+  echo "do 2"
   aws ec2 describe-volumes --filter Name="tag:Name",Values=\"${VOLNAME}\" | jq '.Volumes[0].VolumeId' -r
 }
 
 function doVolumeCheck() 
 {
   local VOLNAME=$1
+  echo "do 3"
   R=$(aws ec2 describe-volumes --filter Name="tag:Name",Values=\"${VOLNAME}\" | jq '.Volumes[0].VolumeId' -r )
   RET=$?
   if [ "${RET}" != "0" ]; then 
@@ -140,33 +154,31 @@ function doVolumeEnsure()
 # ---------------------------------------------------------------------
 # Handle Modifying Params
 # ---------------------------------------------------------------------
-while [[ $1 =~ ^- ]]; do
-
-  if [ "$1" == "-q" ]; then
-    shift
-    DOECHO=0
-
-  elif [ "$1" == "-v" ]; then
-    shift
-    DOECHO=2
-
-  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-    fDisplayOptions
-    exit 0
-
-  else
-    echo
-    echo "***ERROR: unknown option '$1'."
-    echo
-    fDisplayOptions
-    exit 1
-  fi
-done
+#while [[ $1 =~ ^- ]]; do
+#
+#  if [ "$1" == "--convertrc" ]; then
+#    shift
+#    fConvertRegionCodeAWS $1
+#    r=$?
+#    shift
+#    if [ $r -ne 0 ]; then exit $r; fi
+#
+#  else
+#    echo
+#    echo "***ERROR: unknown option '$1'."
+#    echo
+#    fDisplayOptions
+#    exit 1
+#  fi
+#done
 
 COMMAND=$1
 shift
 
-if   [ "${COMMAND}" == "volume-id" ]; then
+if     [ "${COMMAND}" == "convertrc" ]; then
+  fConvertRegionCodeAWS $*
+  EXIT=$?
+elif   [ "${COMMAND}" == "volume-id" ]; then
   doVolumeID       $*
   EXIT=$?
 elif [ "${COMMAND}" == "volume-describe" ]; then
@@ -190,8 +202,8 @@ elif [ "${COMMAND}" == "cluster" ]; then
   exit 1
 
 else
-  printf "\n\nERROR: unknown command \"${COMMAND}\".\n\n" 1>&2
+  printf "ERROR: unknown command \"${COMMAND}\".\n" 1>&2
 fi
 
 
-return ${EXIT}
+exit ${EXIT}

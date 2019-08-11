@@ -1,10 +1,34 @@
 #!/usr/bin/env bash
 
-DOECHO=1
-DOFORCE=0
-FOLD=`tput cols`
-COMMAND="push"
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
 
+
+usage: `basename $0` [options]
+
+Pushes the Kubernetes files to the archive. Makes sure they are built and then pushes the conf and k8s to the Archive, from which we can deploy. This works with pushing secrets and containers into the Archive (which is actually several storage mediums).
+
+  --conf-ext    : extension to the default conf file (ex. foo/conf/cm/apisocket -> foo/conf/cm/apisocket-vh with --conf-ext '-vh')
+#  --nogitchecks : turns off the checks for changes to local code
+
+#  -f : force push
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+. wov-env-ops fDisplayOptions $*
+
+RESULT=0
+COMMAND="push"
 CONFEXT=
   # added to conf dir names (ex. "-vh" for vh specific)
 
@@ -13,61 +37,62 @@ CONFEXT=
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
-if [ ! -z ${WOV_stagemod+x} ]; then
-  printf "\nERROR: Can't have WOV_stagemod set when pushing content.\n\n"
-  exit 1
-fi
-pushenvargs=( "$@" )
-set ""
-. wov-env --provider
-. wov-ns-check
-. wov-push-common
-set -- "${pushenvargs[@]}"
+#if [ ! -z ${WOV_stagemod+x} ]; then
+#  printf "\nERROR: Can't have WOV_stagemod set when pushing content.\n\n"
+#  exit 1
+#fi
+#pushenvargs=( "$@" )
+#set ""
+#. wov-ns-check
+#set -- "${pushenvargs[@]}"
 
 
 
 # ---------------------------------------------------------------------
-# $1 cluster
 # ---------------------------------------------------------------------
 function doPushClusterToArchiveChecks()
 {
-  local CLUSTER="$1"
-  local CLUSTERDIR="${WOV_CACHEDIR}/clusters/${CLUSTER}"
-  local ARCHPATH="`getRelativeArchivePath ${CLUSTER}`"
   local retval=0
 
-  for container in ${RECIPES[@]}; do
+  if [ "${WOV_ORIGIN}" != "self" ]; then
+    l_warn "Cannot push Cluster Configuration to Archive that is not set to Origin self. WOV_ORIGIN is '${WOV_ORIGIN}'"
+    retval=1
+  else
+    local ARCHPATH="`getRelativeArchivePath ${WOV_CLUSTER}`"
 
-    # each container should have a cm
-    if [ ! -e "${CLUSTERDIR}/cm/${WOV_PROJECT}${container}" ]; then
-      echo "WARNING: container '${WOV_PROJECT}${container}' has no K8s ConfigMap file.";
+    for ms in ${RECIPES[@]}; do
+
+      # each ms should have a cm
+      if [ ! -e "${WOV_CLUSTERDIR}/cm/${ms}" ]; then
+        l_warn "microservice '${ms}' has no K8s ConfigMap file.";
+        retval=1;
+      fi
+
+      # each microservice should have a secrets file
+      if [ ! -e "${WOV_CLUSTERDIR}/se/${ms}" ]; then
+        l_warn "microservice '${ms}' has no K8s Secrets file.";
+        retval=1;
+      fi
+
+      # each microservice should have a k8s deployment file
+      if [ ! -e "${WOV_CLUSTERDIR}/k8s/${ms}.yaml" ]; then
+        l_warn "microservice '${ms}' has no K8s Deployment file.";
+        retval=1;
+      fi
+
+      # each microservice should have a k8s service file
+      if [ ! -e "${WOV_CLUSTERDIR}/k8s/${ms}-service.yaml" ]; then
+        l_warn "microservice '${ms}' has no K8s Service file.";
+        retval=1;
+      fi
+
+    done
+
+    # each cluster should have a k8s ingress file
+    if [ ! -e "${WOV_CLUSTERDIR}/k8s/${WOV_PROJECT}-ingress.yaml" ]; then
+      l_warn "project '${WOV_PROJECT}' has no K8s Ingress file ${WOV_PROJECT}-ingress.yaml.";
       retval=1;
     fi
-
-    # each container should have a secrets file
-    if [ ! -e "${CLUSTERDIR}/se/${WOV_PROJECT}${container}" ]; then
-      echo "WARNING: container '${WOV_PROJECT}${container}' has no K8s Secrets file.";
-      retval=1;
-    fi
-
-    # each container should have a k8s deployment file
-    if [ ! -e "${CLUSTERDIR}/k8s/${WOV_PROJECT}${container}.yaml" ]; then
-      echo "WARNING: container '${WOV_PROJECT}${container}' has no K8s Deployment file.";
-      retval=1;
-    fi
-
-    # each container should have a k8s service file
-    if [ ! -e "${CLUSTERDIR}/k8s/${WOV_PROJECT}${container}-service.yaml" ]; then
-      echo "WARNING: container '${WOV_PROJECT}${container}' has no K8s Service file.";
-      retval=1;
-    fi
-
-  done
-
-  # each cluster should have a k8s ingress file
-  if [ ! -e "${CLUSTERDIR}/k8s/${WOV_PROJECT}-ingress.yaml" ]; then
-    echo "WARNING: cluster '${WOV_PROJECT}' has no K8s Ingress file ${WOV_PROJECT}-ingress.yaml.";
-    retval=1;
   fi
 
   return $retval
@@ -79,50 +104,85 @@ function doPushClusterToArchiveChecks()
 # ---------------------------------------------------------------------
 function doPushClusterToArchive() 
 {
-  local CLUSTER="$1"
-  local CLUSTERDIR="${WOV_CACHEDIR}/clusters/${CLUSTER}"
-  local ARCHPATH="`getRelativeArchivePath ${CLUSTER}`"
+  local ARCHPATH="`getRelativeArchivePath ${WOV_CLUSTER}`"
 
 
-  if [ $DOECHO -ge 1 ]; then echo "  ... building cluster configuration: '${CLUSTER}'"; fi
-  wov-env-build -q --cluster ${CLUSTER}
-  A=$?
-  if [ "$A" != "0" ]; then exit $A; fi
+  # already set and built by now
+  #l_  "  ... building cluster configuration: '${WOV_CLUSTER}'"
+  #wov-env-build -q --cluster ${CLUSTER}
+  #A=$?
+  #if [ "$A" != "0" ]; then exit $A; fi
 
-  if [ $DOECHO -ge 1 ]; then echo "  ... pushing to archive: '${WOV_ARCHIVEENV}/${ARCHPATH}'"; fi
-  if [ $DOECHO -ge 2 ]; then echo "$(cd ${CLUSTERDIR} ; ls -d * */* )"; fi
-  A1=$(cd ${CLUSTERDIR} ; aws s3 sync cm  ${WOV_ARCHIVEENV}/${ARCHPATH}/cm  --delete)
-  if [ "${A1}" != "" ]; then printf "$A1\n"; fi
-  A2=$(cd ${CLUSTERDIR} ; aws s3 sync se  ${WOV_ARCHIVEENV}/${ARCHPATH}/se  --delete)
-  if [ "${A2}" != "" ]; then printf "$A2\n"; fi
-  A3=$(cd ${CLUSTERDIR} ; aws s3 sync k8s ${WOV_ARCHIVEENV}/${ARCHPATH}/k8s --delete)
-  if [ "${A3}" != "" ]; then printf "$A3\n"; fi
+  l_ "  ... pushing to archive: '${WOV_ARCHIVEENV}/${ARCHPATH}'"
+  l_verbose "$(cd ${WOV_CLUSTERDIR} ; ls -d * */* )"
+  R=$(cd ${WOV_CLUSTERDIR} ; aws s3 sync cm  ${WOV_ARCHIVEENV}/${ARCHPATH}/cm  --delete)
+  if [ "${R}" != "" ]; then printf "$R\n"; fi
+  R=$(cd ${WOV_CLUSTERDIR} ; aws s3 sync se  ${WOV_ARCHIVEENV}/${ARCHPATH}/se  --delete)
+  if [ "${R}" != "" ]; then printf "$R\n"; fi
+  R=$(cd ${WOV_CLUSTERDIR} ; aws s3 sync k8s ${WOV_ARCHIVEENV}/${ARCHPATH}/k8s --delete)
+  if [ "${R}" != "" ]; then printf "$R\n"; fi
 
-  if [ $DOECHO -ge 1 ]; then echo "  ... success"; fi
+  l_ "  ... success"
 }
 
+
 # ---------------------------------------------------------------------
+# For each named cluster, push to archive
 # ---------------------------------------------------------------------
-function fDisplayOptions()
+function doPushK8sPush()
 {
-  cat <<EOF | fold -w ${FOLD} -s
-
-
-usage: `basename $0` [options] cluster ...
-
-Pushes the Kubernetes files to the archive. Makes sure they are built and then pushes the conf and k8s to the Archive, from which we can deploy. This works with pushing secrets and containers into the Archive (which is actually several storage mediums).
-
-  cluster ...   : the cluster to send
-
-  --conf-ext    : extension to the default conf file (ex. foo/conf/cm/apisocket -> foo/conf/cm/apisocket-vh with --conf-ext '-vh')
-  --nogitchecks : turns off the checks for changes to local code
-
-  -f : force push
-  -h : this help
-  -q/-v : quiet/verbose
-
-EOF
+  local retval=0
+#  for cluster in "${CLUSTERS[@]}"; do
+#    echo "Push to Archive for Cluster: $cluster"
+#    doPushClusterToArchiveChecks ${cluster}
+#    if [ $? != 0 ]; then
+#      echo "  ... skipping cluster push due to warnings."
+#      retval=2
+#    else
+#      doPushClusterToArchive ${cluster}
+#    fi
+#  done
+  doPushClusterToArchiveChecks
+  if [ $? != 0 ]; then
+    l_error "Skipping push due to warnings."
+    retval=2
+  else
+    echo "Push to Archive for Cluster: $WOV_CLUSTER"
+    doPushClusterToArchive
+    retval=$?
+    if [ $? != 0 ]; then
+      l_error "  ... failed"
+    else
+      l_ "  ... success"
+    fi
+  fi
+  return $retval
 }
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doPushK8sCheck()
+{
+  local retval=0
+#  for cluster in "${CLUSTERS[@]}"; do
+#    echo "Check K8s files for Cluster: $cluster"
+#    doPushClusterToArchiveChecks ${cluster}
+#    if [ $? != 0 ]; then
+#      echo "  ... skipping cluster push due to warnings."
+#      retval=2
+#    fi
+#  done
+  l_ "Check K8s files for Cluster: $WOV_CLUSTER"
+  doPushClusterToArchiveChecks
+  if [ $? != 0 ]; then
+    retval=2
+  else
+    l_ "  ... success"
+  fi
+  return $retval
+}
+
 
 
 # ---------------------------------------------------------------------
@@ -130,34 +190,22 @@ EOF
 # ---------------------------------------------------------------------
 while [[ $1 =~ ^- ]]; do
 
-  if [ "$1" == "-q" ]; then
-    shift
-    DOECHO=0
+#  elif [ "$1" == "--nogitchecks" ]; then
+#    shift
+#    NOGITCHECK=1
 
-  elif [ "$1" == "-v" ]; then
-    shift
-    DOECHO=2
-
-  elif [ "$1" == "--nogitchecks" ]; then
-    shift
-    NOGITCHECK=1
-
-  elif [ "$1" == "--conf-ext" ]; then
+  if [ "$1" == "--conf-ext" ]; then
     shift
     CONFEXT=$1
     shift
 
+  elif [ "$1" == "--push" ]; then
+    shift
+    COMMAND="push"
+
   elif [ "$1" == "--check" ]; then
     shift
     COMMAND="check"
-
-  elif [ "$1" == "-f" ]; then
-    shift
-    DOFORCE=1
-
-  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-    fDisplayOptions
-    exit 0
 
   else
     echo
@@ -169,63 +217,51 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
-# For dev and prod, check local code and secrets are checked in and pushed.
-doGitChecksOnFormalStages 1
 
-CLUSTERS=( $* )
-if [ "${#CLUSTERS}" == "0" ]; then
-  CLUSTERS=( "${WOV_CLUSTER}" )
-fi
+if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
 
-# get the names of containers
-fGetContainerRecipes
+  # Load in env
+  . <(wov-env --provider --exports)
+  . wov-env-common
+  . wov-push-common
 
+  # get the names of microservices
+  fGetMicroserviceRecipes
 
-# ---------------------------------------------------------------------
-# For each named cluster, push to archive
-# ---------------------------------------------------------------------
-function doPushK8sPush()
-{
-  local retval=0
-  for cluster in "${CLUSTERS[@]}"; do
-    echo "Push to Archive for Cluster: $cluster"
-    doPushClusterToArchiveChecks ${cluster}
-    if [ $? != 0 ]; then
-      echo "  ... skipping cluster push due to warnings."
-      retval=2
-    else
-      doPushClusterToArchive ${cluster}
-    fi
-  done
-  return $retval
-}
-
-function doPushK8sCheck()
-{
-  local retval=0
-  for cluster in "${CLUSTERS[@]}"; do
-    echo "Check K8s files for Cluster: $cluster"
-    doPushClusterToArchiveChecks ${cluster}
-    if [ $? != 0 ]; then
-      echo "  ... skipping cluster push due to warnings."
-      retval=2
-    fi
-  done
-  return $retval
-}
-
-
-if [ "$COMMAND" == "push" ]; then
-  doPushK8sPush
+  l_verbose "  ...for dev and prod, check local code and secrets are checked in and pushed."
+  doGitChecksOnFormalStages 1
   RESULT=$?
-elif [ "$COMMAND" == "check" ]; then
-  doPushK8sCheck
-  RESULT=$?
+
+  if [ $RESULT -eq 0 ]; then
+    l_verbose "  ... ensure WOV_ORIGIN is to self."
+    if [ "${WOV_ORIGIN}" != "self" ]; then
+      l_warn "Cannot push Cluster Configuration to Archive that is not set to Origin self. WOV_ORIGIN is '${WOV_ORIGIN}'"
+      RESULT=1
+    fi
+  fi
+
+  if [ $RESULT -eq 0 ]; then
+    l_verbose "  ... make sure cluster information is built."
+    wov-env-build --cluster
+    RESULT=$?
+  fi
+
+  if [ $RESULT -eq 0 ]; then
+    l_verbose "  ... call command '${COMMAND}'"
+    if [ "$COMMAND" == "push" ]; then
+      doPushK8sPush
+      RESULT=$?
+    elif [ "$COMMAND" == "check" ]; then
+      doPushK8sCheck
+      RESULT=$?
+    fi
+  fi
+
 fi
 
 
 # 0 - success, 2- warnings
-if [ $DOECHO -ge 1 ]; then 
+if [ $DOECHO -ge 2 ]; then 
   if [ $RESULT == 0 ]; then echo "  ... wov-push-k8s success";
   else echo "  ... wov-push-k8s failed"; fi
 fi

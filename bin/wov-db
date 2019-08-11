@@ -1,0 +1,1030 @@
+#!/usr/bin/env bash
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [WOVDB] {options}
+
+Utility script for databases. This includes connecting, queries and schema checks. Also, manages DataSets.
+
+  Database Server   - a process listening somewhere to handle database requests
+  Database Instance - an instance on a database server that stores and serves data (ex. X in CREATE DATABASE X )
+  Wov Database      - a named combination of Database Server/Instance.
+
+  WOVDB - the Wov Database server to operate on (created via wov-cluster-createdb). Assumed if only one in project.
+
+
+ex. 'wov-db'.
+ Connect to your wov database in a shell using the current project/namespace: 
+   NOTE: you should be ssh tunnelling through a bastion server that was already configured (i.e. it will be a localhost port).
+
+ex. 'wov-db --schema-diff 32'
+ Diffs the current Wov database schema to version 32.
+
+ex. 'wov-db --wdb-init'
+ For the current environment, initializes the Wov Database and creates if necessary.
+
+
+COMMANDS:
+
+  -h : this help
+  -q/-v : quiet/verbose
+
+
+ Database Commands:
+  -c [command]    : run a DB command
+  -f [file]       : load file of SQL commands into a DB
+
+   Options:
+    -d [dbinstance] : changes the database instance (DB inside the DB server)
+    -U [user]       : DB user
+    -p              : prompt for a password
+    -H HOST         : change the host (almost always localhost for local DB or ssh tunnelling)
+
+ Wov DB Utility:
+  -lwdb           : list wov databases
+  --schema        : return the Wov DB's schema
+  --schema-hash   : return the Wov DB's schema hash
+  --schema-diff n : compare the wov database's current schema against a past schema version n
+  --info          : reports about the wov database
+  --wdb-create X  : if database instance on server does not exist, creates and inits
+  --wdb-init   X  : initialize the database for WovTools (does not create and does not overwrite existing database instance)
+  --wdb-ver       : returns the current version
+  --wdb-log       : returns the log of commits for the database
+  --wdb-edit      : edit the current wov database schema deltas file (i.e. add SQL that you use to change things)
+
+ DataSets : non-production data management:
+  -lds               : list all DataSets
+  --ds-schema/-ds X : with DataSet X, reloads the database schema (clearing existing data)
+  --ds-clear/-dc  X : with DataSet X, clears data in the database
+  --ds-data/-dd   X : with DataSet X, loads the database data
+  --ds-reload/-dr X : with DataSet X, reloads the database data (clear and data)
+  --ds-full/-df   X : with DataSet X, loads a full DataSet by loading schema, clear and load data
+
+ DB Server Commands:
+  --dbs-wait                : wait for a database server to come online after creation
+  --docker-postgres-start X : start a local Postgres database via Docker
+  --docker-postgres-stop    : stop a local Postgres database in Docker
+
+
+NOTE:
+About commands (-c)... you have to be careful about quotes as both bash and psql are very particular. Here, use single quotes so '*' is not expanded, and quote the single quote so mydatabase is interpret properly by postgres.
+
+ex. -c 'SELECT * FROM logs WHERE database=\'mydatabase\' ORDER BY id DESC LIMIT 1'
+
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doDBList()
+{
+  WOVDATABASES=( $(doFindDatabases) )
+}
+
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+
+# Now check options
+# ---------------------------------------------------------------------
+. wov-env-ops fDisplayOptions $*
+
+# exit here to avoid importing all the rest
+if [ ${WOV_DODEFAULTCOMMAND} == 0 ]; then exit 0; fi
+
+. <(wov-env --exports -e)
+. wov-env-common
+. wov-push-common
+. wov-db-common
+
+
+WOVDBNAME=               # NOTE: badly named variable. it's the datbase name, or database instance
+WOVDATABASES=
+DB_COMMAND=
+DB_OP=
+DB_FILE=
+DB_HEADEROPTIONS=
+DATASETFILES=( 'schema' 'data' 'clear' )
+
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doDataSetList()
+{
+#  local S=$(IFS=, ; echo "${DATASETFILES[*]}")
+
+  local fname=()
+  local fname2=()
+
+  # find files
+  for s in ${DATASETFILES[@]}; do
+    fname+=( $(cd ${WOV_BASEDIR}/wovtools/data ; ls -- *_$s.sql* 2> /dev/null ) )
+  done
+#  echo "fname: '${fname[@]}'"
+
+  # find roots
+  for f in ${fname[@]}; do
+    local F=( ${f//_/ } )
+    fname2+=( "${F[0]}" )
+  done
+#  echo "fname2: '${fname2[@]}'"
+
+  # uniq them
+  local fnamen=( $(echo "${fname2[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' ') )
+  echo "${fnamen[@]}"
+}
+
+
+
+
+# --------------------------------------------------------------------- 
+# Set config from env vars and project type
+# --------------------------------------------------------------------- 
+doSetDBData()
+{
+  DB_SUBHOST=WOV_${WOVDBNAME}_subhost
+  DB_TYPE=WOV_${WOVDBNAME}_type
+  DB_DATABASE=WOV_${WOVDBNAME}_database
+  DB_USERNAME=WOV_${WOVDBNAME}_username
+  DB_PASSWORD=WOV_${WOVDBNAME}_password
+#  DB_HOST=WOV_${WOVDBNAME}_host
+  DB_HOST=localhost
+  DB_PORT=WOV_${WOVDBNAME}_port
+  DB_INSTANCEAVAILABILITYZONE=WOV_${WOVDBNAME}_instanceAvailabilityZone
+  DB_INSTANCEAVAILABILITYZONEALT=WOV_${WOVDBNAME}_instanceAvailabilityZoneAlt
+  DB_INSTANCE_CLASS=WOV_${WOVDBNAME}_instance_class
+  DB_INSTANCE_STORAGE=WOV_${WOVDBNAME}_instance_storage
+  DB_VERSION=WOV_${WOVDBNAME}_version
+
+  DB_HEADEROPTIONS=-t
+
+  ## if in Plugin and using default database, default to the mongodb
+  #if [[ ( "$WOVDBNAME" == "" ) || ( "$WOVDBNAME" == "${WOV_PROJECT}db" ) ]] && [[ "${WOV_PROJECTTYPE}" == "pl" ]]; then
+  #  # echo "...defaulting to plugin mongodb."
+  #  DB_TYPE=WOV_we_db_type
+  #  DB_DATABASE=WOV_we_db_collection
+  #  DB_USERNAME=WOV_we_db_user
+  #  DB_PASSWORD=WOV_we_db_password
+  #  DB_HOST=WOV_we_db_url
+  #  DB_PORT=WOV_we_db_port
+  #  WOVDBNAME=${WOV_PROJECT}db
+  #fi
+
+  # Set variables to values of the name
+  DB_SUBHOST=${!DB_SUBHOST}
+  DB_TYPE=${!DB_TYPE}
+  DB_DATABASE=${!DB_DATABASE}
+  DB_USERNAME=${!DB_USERNAME}
+  DB_PASSWORD=${!DB_PASSWORD}
+#  DB_HOST=${!DB_HOST}
+  DB_PORT=${!DB_PORT}
+  DB_INSTANCEAVAILABILITYZONE=${!DB_INSTANCEAVAILABILITYZONE}
+  DB_INSTANCEAVAILABILITYZONEALT=${!DB_INSTANCEAVAILABILITYZONEALT}
+  DB_INSTANCE_CLASS=${!DB_INSTANCE_CLASS}
+  DB_INSTANCE_STORAGE=${!DB_INSTANCE_STORAGE}
+  DB_VERSION=${!DB_VERSION}
+
+  local vars=( 'DB_SUBHOST' 'DB_TYPE' 'DB_DATABASE' 'DB_USERNAME' 'DB_PASSWORD' \
+    'DB_PORT' 'DB_INSTANCEAVAILABILITYZONE' 'DB_INSTANCEAVAILABILITYZONEALT' 'DB_INSTANCE_CLASS' \
+    'DB_INSTANCE_STORAGE' 'DB_VERSION' )
+
+  # Verify that values are set
+  local isgood=1
+  for v in ${vars[@]}; do
+    if [ "${!v}" == "" ]; then
+      l_warn "Wov Database is missing '${WOVDBNAME}.`echo ${v:3} | tr '[:upper:]' '[:lower:]'`'." 
+      isgood=0
+    fi
+  done
+  if [ ${isgood} -eq 0 ]; then
+    l_error "Failed to provide all Wov Database configuration values."
+    exit 1
+  fi
+}
+
+
+
+# NOTE: using bastion so this overrides cluster settings
+#DB_PORT=$(wov-bastion --bhost ${WOV_CLUSTER}-bastion --ldp ${WOVDBNAME})
+#DB_HOST=localhost   # bastion
+# --------------------------------------------------------------------- 
+# Builds the X data set for a database from the wovtools/data/X_* files
+#  $1 - data set name (ex. alywan)
+# --------------------------------------------------------------------- 
+function doDBDataBuild()
+{
+  if [ "$1" == "" ]; then echo "ERROR: need a data set name parameter to wov-db::doDBDataBuild."; exit 1; fi
+
+
+  # Make the target directory
+  mkdir -m 700 -p ${WOV_BASEDIR}/wovtools/cache/data
+  if [ $? -ne 0 ]; then echo "ERROR: failed to make target data directory in cache."; exit 1; fi
+
+  for f in ${DATASETFILES[@]}; do
+
+    local fname=`cd ${WOV_BASEDIR}/wovtools/data ; ls $1_$f.*`
+    # echo "f: '${f}'  fname: '${fname}'   last 4: '${fname: -4}'"
+
+    # compile file if it has .wov on it
+    if [ "${fname: -4}" == ".wov" ]; then
+      local finname="${fname::-4}"
+      if [ ! -e "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ] ||
+         [ "${WOV_BASEDIR}/wovtools/data/${1}_const.js" -nt "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ] ||
+         [ "${WOV_BASEDIR}/wovtools/data/${fname}" -nt "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ]; then
+        if [ ${DOECHO} -ge 1 ]; then echo "  ... compile ${finname}"; fi
+        WOV_BASEDIR=${WOV_BASEDIR} wov-compile -ds ${1} "${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/secrets.json" "${WOV_BASEDIR}/wovtools/data/${fname}" > "${WOV_BASEDIR}/wovtools/cache/data/${finname}"
+      fi
+
+    # or copy it over
+    else
+      if [ ! -e "${WOV_BASEDIR}/wovtools/cache/data/${fname}" ]; then
+        if [ ${DOECHO} -ge 1 ]; then echo "  ... cp ${fname}"; fi
+        cp "${WOV_BASEDIR}/wovtools/data/${fname}" "${WOV_BASEDIR}/wovtools/cache/data/."
+      fi
+    fi
+
+  done
+}
+
+
+# --------------------------------------------------------------------- 
+# Loads a data set file.
+# $1 - data set to use
+# #2 - data command to run: schema, clear or data which match to a file 
+# --------------------------------------------------------------------- 
+function doDBDataCommand()
+{
+  if [ "$WOV_STAGE" == "prod" ]; then echo "ERROR: wov-db DataSets do not work on production."; exit 1; fi
+  if [ "$1" == "" ]; then echo "ERROR: need a data set name parameter to wov-db::doDBDataCommand."; exit 1; fi
+  if [ "$2" == "schema" ] ||
+     [ "$2" == "clear" ] ||
+     [ "$2" == "data" ]; then
+    local A=1
+  else
+    echo "ERROR: Unknown command for doDBDataCommand of '${2}'. Should be one of 'schema', 'clear', or 'data'."
+    exit 1
+  fi
+
+  R=$(PGPASSWORD=${DB_PASSWORD} psql --quiet -P "footer=off" -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f "${WOV_BASEDIR}/wovtools/cache/data/${1}_${2}.sql") ; Re=$?
+  if [ ${DOECHO} -ge 2 ]; then echo "${R}"; fi
+  if [ ${DOECHO} -ge 1 ]; then echo "  ... loaded ${1}_${2}.sql"; fi
+  if [ "$Re" != "0" ]; then
+    showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n  : have you created the datbase : 'wov-db --wdb-create\n'"
+    exit 1
+  fi
+}
+
+
+# $1 - port
+# $2 - error message
+function showConnectionFailure()
+{
+  if [ "${1}" == "" ]; then
+    >&2 printf "ERROR: No port specified. Configuration error.\n";
+  else
+    wov-bastion-connection -q --test-port ${1}
+    if [ $? -ne 0 ]; then
+      >&2 printf "ERROR: Port ${1} is not open. Is your bastion connection open?\n";
+    else
+      >&2 printf "$2";
+    fi
+  fi
+}
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function doDatabaseConnectMessage()
+{
+  printf "\n\n"
+  figlet "${WOV_NS}"
+  printf "  DBServer : ${WOVDBNAME}\n"
+  printf "  Type     : ${DB_TYPE}\n"
+  printf "  User     : ${DB_USERNAME}\n"
+  printf "  Host     : ${DB_HOST}\n"
+  printf "  Port     : ${DB_PORT}\n"
+  printf "  Database : ${DB_DATABASE}\n\n"
+}
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function setAsAdmin()
+{
+  DB_USERNAME="$(wov-env --var WOV_${WOVDBNAME}_admin_username)"
+  DB_PASSWORD="$(wov-env --var WOV_${WOVDBNAME}_admin_password)"
+  if [ "${DB_USERNAME}" == "" ] || [ "${DB_PASSWORD}" == "" ]; then
+    printf "\n\nERROR: Setting as admin, but you have no admin configured. Ensure WOV_${WOVDBNAME}_admin_[username/password] is configured in your secrets.\n\n"
+    exit 1
+  fi
+}
+
+
+function doWovDBCreateIfMissing() 
+{
+  local retval=0
+
+  if [ $retval -eq 0 ]; then
+
+    # Check that the user's databae exists
+    export PGPASSWORD=${DB_PASSWORD}
+    psql -h localhost -p ${DB_PORT} -U ${DB_USERNAME} -tc "SELECT 1 FROM pg_database WHERE datname = '${DB_DATABASE}'" | grep -q 1 || psql -U ${DB_USERNAME} -h localhost -p ${DB_PORT} -p ${DB_PORT} -c "CREATE DATABASE ${DB_DATABASE}"
+    Re=$?
+    if [ $Re -ne 0 ]; then
+      l_error "Failed to create database instance."
+      retval=1
+    fi
+  fi
+
+  if [ $retval -eq 0 ]; then
+    doWovDBInit
+  fi
+
+  return $retval
+}
+
+# ---------------------------------------------------------------------
+# Can be called on an existing database server that has a database 
+# instance, and not delete/overwrite anything as all this does is 
+# initialize and create deltas.
+# ---------------------------------------------------------------------
+function doWovDBInit()
+{
+  mkdir -p ${WOV_BASEDIR}/wovtools/db/archive
+
+  # Create 'wovtools' database in db server if it does not exist
+  export PGPASSWORD=${DB_PASSWORD}
+  psql -h localhost -U ${DB_USERNAME} -p ${DB_PORT} -tc "SELECT 1 FROM pg_database WHERE datname = 'wovtools'" | grep -q 1 || psql -U ${DB_USERNAME} -h localhost -p ${DB_PORT} -c "CREATE DATABASE wovtools"
+
+  # in 'wovtools', create the logs table, and insert a row
+  psql -U ${DB_USERNAME} -h localhost -p ${DB_PORT} -d wovtools -tc "CREATE TABLE IF NOT EXISTS logs (id SERIAL NOT NULL PRIMARY KEY, database varchar, wovtoolsver varchar, label varchar, pver integer, sver integer, snapshot varchar, schema varchar DEFAULT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() );"
+
+  # first delta is that it exists
+  cat <<EOF >> ${WOV_BASEDIR}/wovtools/db/${WOVDBNAME}.deltas
+# ---------------------------------------------------------------------
+# doInitDB called for: ${WOVDBNAME}
+# ---------------------------------------------------------------------
+# 1) create wovtools database if not exist
+# 2) create the logs database in wovtools
+# ---------------------------------------------------------------------
+EOF
+
+  # Init the archive for it
+  if [ ! -e "${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}.json" ]; then
+    cat <<EOF >> ${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}.json
+{
+  "wovtoolsversion": "0",
+  "versions": {}
+}
+EOF
+  fi
+
+}
+
+
+# ---------------------------------------------------------------------
+# returns 0 on success
+# ---------------------------------------------------------------------
+function doDBGetVer()
+{
+  local retval=1
+
+  if [ "$DB_PORT" == "" ]; then >&2 echo "ERROR: no port specified."; retval=2; fi
+  if [ "$DB_USERNAME" == "" ]; then >&2 echo "ERROR: no username specified."; retval=2; fi
+  if [ "$DB_PASSWORD" == "" ]; then >&2 echo "ERROR: no password specified."; retval=2; fi
+
+  if [ $retval -eq 2 ]; then exit 1; fi
+
+  R=$(PGPASSWORD=${DB_PASSWORD} psql -h localhost -d wovtools -p ${DB_PORT} -U ${DB_USERNAME} --tuples-only -c "SELECT * from logs order by id DESC limit 1;" 2> /dev/null ) ; Re=$?
+  if [ ${Re} == "0" ] ; then
+    if [ "${R}" == "" ]; then echo "None"; 
+    else 
+      echo "${R}" | cut -d'|' -f5 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+    fi
+    retval=0
+  else
+    wov-bastion-connection -q --test-port "${DB_PORT}" ; Re=$?
+    if [ $Re -eq 1 ]; then
+      >&2 echo "ERROR: DB port ${DB_PORT} is not open. Is your bastion connection open?"
+    elif [ $Re -eq 2 ]; then
+      >&2 echo "ERROR: Failed testing bastion connection."
+    else
+      echo "Uninited"
+    fi
+  fi
+
+  return $retval
+}
+
+
+# ---------------------------------------------------------------------
+# returns 0 on success
+# ---------------------------------------------------------------------
+function doDBGetLog()
+{
+  local retval=1
+
+  R=$(PGPASSWORD=${DB_PASSWORD} psql -h localhost -d wovtools -p ${DB_PORT} -U ${DB_USERNAME} --tuples-only -c "SELECT * from logs order by id DESC;" 2> /dev/null ) ; Re=$?
+  if [ ${Re} == "0" ] ; then
+    if [ "${R}" == "" ]; then echo "None"; 
+    else echo $R; fi
+    retval=0
+  else
+    echo "Uninited"
+  fi
+
+  return $retval
+}
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function doInfo()
+{
+#  . <(wov-env -c wov-aws-va-grape --exports)
+#  doSetDBData
+
+  cat <<EOF
+
+DB Information
+---------------------------------------------------------------------
+  AWS Server : $(doResName DB ${WOV_CLUSTER} ${DB_SUBHOST}):$([ "${DB_PORT}" != "" ] && echo ${DB_PORT} || echo "undefined")
+    Database : $(EUndef ${DB_DATABASE})  User: ${DB_USERNAME} PASSWORD: ${DB_PASSWORD}
+        Type : $(EUndef ${DB_TYPE})  Ver: $(EUndef ${DB_VERSION})  Storage: $(EUndef ${DB_INSTANCE_CLASS}), $(EUndef ${DB_INSTANCE_STORAGE}) GB, zones: $(EUndef "${AWS_REGION}${DB_INSTANCEAVAILABILITYZONE}") $(EUndef "${AWS_REGION}${DB_INSTANCEAVAILABILITYZONEALT}")
+
+  WovTools Version: $(EUndef $(doDBGetVer))
+
+  ConnectString: 'PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USERNAME} -d ${DB_DATABASE}'
+  
+EOF
+}
+
+
+# ---------------------------------------------------------------------
+# Wait for db to get address, meaning it is ready to go
+# $1=[dbname]
+# ---------------------------------------------------------------------
+function doDBSWait()
+{
+
+  if [ "$1" == "localhost" ]; then
+    echo "ERROR: asking to wait for localhost database. Turn off local database in config/local.json originmods.local."
+    exit 1
+  fi
+
+  # check for existence
+  S=$(aws rds describe-db-instances --db-instance-identifier $(doResName DB ${WOV_CLUSTER} ${1}) --query 'DBInstances[0].Endpoint.Address' --output text) ; Se=$?
+  if [ $Se == 255 ]; then echo "ERROR: unknown database."; exit 1; fi
+
+
+  # wait for it to get an address
+  while [ "$(aws rds describe-db-instances --db-instance-identifier $(doResName DB ${WOV_CLUSTER} ${1}) --query 'DBInstances[0].Endpoint.Address' --output text)" == "None" ]; do
+    echo "    ... waiting for database to get address."
+    sleep 5
+  done
+
+  # wait for it to be available
+  while [ "$(aws rds describe-db-instances --db-instance-identifier $(doResName DB ${WOV_CLUSTER} ${1}) --query 'DBInstances[0].DBInstanceStatus' --output text)" != "available" ]; do
+    echo "    ... waiting for database to come online."
+    sleep 5
+  done
+}
+
+
+# ---------------------------------------------------------------------
+# Edit the deltas file for the database instance.
+# ---------------------------------------------------------------------
+function doDBEditDeltas()
+{
+
+  if [ "${EDITOR}" == "" ]; then
+    printf "ERROR: environment variable EDITOR not defined.\n"
+    exit 1
+  fi
+
+  local P=${WOV_BASEDIR}/wovtools/db/${WOVDBNAME}.deltas
+
+  if [ "${NEWWINDOW}" == "1" ]; then
+    x $EDITOR ${P}
+  else
+    $EDITOR ${P}
+  fi
+
+}
+
+# Find databases
+doDBList
+
+# ---------------------------------------------------------------------
+# Handle Non-Wov Database Specific Commands
+# ---------------------------------------------------------------------
+DOCONT=0
+while [[ $1 =~ ^- ]] && [ ${DOCONT} -eq 0 ]; do
+
+  # ---------------------------------------------------------------------
+  # Listings
+  # ---------------------------------------------------------------------
+
+  if [ "$1" == "-lds" ]; then
+    shift
+    doDataSetList
+    WOV_DODEFAULTCOMMAND=0
+
+  elif [ "$1" == "-lwdb" ]; then
+    shift
+    # doDBList
+    echo "${WOVDATABASES[@]}"
+    WOV_DODEFAULTCOMMAND=0
+
+
+  # ---------------------------------------------------------------------
+  # Wov Database
+  # ---------------------------------------------------------------------
+
+#  elif [ "$1" == "--wdb-init" ]; then
+#    shift
+#    WOVDBNAME="$1"
+#    doSetDBData
+#    shift
+#    doWovDBInit
+#    exit $?
+#    WOV_DODEFAULTCOMMAND=0
+#
+#  elif [ "$1" == "--wdb-create" ]; then
+#    shift
+#    WOVDBNAME="$1"
+#    doSetDBData
+#    shift
+#    doWovDBCreateIfMissing
+#    exit $?
+#    WOV_DODEFAULTCOMMAND=0
+
+  # --------------------------------------------------------------------- 
+  # Local Docker Postgres DB 
+  # --------------------------------------------------------------------- 
+
+  elif [ "$1" == "--docker-postgres-start" ]; then
+    shift
+    WOVDBNAME="$1"
+    doSetDBData
+    shift
+
+    # Test for running postgres on port
+    pg_isready -p 5432 -h localhost 2>&1  > /dev/null
+    A=$?
+    if [ "$A" == "0" ]; then echo "ERROR: postgres already accepting connections. Try --docker-postgres-stop."; exit 1; fi
+
+    # match major/minor versions
+    pgsplit=( $(echo $DB_VERSION | tr "." "\n") )
+    pgmajorminor="${pgsplit[0]}.${pgsplit[1]}"
+
+    # Start it and wait for IMAX seconds to be ready
+    IMAX=10
+    I=0
+    docker run --rm --name postgres-local -e POSTGRES_PASSWORD=${DB_PASSWORD} -d -p 5432:5432 "postgres:${pgmajorminor}" > /dev/null
+    if [ ${?} -ne 0 ]; then
+      l_error "Failed to start Postgres in Docker."
+      I=${IMAX}
+    fi
+
+    while [ "$(pg_isready -p 5432 -h localhost 2>&1 > /dev/null ; echo $?)" != "0" ] && [ ${I} -le ${IMAX} ]; do
+      sleep 1 # sleep to account for time for it to spin up
+      I=$((I + 1))
+      if [ $I -gt ${IMAX} ]; then l_error "Failed to connect to local postgres." ; exit 1; fi
+    done
+    #PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USERNAME} -c "create database ${DB_DATABASE}"  > /dev/null
+    #if [ "$?" != "0" ]; then echo "ERROR: could not create database of '${DB_DATABASE}'."; exit 1; fi
+    echo "  ... success"
+    exit 0
+
+  elif [ "$1" == "--docker-postgres-stop" ]; then
+    shift
+    docker stop postgres-local > /dev/null
+    if [ "$?" == "0" ]; then echo "  ... success"; exit 0; fi
+    exit 0
+
+  else
+    DOCONT=1
+#    echo
+#    fDisplayOptions
+#    echo
+#    l_error "***ERROR: unknown option '$1'. This command may require a Wov Database first."
+#    exit 1
+  fi
+
+done
+
+
+# exit here to avoid importing all the rest
+if [ ${WOV_DODEFAULTCOMMAND} == 0 ]; then exit 0; fi
+
+
+# ---------------------------------------------------------------------
+# Get Wov Database from command line
+# 1st param might be Wov DB Name, if not, use default
+# ---------------------------------------------------------------------
+if [[ $1 =~ ^- ]] || [ "${1}" == "" ]; then
+
+  if [ "${#WOVDATABASES[@]}" -eq 1 ]; then
+    WOVDBNAME="${WOVDATABASES[0]}"
+  else
+    l_error "Multiple Wov Databases so can't assume. Need to provide the name on commandline."
+    printf  "  : known Wov Databases : ${WOVDATABASES[@]}"
+    exit 1
+  fi
+
+else
+  WOVDBNAME=$1
+  containsElement $1 "${WOVDATABASES[@]}"
+  if [ $? == 1 ]; then
+    l_error "'${1}' is not a Wov Database. They are: '${WOVDATABASES[@]}'"
+    exit 1
+  fi
+  shift
+fi
+
+
+# 1st call
+# ---------------------------------------------------------------------
+doSetDBData
+
+# ---------------------------------------------------------------------
+# Handle Remaining Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-p" ]; then
+    shift
+    read DB_PASSWORD
+    shift
+
+  elif [ "$1" == "--info" ]; then
+    doInfo
+    exit 0
+
+  elif [ "$1" == "--admin" ]; then
+    shift
+    setAsAdmin
+
+#  elif [ "$1" == "-n" ] || [ "$1" == "--namespace" ]; then
+#    shift
+#    NAMESPACE="${1}"
+#    # build the local cluster to point to cluster CLUSTER-NAMESPACE, and load it. touch config.json so next time it reloads
+#    wov-env-build -g ${WOV_CLUSTER}-${NAMESPACE} --local
+#    . <(wov-env -c local --exports)
+#    touch ${WOV_BASE}/config.json
+#    #. <(wov-env -c ${WOV_CLUSTER} -n ${NAMESPACE} --exports)
+#    echo ".. namespace ${WOV_NS} from ${WOV_CLUSTER}-${NAMESPACE}"
+#    echo "  ${WOV_alywandb_port}"
+#    doSetDBData
+#    echo "  ${WOV_alywandb_port}"
+#    shift
+
+  elif [ "$1" == "-U" ]; then
+    shift
+    DB_USERNAME="$1"
+    shift
+
+  elif [ "$1" == "-d" ]; then
+    shift
+    DB_DATABASE="$1"
+    shift
+
+  elif [ "$1" == "-f" ]; then
+    shift
+    DB_OP="file"
+    DB_FILE="$1"
+    shift
+
+  elif [ "$1" == "--headers" ]; then
+    shift
+    DB_HEADEROPTIONS=
+
+  elif [ "$1" == "--noheaders" ]; then
+    shift
+    DB_HEADEROPTIONS=-t
+
+  elif [ "$1" == "-c" ]; then
+    shift
+    DB_OP="command"
+    DB_COMMAND="$1" # ( $1 )
+    shift
+
+  elif [ "$1" == "--schema" ]; then
+    shift
+    DB_OP="schema"
+
+  elif [ "$1" == "--schema-hash" ]; then
+    shift
+    DB_OP="schemahash"
+
+  elif [ "$1" == "--schema-diff" ]; then
+    shift
+    DB_OP="schemadiff"
+    SCHEMADIFFVER=$1
+    shift
+
+  elif [ "$1" == "--ds-schema" ] || [ "$1" == "-ds" ]; then
+    shift
+    exitIfProd
+    doDBDataBuild $1
+    doDBDataCommand $1 "schema"
+    exit 0
+    shift
+
+  elif [ "$1" == "--ds-clear" ] || [ "$1" == "-dc" ]; then
+    shift
+    exitIfProd
+    doDBDataBuild $1
+    doDBDataCommand $1 "clear"
+    exit 0
+    shift
+
+  elif [ "$1" == "--ds-data" ] || [ "$1" == "-dd" ]; then
+    shift
+    exitIfProd
+    doDBDataBuild $1
+    doDBDataCommand $1 "data"
+    exit 0
+    shift
+
+  elif [ "$1" == "--ds-reload" ] || [ "$1" == "-dr" ]; then
+    shift
+    exitIfProd
+    doDBDataBuild $1
+    doDBDataCommand $1 'clear'
+    doDBDataCommand $1 'data'
+    exit 0
+    shift
+
+  elif [ "$1" == "--ds-full" ] || [ "$1" == "-df" ]; then
+    shift
+    exitIfProd
+    doDBDataBuild $1
+    doDBDataCommand $1 'schema'
+    doDBDataCommand $1 'clear'
+    doDBDataCommand $1 'data'
+    exit 0
+    shift
+
+
+
+  # --------------------------------------------------------------------- 
+  # Wov Database
+  # --------------------------------------------------------------------- 
+
+  elif [ "$1" == "--wdb-init" ]; then
+    shift
+    doWovDBInit
+    WOV_DODEFAULTCOMMAND=0
+
+  elif [ "$1" == "--wdb-create" ]; then
+    shift
+    doWovDBCreateIfMissing
+    WOV_DODEFAULTCOMMAND=0
+
+  elif [ "$1" == "--wdb-ver" ]; then
+    shift
+    doDBGetVer
+    exit 0
+
+  elif [ "$1" == "--wdb-log" ]; then
+    shift
+    doDBGetLog
+    exit 0
+
+  elif [ "$1" == "--wdb-edit" ]; then
+    shift
+    doDBEditDeltas
+    exit 0
+
+  # ---------------------------------------------------------------------
+  # Database Server
+  # ---------------------------------------------------------------------
+
+  elif [ "$1" == "--dbs-wait" ]; then
+    shift
+    doDBSWait ${DB_SUBHOST}
+    exit 0
+
+
+  # --------------------------------------------------------------------- 
+  # DB Connection Commands
+  # --------------------------------------------------------------------- 
+
+  elif [ "$1" == "-H" ]; then
+    shift
+    DB_HOST="$1"
+    shift
+
+  else
+    echo
+    fDisplayOptions
+    echo
+    l_error "***ERROR: unknown option '$1'."
+    exit 1
+  fi
+done
+
+
+
+if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
+
+
+  #if [ $DOECHO -ge 1 ]; then echo "... connecting to ${WOVDBNAME} (${DB_HOST}) via vh (user ${DB_USERNAME} on ${DB_DATABASE})"; fi
+
+
+  # Check vh pod exists
+  # wov-p vh >/dev/null
+  #kubectl get pods vh > /dev/null
+  #if [ "$?" == "1" ]; then
+  #  printf "\n\nERROR: 'vh' has not been created. Run 'wov-vh -s'.\n\n"
+  #  exit 1
+  #fi
+
+  if [ "${DB_TYPE}" == "postgres" ]; then
+
+    if [ "${DB_OP}" == "schema" ]; then
+      # Log into pod 'vh', run pg_dump
+      #    if [ "${DB_HOST}" != "localhost" ]; then
+      #      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s"
+      #    else
+      #      PGPASSWORD=${DB_PASSWORD} pg_dump -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
+      #    fi
+
+      PGPASSWORD="${DB_PASSWORD}" pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s
+      if [ "$?" != "0" ]; then
+        showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n"
+        exit 1
+      fi
+
+    elif [ "${DB_OP}" == "schemadiff" ]; then
+
+      SDF="${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}/schemas/${SCHEMADIFFVER}.schema"
+      if [ ! -e ${SDF} ]; then echo "ERROR: no schema for database '${WOVDBNAME}', schema version '${SCHEMADIFFVER}'."; exit 1; fi
+
+      SDF1="${WOV_BASEDIR}/wovtools/cache/.schemadiff.$$"
+      rm -f ${SDF1} > /dev/null
+      touch ${SDF1}
+      chmod 600 ${SDF1}
+
+      PGPASSWORD="${DB_PASSWORD}" pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s >> ${SDF1} ; Re=$?
+      if [ $Re != 0 ]; then
+        showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n"
+        exit 1
+      fi
+      diff ${SDF} ${SDF1}
+      rm ${SDF1}
+
+    elif [ "${DB_OP}" == "schemahash" ]; then
+      SDF1="${WOV_BASEDIR}/wovtools/cache/.schemahash.$$"
+      rm -f ${SDF1} > /dev/null
+      touch ${SDF1}
+      chmod 600 ${SDF1}
+
+      PGPASSWORD="${DB_PASSWORD}" pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s >> ${SDF1} ; Re=$?
+      if [ $Re != 0 ]; then
+        showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n"
+        exit 1
+      fi
+
+      HASH=$(cat "${SDF1}" | shasum -a 256 | cut -d' ' -f1) ; Re=$?
+      if [ $Re != 0 ]; then
+        echo "ERROR: failed calling 'shasum' on database schema."
+        exit 1
+      fi
+      echo $HASH
+      rm ${SDF1}
+
+    elif [ "${DB_OP}" == "command" ]; then
+      # Log into pod 'vh', run psql
+      #    echo "dbcommand  : \"${DB_COMMAND}\""
+      #    echo "dbcommand q: \"${DB_COMMAND[@]}\""
+      #    VARS=( "PGPASSWORD=${DB_PASSWORD}" "psql" "--tuples-only" "-h" "${DB_HOST}" "-U" "${DB_USERNAME}" "-d" "${DB_DATABASE}" "-c" "${DB_COMMAND}" )
+      #    kubectl exec -i vh -- /bin/bash -c "${VARS[@]}"
+      #    kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c ${DB_COMMAND}"
+      #    if [ "${DB_HOST}" != "localhost" ]; then
+      #      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\""
+      #    else
+      #      PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\"
+      #    fi
+
+      R=$(PGPASSWORD="${DB_PASSWORD}" psql ${DB_HEADEROPTIONS} -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"  2>&1 ) ; Re=$?
+      #PGPASSWORD=${DB_PASSWORD} psql --tuples-only -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"
+      if [ "${Re}" != "0" ]; then
+        if [ "$R" == "psql: FATAL:  database \"wovtools\" does not exist" ]; then
+          printf "\n${R}\nERROR: did you init the database? 'wov-db ${WOVDBNAME} --wdb-init'\n"
+          exit 1
+        fi
+        printf "${R}\n"
+        showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n"
+        exit 1
+      else
+        echo $R
+      fi
+
+
+    elif [ "${DB_OP}" == "file" ]; then
+      # copy file; exectute it in database, delete file
+      #    if [ "${DB_HOST}" != "localhost" ]; then
+      #      kubectl cp ${DB_FILE} vh:.${WOVDBNAME}.sql.$$
+      #      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f .${WOVDBNAME}.sql.$$"
+      #      kubectl exec -i vh -- /bin/bash -c "rm -f .${WOVDBNAME}.sql.$$"
+      #    else
+      #      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
+      #    fi
+      PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
+      PGPASSWORDe=$?
+      if [ "$PGPASSWORDe" != "0" ]; then
+        showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n"
+        exit 1
+      fi
+
+    elif [ "${DB_OP}" == "" ]; then
+      # Log into pod 'vh', run psql
+      if [ $DOECHO -ge 1 ]; then doDatabaseConnectMessage; fi
+      if [ $DOECHO -ge 2 ]; then echo "... connect with 'PGPASSWORD=... psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}'"; fi
+      #    if [ "${DB_HOST}" != "localhost" ]; then
+      #      kubectl exec -it vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}"
+      #    else
+      #      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
+      #    fi
+      PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
+      if [ "$?" != "0" ]; then
+        showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n  : is the db inited? 'wov-db --wdb-init'\n  : is the db created? 'wov-db --wdb-create'\n"
+        exit 1
+      fi
+    else
+      echo "ERROR: unknown DB operation '${DB_OP}'."
+      exit 1
+    fi
+
+  elif [ "${DB_TYPE}" == "mongo" ]; then
+
+
+    if [ "${DB_OP}" == "schema" ]; then
+      # NOTE: mongo has no schema, so taking from first returned object
+      DB_COMMAND=$(cat <<EOF
+function printSchema(obj) {
+  for (var key in obj) {
+    print(' ', key, typeof obj[key]) ;
+  }
+};
+db.getCollectionNames().forEach(function(collname) {
+  print('COLLECTION:', collname);
+  // printSchema(db[collname].findOne()); // NOTE: not calling since if there is no object, then no schema
+})
+EOF
+)
+
+kubectl exec -it $(wov-p ${WOVDBNAME}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE} --eval \"${DB_COMMAND}\""
+#    if [ "${DB_HOST}" != "localhost" ]; then
+#      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
+#    else
+#      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
+#    fi
+
+
+  elif [ "${DB_OP}" == "command" ]; then
+    kubectl exec -it $(wov-p ${WOVDBNAME}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE} --eval \"${DB_COMMAND}\""
+    #    if [ "${DB_HOST}" != "localhost" ]; then
+    #      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
+    #    else
+    #      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
+    #    fi
+  elif [ "${DB_OP}" == "file" ]; then
+    printf "\nFile: untested\n\n";
+    if [ "${DB_HOST}" != "localhost" ]; then
+      kubectl cp ${DB_FILE} vh:.${WOVDBNAME}.sql.$$
+      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} ${WOVDBNAME}.sql.$$"
+      kubectl exec -i vh -- /bin/bash -c "rm -f .${WOVDBNAME}.sql.$$"
+    else
+      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} ${DB_FILE}
+    fi
+  elif [ "${DB_OP}" == "" ]; then
+    if [ $DOECHO -ge 1 ]; then doDatabaseConnectMessage; fi
+
+    echo "entering pod ${WOVDBNAME}-${WOV_STAGE}"
+    kubectl exec -it $(wov-p ${WOVDBNAME}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE}"
+    #    if [ "${DB_HOST}" != "localhost" ]; then
+    #      kubectl exec  -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"
+    #    else
+    #      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}
+    #    fi
+
+  fi
+
+else
+  printf "\n\nERROR: Unknown database type of '${DB_TYPE}'. Probably need to implement it in wov-db, and ensure it is supported in vh container.\n"
+  exit 1
+fi
+
+
+fi

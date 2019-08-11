@@ -253,23 +253,20 @@ function doConfigVol() {
   printf -v CVse "%s          optional: true\n" "$CVse"
 
   # microservice-level
-  local RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
+  # local RECIPES=$(cd ${WOV_BASEDIR}/wovtools/msrecipes && find * -maxdepth 0 -type f 2> /dev/null)
+  fGetMicroserviceRecipes
 
   # add all generated ConfigMap (via wov-push-k8s)
-  for f in ${RECIPES}; do
-#    printf -v CVcm "%s  - name: configmap-volume-${f}\n" "$CVcm"
-#    printf -v CVcm "%s    configMap:\n" "$CVcm"
-#    printf -v CVcm "%s      name: ${WOV_PROJECT}${f}vh\n" "$CVcm"
+  for ms in ${RECIPES}; do
     printf -v CVcm "%s      - configMap:\n" "$CVcm"
-    printf -v CVcm "%s          name: ${WOV_PROJECT}${f}vh\n" "$CVcm"
+    printf -v CVcm "%s          name: ${ms}vh\n" "$CVcm"
     printf -v CVcm "%s          optional: true\n" "$CVcm"
   done
 
   # add all generated Secrets (via wov-push-k8s)
-  for f in ${RECIPES}; do
-#    printf -v CV "%s  - name: secret-volume-${f}\n" "$CV"
+  for ms in ${RECIPES}; do
     printf -v CVse "%s      - secret:\n" "$CVse"
-    printf -v CVse "%s          name: ${WOV_PROJECT}${f}vh\n" "$CVse"
+    printf -v CVse "%s          name: ${ms}vh\n" "$CVse"
     printf -v CVse "%s          optional: true\n" "$CVse"
   done
 }

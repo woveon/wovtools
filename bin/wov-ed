@@ -12,7 +12,7 @@ set ""
 set -- "${buildargs[@]}"
 
 DOECHO=1
-FOLD=80
+FOLD=$(tput cols)
 HAS_SECRET=0
 HAS_BUILDENV=0
 SECRETDIFF=1
@@ -102,10 +102,10 @@ if [ "${EDITOR}" == "" ]; then
 fi
 
 
-if [[ $1 == conf/* ]]     || [[ $1 == k8s/* ]]  || [[ $1 == containers/* ]] || 
+if [[ $1 == conf/* ]]     || [[ $1 == k8s/* ]]  || [[ $1 == msrecipes/* ]] || 
    [[ $1 == services/* ]] || [[ $1 == cmds/* ]] || [[ $1 == secrets/* ]] ||
    [[ $1 == clusters/* ]] || [[ $1 == data/* ]] || [[ $1 == db/* ]] ||
-   [[ $1 == config.json ]] || [[ $1 == local.json ]] ; then
+   [[ $1 == config.json ]] || [[ $1 == myconfig.json ]] ; then
   
   if [ "$#" != "1" ]; then
     printf "\nERROR: bad number of arguments for 'secrets'.\n"

@@ -2,21 +2,68 @@
 
 # --------------------------------------------------------------------- 
 # This is a light-weight env variable loader. Used by wov-env and wov-env-build.
-#  NOTE: This does not contain secrets variables. 
+#  NOTE: This does not contain secrets variables or do any importing. 
 # --------------------------------------------------------------------- 
-
 
 # --------------------------------------------------------------------- 
 # Versions
 # --------------------------------------------------------------------- 
-export WOV_VERSION=1
+export WOV_VERSION=2
 export WOV_VH_VERSION=0.1
+
 
 # --------------------------------------------------------------------- 
 # Command line
 # --------------------------------------------------------------------- 
-if [ "$1" == '-g' ] || [ "$1" == '--global' ]; then shift; GLOBALCOMMAND=$1; shift; fi
-if [ "$1" == "--vh-label" ]; then echo "${WOV_VH_VERSION}"; exit 0; fi
+#if [ "$1" == '-g' ] || [ "$1" == '--global' ]; then shift;  GLOBALCONTEXT=$1; shift; fi
+#if [ "$1" == '-c' ] || [ "$1" == '--context' ]; then shift; GLOBALCONTEXT=$1; shift; fi
+#>&2 echo "CMDS $*"
+#while [[ $1 =~ ^- ]]; do
+#
+##  >&2 echo "CMD $1"
+#  if [ "$1" == "-q" ]; then
+#    shift
+#    DOECHO=0
+#
+#  elif [ "$1" == "-v" ]; then
+#    shift
+#    DOECHO=2
+#
+#  elif [ "$1" == "--vh-label" ]; then
+#    shift
+#    echo "${WOV_VH_VERSION}";
+#    exit 0
+#
+#  elif [ "$1" == "--origin" ]; then
+#    shift
+#    export WOV_ORIGIN="$1"
+##    >&2 echo "cli switch WOV_ORIGIN ${WOV_ORIGIN}"
+#    shift
+#
+#  elif [ "$1" == '--context' ]; then
+#    shift
+#    export WOV_CONTEXT="$1"
+##    >&2 echo "cli switch WOV_CONTEXT ${WOV_CONTEXT}"
+#    shift
+#
+#  else
+#    echo
+#    echo "***ERROR: wov-env-loader unknown option '$1'."
+#    exit 1
+#  fi
+#
+#  >&2 echo "exit CMD $1"
+#done
+
+#>&2 echo "CMDS left ${*}"
+
+#NOTE: this was a short circuiting piece of code
+#if [ "${WOV_CONTEXT}" != "" ]; then
+#  if [ "${GLOBALCONTEXT}" == "" ]; then
+#    echo "WOV_CONTEXT ${WOV_CONTEXT} set and no GLOBALCONTEXT overridding, exiting b/c no need to call "
+#    exit 0
+#  fi
+#fi
 
 # --------------------------------------------------------------------- 
 # Returns 1 if this is a WovTools project
@@ -24,126 +71,167 @@ if [ "$1" == "--vh-label" ]; then echo "${WOV_VH_VERSION}"; exit 0; fi
 function isProject()
 {
   let retval=1
-  if [      "$WOV_BASEDIR" == "" ]; then echo "  WARNING: not in wovtools project (no git)."; retval=0; fi
-  if [ ! -d "$WOV_BASEDIR/wovtools" ]; then echo "  WARNING: not in wovtools project (no wovtools directory)."; retval=0; fi
-  if [ ! -f "${WOV_BASEDIR}/wovtools/config.json" ]; then echo "  WARNING: not in wovtools project (no wovtools/config.json file)."; retval=0; fi
+  # >&2 echo "WOV_BASEDIR ${WOV_BASEDIR}"
+  if [      "${WOV_BASEDIR}" == "" ]; then echo "WARNING: not in wovtools project (no git)."; retval=0; fi
+  if [ ! -d "${WOV_BASEDIR}/wovtools" ]; then echo "WARNING: not in wovtools project (no wovtools directory)."; retval=0; fi
+  if [ ! -f "${WOV_BASEDIR}/${WOV_CONFIGFILE_MAIN}" ]; then echo "WARNING: not in wovtools project (no ${WOV_CONFIGFILE_MAIN} file)."; retval=0; fi
   return $retval;
 }
 
 # --------------------------------------------------------------------- 
-# git vars
+# Source files for project configuration : finds WOV_BASEDIR if not set
+# - needed by wov-init before a project is created 
+# - wov-init sets WOV_BASEDIR before calling
 # --------------------------------------------------------------------- 
-export WOV_BASEDIR="$(git rev-parse --show-toplevel 2> /dev/null)"
-R=( "$(isProject)" )
-if [ $? != 1 ]; then
-  echo "ERROR: not in a WovTools project. Try using wov-init to create a project here."
-  ( IFS=$'\n'; echo "${R[*]}" )
-  exit 1
+if [ "${WOV_BASEDIR}" == "" ]; then
+  export WOV_BASEDIR="$(git rev-parse --show-toplevel 2> /dev/null)" 
 fi
-export WOV_PVER="$(git rev-list --count $(git rev-parse --abbrev-ref HEAD))"
-export WOV_SVER="$(cd ${WOV_BASEDIR}/wovtools/secrets && git rev-list --count $(git rev-parse --abbrev-ref HEAD))"
-export WOV_USERNAME="$(git config user.name)"
-export WOV_USEREMAIL="$(git config user.email)"
-export WOV_GSTAGE="$(git rev-parse --abbrev-ref HEAD)"
-
-
-# --------------------------------------------------------------------- 
-# Source files for project configuration : build if needed
-# --------------------------------------------------------------------- 
+export WOV_CONFIGFILE_MAIN="wovtools/config.json"
+export WOV_CONFIGFILE_MINE="wovtools/myconfig.json"
 export WOV_CACHEDIR="${WOV_BASEDIR}/wovtools/cache"
-export WOV_CONFIGFILE_RAW="${WOV_BASEDIR}/wovtools/config.json"
-export WOV_CONFIGFILE_LOCALRAW="${WOV_BASEDIR}/wovtools/local.json"
+export WOV_CONFIGFILE_MAINRAW="${WOV_BASEDIR}/${WOV_CONFIGFILE_MAIN}"
+export WOV_CONFIGFILE_MINERAW="${WOV_BASEDIR}/${WOV_CONFIGFILE_MINE}"
 export WOV_CONFIGFILE_MERGED="${WOV_CACHEDIR}/.merged.json"
-#export WOV_FILE_SECRETS_RAW="${WOV_BASEDIR}/wovtools/config.json"
-#export WOV_FILE_SECRETSLOCAL_RAW="${WOV_BASEDIR}/wovtools/local.json"
-#export WOV_FILE_SECRETSMERGED="${WOV_CACHEDIR}/.merged.json"
+SED=`which gsed`
 
-
-# --------------------------------------------------------------------- 
-# global .wovtools file
-# --------------------------------------------------------------------- 
-export WOV_ME=$(cat ${HOME}/.wovtools | jq -r '.me')
-if [ "${WOV_ME}" == "null" ] ; then
-  printf "\n\nERROR: You need to set 'me' in the wovtools/config.json file.\n"
-  printf "  - This is a unique code in this project, to represent yourself. Try using your initials (assuming they are unique to your team).\n\n"
-  exit 1
-fi
-
-# --------------------------------------------------------------------- 
-# vars from merged files (config.json and local.json)
-# --------------------------------------------------------------------- 
-
-# --------------------------------------------------------------------- 
-# Merge if out of date
-if [ ${WOV_CONFIGFILE_RAW} -nt ${WOV_CONFIGFILE_MERGED} ] || [ ${WOV_CONFIGFILE_LOCALRAW} -nt ${WOV_CONFIGFILE_MERGED} ]; then
-  echo "... merged file out of date, creating: ${WOV_CONFIGFILE_MERGED}"
-  echo "" > ${WOV_CONFIGFILE_MERGED}
-  chmod 600 ${WOV_CONFIGFILE_MERGED}
-  jq -s ".[0] * .[1]" ${WOV_CONFIGFILE_RAW} ${WOV_CONFIGFILE_LOCALRAW} >> ${WOV_CONFIGFILE_MERGED} 2> /dev/null
-  if [ "$?" != "0" ]; then
-    F1=$(cat ${WOV_CONFIGFILE_RAW} | jq type 2>&1)
-    F1a=$?
-    if [ "$F1a" != "0" ]; then printf "\n\nERROR: ${WOV_CONFIGFILE_RAW} is not properly formatted.\n${F1}\n\n"; fi
-    F2=$(cat ${WOV_CONFIGFILE_LOCALRAW} | jq type 2>&1)
-    F2a=$?
-    if [ "$F2a" != "0" ]; then printf "\n\nERROR: ${WOV_CONFIGFILE_LOCALRAW} is not properly formatted.\n${F2}\n\n"; fi
-    exit 1;
-  fi
-fi
-
-
-# --------------------------------------------------------------------- 
-# Load merged file in one call
-MERGEDVARS=()
-while read f; do
-  MERGEDVARS+=( "$f" )
-done <<<$(cat ${WOV_CONFIGFILE_MERGED} | jq -r ". | ( .ver, .project.project, .project.type, .project.title, .project.description, .archive.repository, .archive.env  )" )
-WOV_PVERSION=${MERGEDVARS[0]}
-if [ "${WOV_PVERSION}" != "${WOV_VERSION}" ] && [ "${WOV_PVERSION}" != "initing" ] ; then
-  printf "\n\nERROR: Your project version '${WOV_PVERSION}', does not match to the WovTools version '${WOV_VERSION}'.\n\n"
-  exit 1
-fi
-export WOV_WPROJECT="${MERGEDVARS[1]}"
-export WOV_PROJECTTYPE="${MERGEDVARS[2]}"
-export WOV_PROJECTTITLE="${MERGEDVARS[3]}"
-export WOV_PROJECTDESCRIPTION="${MERGEDVARS[4]}"
-export WOV_ARCHIVEREPOSITORY="${MERGEDVARS[5]}"
-export WOV_ARCHIVEENV="${MERGEDVARS[6]}"
-
-
-# vars from Kubernetes
-# --------------------------------------------------------------------- 
-if [ "$GLOBALCOMMAND" != "" ]; then 
-  export WOV_CONTEXT=$GLOBALCOMMAND; 
-else
-  export WOV_CONTEXT="$(kubectl config current-context)"
-fi
-OLDIFS=$IFS
-IFS='-'
-array=( $WOV_CONTEXT )
-IFS=$OLDIFS
-export WOV_KSTAGE="${array[5]}"
-export WOV_KPROJECT="${array[4]}"
-export WOV_NS="${WOV_KPROJECT}-${WOV_KSTAGE}"
-export WOV_FLAVOR="${array[3]}"
-export WOV_REGION="${array[2]}"
-export WOV_PROVIDER="${array[1]}"
-export WOV_CLTYPE="${array[0]}"
-export WOV_CLUSTER="${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}"
-if [ "${#array[@]}" != "6" ]; then
-  # error if no namespace nad not in global context
-  if [ "${GLOBALCOMMAND}" == "" ]; then
-    echo "ERROR: bad context '${WOV_CONTEXT}' (from '-g X' switch or kubectl config current-context). Should be CLTYPE-PROVIDER-REGION-FLAVOR-PROJECT-STAGE."
+function getWovProjectVars() 
+{
+  # --------------------------------------------------------------------- 
+  # git vars
+  # --------------------------------------------------------------------- 
+  R=( "$(isProject)" )
+  if [ ${?} != 1 ]; then
+    echo "ERROR: not in a WovTools project. Try using wov-init to create a project here."
+    ( IFS=$'\n'; echo "${R[*]}" )
     exit 1
   fi
-fi
+  export WOV_PVER="$(git rev-list --count $(git rev-parse --abbrev-ref HEAD))"
+  export WOV_SVER="$(cd ${WOV_BASEDIR}/wovtools/secrets && git rev-list --count $(git rev-parse --abbrev-ref HEAD))"
+  export WOV_USERNAME="$(git config user.name)"
+  export WOV_USEREMAIL="$(git config user.email)"
+  export WOV_GSTAGE="$(git rev-parse --abbrev-ref HEAD)"
 
 
 
-# --------------------------------------------------------------------- 
-# Unifying
-# --------------------------------------------------------------------- 
-export WOV_STAGE="$WOV_KSTAGE"        # KSTAGE has priority since git repo might differ but want to build for current stage.
-export WOV_PROJECT="${WOV_WPROJECT}"  
 
-# echo "PROJECT ${WOV_PROJECT} KSTAGE ${WOV_KSTAGE}"
+  # --------------------------------------------------------------------- 
+  # global .wovtools file
+  # --------------------------------------------------------------------- 
+  export WOV_ME=$(cat ${HOME}/.wovtools | jq -r '.me')
+  if [ "${WOV_ME}" == "null" ] ; then
+    printf "\n\nERROR: You need to set 'me' in the ${WOV_CONFIGFILE_MINE} file.\n"
+    printf "  - This is a unique code in this project, to represent yourself. Try using your initials (assuming they are unique to your team).\n\n"
+    exit 1
+  fi
+
+  # --------------------------------------------------------------------- 
+  # vars from merged config files
+  # --------------------------------------------------------------------- 
+
+  # --------------------------------------------------------------------- 
+  # Merge if out of date
+  if [ ${WOV_CONFIGFILE_MAINRAW} -nt ${WOV_CONFIGFILE_MERGED} ] || [ ${WOV_CONFIGFILE_MINERAW} -nt ${WOV_CONFIGFILE_MERGED} ]; then
+    echo "... merged file out of date, creating: ${WOV_CONFIGFILE_MERGED}"
+    echo "" > ${WOV_CONFIGFILE_MERGED}
+    chmod 600 ${WOV_CONFIGFILE_MERGED}
+    jq -s ".[0] * .[1]" ${WOV_CONFIGFILE_MAINRAW} ${WOV_CONFIGFILE_MINERAW} >> ${WOV_CONFIGFILE_MERGED} 2> /dev/null
+    if [ "$?" != "0" ]; then
+      F1=$(cat ${WOV_CONFIGFILE_MAINRAW} | jq type 2>&1)
+      F1a=$?
+      if [ "$F1a" != "0" ]; then printf "\n\nERROR: ${WOV_CONFIGFILE_MAIN} is not properly formatted.\n${F1}\n\n"; fi
+      F2=$(cat ${WOV_CONFIGFILE_MINERAW} | jq type 2>&1)
+      F2a=$?
+      if [ "$F2a" != "0" ]; then printf "\n\nERROR: ${WOV_CONFIGFILE_MINE} is not properly formatted.\n${F2}\n\n"; fi
+      exit 1;
+    fi
+  fi
+
+
+  # --------------------------------------------------------------------- 
+  # Load merged file in one call
+  MERGEDVARS=()
+  while read f; do
+    MERGEDVARS+=( "$f" )
+  done <<<$(cat ${WOV_CONFIGFILE_MERGED} | jq -r ". | ( .ver, .project.project, .project.type, .project.title, .project.description, .archive.repository, .archive.env  )" )
+  WOV_PVERSION=${MERGEDVARS[0]}
+  if [ "${WOV_PVERSION}" != "${WOV_VERSION}" ] && [ "${WOV_PVERSION}" != "initing" ] ; then
+    printf "\n\nERROR: Your project version '${WOV_PVERSION}', does not match to the WovTools version '${WOV_VERSION}'.\n\n"
+    exit 1
+  fi
+  export WOV_WPROJECT="${MERGEDVARS[1]}"
+  export WOV_PROJECTTYPE="${MERGEDVARS[2]}"
+  export WOV_PROJECTTITLE="${MERGEDVARS[3]}"
+  export WOV_PROJECTDESCRIPTION="${MERGEDVARS[4]}"
+  export WOV_ARCHIVEREPOSITORY="${MERGEDVARS[5]}"
+  export WOV_ARCHIVEENV="${MERGEDVARS[6]}"
+
+
+  # vars from Kubernetes
+  # --------------------------------------------------------------------- 
+  if [ "${WOV_CONTEXT}" == "" ]; then 
+    export WOV_CONTEXT="$(kubectl config current-context)"
+  fi
+  array=( ${WOV_CONTEXT//-/ } )
+  if [ "${#array[@]}" != "6" ]; then
+    echo "ERROR: bad context '${WOV_CONTEXT}'. Should be {ORIGIN:}CLTYPE-PROVIDER-REGION-FLAVOR-PROJECT-STAGE."
+    exit 1
+  fi
+  cltypearray=( ${array[0]//:/ } )
+  export WOV_KSTAGE="${array[5]}"
+  export WOV_KPROJECT="${array[4]}"
+  export WOV_NS="${WOV_KPROJECT}-${WOV_KSTAGE}"
+  export WOV_FLAVOR="${array[3]}"
+  export WOV_REGION="${array[2]}"
+  export WOV_PROVIDER="${array[1]}"
+
+  # if not passed in, load from file
+#  if [ "${WOV_ORIGIN}" == "" ]; then
+#    export WOV_ORIGIN=$(cat ${WOV_CONFIGFILE_MINERAW} | jq -r '.curorigin')
+#  fi
+
+  # from CONTEXT, set CLTYPE to ORIGIN:[CLTYPE] and if CLTYPE does not exist, it's because ORIGIN not set
+  export WOV_CLTYPE="${cltypearray[1]}"
+  if [ "${WOV_CLTYPE}" == "" ]; then
+    export WOV_CLTYPE="${cltypearray[0]}"
+#    >&2 echo "1) load from file if not set by commandline : ${WOV_ORIGIN}"
+    if [ "${WOV_ORIGIN}" == "" ]; then
+#      echo "4) pulling from file"
+      export WOV_ORIGIN=$(cat ${WOV_CONFIGFILE_MINERAW} | jq -r '.curorigin')
+    fi
+  else
+    if [ "${WOV_ORIGIN}" != "" ]; then
+#      echo "2) Ignore origin"
+      >&2 echo "WARNING: ORIGIN '${WOV_ORIGIN}' explicitly set on commandline. Ignoring origin from CONTEXT of '${cltypearray[0]}'."
+    else
+#      >&2 echo "3) Set to part of context"
+      export WOV_ORIGIN=${cltypearray[0]}
+    fi
+  fi
+  export WOV_CONTEXT="${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}-${WOV_KPROJECT}-${WOV_KSTAGE}"
+  export WOV_CLUSTER="${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}"
+  export WOV_WORKINGCONTEXT="${WOV_ORIGIN}:${WOV_CONTEXT}"
+#  echo "WOV_ORIGIN: ${WOV_ORIGIN}"
+#  echo "WOV_CONTEXT: ${WOV_CONTEXT}"
+#  echo "WOV_WORKINGCONTEXT: ${WOV_WORKINGCONTEXT}"
+
+
+  # --------------------------------------------------------------------- 
+  # Unifying
+  # --------------------------------------------------------------------- 
+  export WOV_STAGE="$WOV_KSTAGE"        # KSTAGE has priority since git repo might differ but want to build for current stage.
+  export WOV_PROJECT="${WOV_WPROJECT}"  
+
+  # echo "PROJECT ${WOV_PROJECT} KSTAGE ${WOV_KSTAGE}"
+
+
+  # --------------------------------------------------------------------- 
+  # vars computed from above
+  # --------------------------------------------------------------------- 
+  export WOV_CLUSTERDIR="${WOV_CACHEDIR}/clusters/${WOV_ORIGIN}__${WOV_CONTEXT}"
+#  mkdir -m 700 -p ${WOV_SECRETFILE_path}
+  export WOV_SECRETFILE=${WOV_CLUSTERDIR}/config.json
+
+}
+
+# if it is set to 0, skip, and all other cases load it up
+if [ "${ISWOVPROJECT}" == "0" ]; then ISWOVPROJECT=${ISWOVPROJECT}; else getWovProjectVars; fi

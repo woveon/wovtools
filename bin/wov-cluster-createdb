@@ -92,7 +92,7 @@ aws rds create-db-instance \
 3) Init Database
 --------------------------------------------------
 
-  wov-db-connect -I
+  wov-db -I
 
 
 

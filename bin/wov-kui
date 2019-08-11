@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-FOLD=80
+FOLD=$(tput cols)
 DOECHO=1
 DIDCMD=0
 

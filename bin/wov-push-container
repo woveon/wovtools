@@ -1,19 +1,10 @@
 #!/usr/bin/env bash
 
-DOECHO=1
-DOFORCE=0
-DOPUSH=1
-FOLD=$(tput cols)
-BLOCK=0
-DESTDIR=
-SRCDIR=
 
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
 function fDisplayOptions()
 { 
-  DDIR="${DESTDIR}"; if [ "${DDIR}" == "" ]; then DDIR="DESTDIR"; fi
-  SDIR="${SRCDIR}";  if [ "${SDIR}" == "" ]; then SDIR="SRCDIR"; fi
   cat <<EOF | fold -w ${FOLD} -s
 
 
@@ -28,17 +19,22 @@ ex. `basename $0` -f ggg hhh
 
 The recipes for containers should:
 
-1) copy code from ${SDIR} to the ${DDIR} directory
-  - where SRCDIR is the root of your git and DESTDIR is the root of the container to be built (i.e. wovtools/cache/containers/CONTAINER).
+1) copy MS code from PROJDIR or MSDIR to the DESTDIR directory
+  - MS is the name of your microservice which will be a single container
+  - CONTAINER is the name of the container (lower of MS), with PROJECT/CONTAINER being its repository name.
+  - PROJDIR is the root of your git
+  - MSDIR is the root of your microservice
+  - DESTDIR is the root of the container to be built (i.e. wovtools/cache/containers/MS).
+  - DOECHO determines logging levels: 0-quiet, 1-normal, 2-verbose
 
 2) create a sub-recipes to insert into the Dockerfile. There are BUILD and RUN stages, where BUILD contains ssh keys to access private repos. RUN tells the container how to run.
-  - ${DDIR}/SECRET/prebuild.docker - called before all files copied into container (do yarn installs here)
-  - ${DDIR}/SECRET/build.docker - all code is in the container
-  - ${DDIR}/SECRET/run.docker - instructions on how to run container
+  - DESTDIR/SECRET/prebuild.docker - called before all files copied into container (do yarn installs here)
+  - DESTDIR/SECRET/build.docker - all code is in the container
+  - DESTDIR/SECRET/run.docker - instructions on how to run container
 
   -p/P : do push, no push
   -h : this help
-  -l : list containers
+#  -l : list containers
   -f : force build
   -q/-v : quiet/verbose
 
@@ -46,58 +42,29 @@ EOF
 }
 
 
-if [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-  fDisplayOptions
-  exit 0
-fi
+
+
 
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
-#wov-env-build -q --local
-#if [ "$?" != "0" ]; then
-#  exit 1
-#fi
+. wov-env-ops fDisplayOptions $*
 
-echo "wov-push-container pre : ${WOV_PVER}"
-pushcontainersargs=( "$@" )
-set ""
-. wov-env --provider
-. <(wov-env --provider --exports)
-. wov-ns-check
-. wov-push-common
-set -- "${pushcontainersargs[@]}"
+#pushcontainersargs=( "$@" )
+#set ""
+##. wov-env --provider
+##. wov-ns-check
+#set -- "${pushcontainersargs[@]}"
 
-echo "wov-push-container post : ${WOV_PVER}"
-
-# For dev and prod, check local code and secrets are checked in and pushed.
-doGitChecksOnFormalStages 1
 
 
 # Globals
-RECIPES=( )
-CONTAINERNAME=
-CONTAINER=
-SRCDIR=${WOV_BASEDIR}
+DOFORCE=0
+DOPUSH=1
+RECIPES=
+DESTDIR=
 ARCHDIR=
-
-# echo "NOTE[$0]: Skipping git checks.... will do on wov-push."
-
-
-# If NodeJS project...
-if [ -e "${WOV_BASEDIR}/node_modules" ]; then
-  echo "  ... check for yarn 'linked' packages"
-  R3=( $(cd ${WOV_BASEDIR}/node_modules ; find * -type l -maxdepth 1) )
-  if [ "${R3}" != "" ]; then
-    printf "\n***ERROR: You have linked node modules.\n"
-    printf "\n*Linked NodeJS Modules:\n"
-    for l in ${R3[@]}; do
-      printf "*  : ${l}\n"
-    done
-    printf "*  ... yarn publish those, update package.json and then unlink with 'yarn unlink X'.\n\n"
-    exit 1
-  fi
-fi
+MSRECIPEDIR="${WOV_BASEDIR}/wovtools/msrecipes"
 
 
 
@@ -106,9 +73,13 @@ fi
 # ---------------------------------------------------------------------
 # Put contents together in container directory. Also builds Dockerfile.
 #  NOTE: later will decide if we need to build a container, based upon this
+# $1 - CONTAINER
+# $2 - MS
 # ---------------------------------------------------------------------
 function doPackContainer
 {
+  local CONTAINER="$1"
+  local MS="$2"
   # build the content in wovtools/cache/containers/$f
   mkdir -p ${DESTDIR}
   mkdir -p ${DESTDIR}/SECRET/sshkeys
@@ -117,7 +88,7 @@ function doPackContainer
   echo "" > ${DESTDIR}/Dockerfile
 
   echo "  ... pack container using recipe: '$f'"
-  cd ${WOV_BASEDIR} && SRCDIR=${SRCDIR} DESTDIR=${DESTDIR} CONTAINER=${CONTAINER} DOECHO=${DOECHO} ${WOV_BASEDIR}/wovtools/containers/$f
+  cd ${WOV_BASEDIR} && PROJDIR=${WOV_BASEDIR} MSDIR="${WOV_BASEDIR}/${f}" DESTDIR=${DESTDIR} MS=$f CONTAINER=${CONTAINER} DOECHO=${DOECHO} "${MSRECIPEDIR}/$f"
   if [ "$?" != "0" ]; then
     printf "\n\nERROR: failed building container.\n\n"
     exit 1
@@ -167,13 +138,13 @@ EOF
 
   # --------------------------------------------------------------------- 
   # start building Dockerfile for the container
-  _CONTAINERBASE="WOV_${WOV_PROJECT}${CONTAINERNAME}_containerfrom"
+  _CONTAINERBASE="WOV_${MS}_containerfrom"
   CONTAINERBASE=${!_CONTAINERBASE}
   if [ "${CONTAINERBASE}" == "null" ] || [ "${CONTAINERBASE}" == "" ]; then
-    printf "\nERROR: Docker container for '${repo}' has no known base to build from in secret: 'WOV_${WOV_PROJECT}${CONTAINERNAME}_containerfrom'.\n\n"
+    printf "\nERROR: Docker container for '${repo}' has no known base to build from in secret: 'WOV_${MS}_containerfrom'.\n\n"
     printf "   Check: \n"
     printf "     - secrets are rebuilt\n"
-    printf "     - secrets contain entry for '${WOV_PROJECT}.${CONTAINERNAME}.containerfrom'.\n"
+    printf "     - secrets contain entry for '${WOV_PROJECT}.${MS}.containerfrom'.\n"
     printf "     - secret file containing that entry is included in this stage (see wovtools/confing.json secrets.${WOV_STAGE})\n\n"
     exit 1
   fi
@@ -325,33 +296,62 @@ function doDockerizeContainer
 
 
 # ---------------------------------------------------------------------
-# List the container recipes we have.
+# Make sure it is ok
+# 
+# $1 - container name (sans project name)
+# $2 - microservice name
+# 
+# For now:
+#  - ensure package.json (if exists) is ok
 # ---------------------------------------------------------------------
-function doList()
+function doCheckPackedContainer
 {
-  C=$(ls ${WOV_BASEDIR}/wovtools/containers/* 2> /dev/null )
-  RETVAL=$?
-  if [ $RETVAL -eq 0 ]; then echo $C; else echo "No containers"; fi
+  local CHECKAS=''
+  if [[ $DOECHO -ge 1 ]]; then echo "...checking packed container : ${1}"; fi
+
+  # Determine container type
+  if [ -e "${DESTDIR}/package.json" ]; then
+    if [[ $DOECHO -ge 2 ]]; then echo "  ...found package.json : checking NodeJS container."; fi
+    CHECKAS='nodejs'
+  fi
+
+  # NodeJS
+  if [ "${CHECKAS}" == "nodejs" ]; then
+    local deps=( `cat ${DESTDIR}/package.json | jq -r '.dependencies | to_entries[] |  "\(.key) \(.value)"' 2> /dev/null ` )
+    # echo "deps: ${deps[@]}"
+
+    if [ -e ${WOV_BASEDIR}/$2/node_modules ]; then
+      echo "  ... checking linked npm packages are checked in and published"
+      R3=( $(cd ${WOV_BASEDIR}/$1/node_modules ; find * -type l -maxdepth 1) )
+      if [ "${R3}" != "" ]; then
+        printf "\n***ERROR: You have linked node modules.\n"
+        printf "TODO: see issue #50 : https://github.com/woveon/wovtools/issues/50\n"
+        printf "\n*Linked NodeJS Modules:\n"
+        for l in ${R3[@]}; do
+          wov-git-check "${WOV_BASEDIR}/${2}/node_modules/${l}"
+          local Re=$?
+          printf "*  : ${Re} - ${l}\n"
+        done
+        printf "*  ... yarn publish those, update package.json and then unlink with 'yarn unlink X'.\n\n"
+        exit 1
+      fi
+    fi
+  fi
+
+  l_ "  ...done checking packed container"
 }
 
-
 # --------------------------------------------------------------------- 
-# Push the container: pack, dockerize, push
+# Push the container: pack, dockerize, push.
+#  NOTE: container's name is microservice name, lower cased
+# $1 - name of the microservice.
 # --------------------------------------------------------------------- 
 function doPushContainer()
 {
-  CONTAINERNAME=$f
-  CONTAINER=${WOV_PROJECT}${CONTAINERNAME}
-  SRCDIR=${WOV_BASEDIR}
-  DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${CONTAINERNAME}
-  ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${CONTAINERNAME}
-  if [[ $DOECHO -ge 2 ]]; then 
-    echo "CONTAINERNAME=${CONTAINERNAME}"
-    echo "CONTAINER=${CONTAINER}"
-    echo "SRCDIR=${SRCDIR}"
-    echo "DESTDIR=${DESTDIR} # more like a 'content' dir as this is all copied in here"
-    echo "ARCHDIR=${ARCHDIR} # location of archive of DESTDIR"
-  fi
+  local MS=$1
+  local CONTAINER=$(echo ${MS} | tr '[:upper:]' '[:lower:]')
+  DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${MS}
+  ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${MS}
 
   mkdir -p ${ARCHDIR}
   if [ "$?" != "0" ]; then
@@ -359,16 +359,19 @@ function doPushContainer()
     exit 1
   fi
 
-  if [[ ! -e "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
-    echo "ERROR: recipe for container ${f} does not exist (${WOV_BASEDIR}/wovtools/containers/$f).";
+  if [[ ! -e "${MSRECIPEDIR}/$f" ]]; then 
+    echo "ERROR: recipe for microservice container '${f}' does not exist in '${MSRECIPEDIR}'.";
     exit 1
-  elif [[ ! -x "${WOV_BASEDIR}/wovtools/containers/$f" ]]; then 
-    echo "ERROR: recipe for container ${f} not executable (${WOV_BASEDIR}/wovtools/containers/$f).";
+  elif [[ ! -x "${MSRECIPEDIR}/$f" ]]; then 
+    echo "ERROR: recipe for container ${f} not executable (${MSRECIPEDIR}/$f).";
     exit 1
   else
 
     # Copy in and generate all files in DESTDIR
-    doPackContainer ${f}
+    doPackContainer "${CONTAINER}" "${MS}"
+
+    # Ensure all is well
+    doCheckPackedContainer "${CONTAINER}" "${MS}"
 
     # Just packed container, do we need to build it? Do diffs against archive, then compare remote container
     NEEDSBUILD=0
@@ -380,7 +383,7 @@ function doPushContainer()
       fi
     else
       if [ $DOECHO -ge 2 ]; then echo "  ... check push container status"; fi
-      wov-push-container-check -q ${f}
+      wov-push-container-buildcheck -q ${CONTAINER} ${MS}
       NEEDSBUILD=$?
       if [ "$NEEDSBUILD" != "0" ]; then 
         if [ $DOECHO -ge 2 ]; then echo "  ... pushed containers differ so will build."; fi
@@ -407,8 +410,12 @@ function doPushContainer()
       if [ "${NEEDSBUILD}" == "1" ] || [ "${NEEDSBUILD}" == "5" ] || [ "${DOFORCE}" == "1" ]; then
         if [ $DOECHO -ge 1 ]; then echo "  ... container push needed"; fi
         if [ $DOECHO -ge 2 ]; then echo "    ... tag repo"; fi
-        echo "CMD: docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-        docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}
+        #echo "CMD: docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+        docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} ; Re=$?
+        if [ $Re -ne 0 ]; then
+          l_error "Failed to tag container: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+          exit 1
+        fi
 
         if [ $DOECHO -ge 2 ]; then echo "    ... push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"; fi
 
@@ -416,10 +423,14 @@ function doPushContainer()
         # aws ecr describe-repositories --repository-names ${WOV_PROJECT}/${CONTAINER}
 
         # If just built, dump log, since it will have to push a lot of data
-        R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty )
-        RR=$?
-        if [[ $R == 'name unknown'* ]]; then
-          printf "\n\n    ...${R}.\n"
+        R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty ) ; Re=$?
+        #echo "R: ${Re} '${R}'"
+        if [ $Re -ne 0 ]; then 
+          l_error "Failed to push container: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+          exit 1
+        fi
+        if [[ $R == *"name unknown"* ]]; then
+          l_error "Create the repository in your Docker Repository (ECR): https://us-east-1.console.aws.amazon.com/ecr/repositories."
           exit 1
         fi
         if [[ $R == *'Your Authorization Token has expired.'* ]]; then
@@ -432,8 +443,8 @@ function doPushContainer()
           else
             echo "      ... SUCCESS auto-login to AWS attempt"
             echo "    ... re-push container to: ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-            R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1  | tee /dev/tty)
-            if [ "$?" != "0" ]; then
+            R=$(docker push ${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1  | tee /dev/tty) ; Re=$?
+            if [ $Re -ne 0 ]; then
               printf "\n\n  ...still errors: ${R}.\n"
               exit 1
             fi
@@ -466,34 +477,26 @@ function doPushContainer()
 # ---------------------------------------------------------------------
 while [[ $1 =~ ^- ]]; do
 
-  if [ "$1" == "-q" ]; then
-    shift
-    DOECHO=0
-
-  elif [ "$1" == "-v" ]; then
-    shift
-    DOECHO=2
-
-  elif [ "$1" == "-p" ]; then
+  if [ "$1" == "-p" ]; then
     shift
     DOPUSH=1
+    WOV_DODEFAULTCOMMAND=1
 
   elif [ "$1" == "-P" ]; then
     shift
     DOPUSH=0
+    WOV_DODEFAULTCOMMAND=1
 
   elif [ "$1" == "-f" ]; then
     shift
     DOFORCE=1
+    WOV_DODEFAULTCOMMAND=1
 
-  elif [ "$1" == "-l" ]; then
+  elif [ "$1" == "--clean" ]; then
     shift
-    doList
-    BLOCK=1
-
-  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-    fDisplayOptions
-    exit 0
+    l_ "cleaning container cache at : '${WOV_CACHEDIR}/containers'"
+    rm -Rf "${WOV_CACHEDIR}/containers"
+    WOV_DODEFAULTCOMMAND=0
 
   else
     echo
@@ -506,30 +509,45 @@ done
 
 
 # Find the recipes and push them
-if [ "${BLOCK}" == "0" ]; then
+if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
 
-  if [ ! -e "${WOV_BASEDIR}/wovtools/containers" ]; then
-    printf "\nERROR: wovtools/containers directory does not exist. Should have container recipes there.\n\n"
+  . <(wov-env --provider --exports)
+  . wov-env-common
+  . wov-push-common
+
+  if [ ! -e "${MSRECIPEDIR}" ]; then
+    printf "\nERROR: 'wovtools/msrecipes' does not exist. Should have microservice container recipes there.\n\n"
     exit 1
   fi
 
+  # For dev and prod, check local code and secrets are checked in and pushed.
+  # echo "NOTE[$0]: Skipping git checks.... will do on wov-push."
+  doGitChecksOnFormalStages true
+
+  # Get Microservice Recipes from Commandline, or assume all otherwise
   RECIPES=( "$@" )
-  if [ "${#RECIPES[@]}" == "0" ]; then
-    # RECIPES=$(cd ${WOV_BASEDIR}/wovtools/containers && find * -maxdepth 0 -type f 2> /dev/null)
-    fGetContainerRecipes
-  fi
+  if [ "${#RECIPES[@]}" == "0" ]; then fGetMicroserviceRecipes; fi
 #  echo "R: ${RECIPES}"
 
-  # Build containers if needed
+  # Build MS if needed
   for f in ${RECIPES}; do
     if [ $DOECHO -ge 1 ]; then printf "\n%-${FOLD}s\n" "-" | tr ' ' '-' ; echo "... push container '${f}'."; fi
-    doPushContainer $@
+    if [ ! -e ${MSRECIPEDIR}/${f} ]; then
+      l_error "No recipe for container '${f}' in ${MSRECIPEDIR}."
+      exit 1
+    fi
+    if [ ! -e ${WOV_BASEDIR}/${f} ]; then
+      l_error "No '${f}' microservice directory in project."
+      exit 1
+    fi
+    doPushContainer $f
   done
 
   if [[ $DOECHO -ge 1 ]]; then
     printf "\nCompleted Building:\n"
-    for f in ${RECIPES}; do
-      echo "  ... built: ${WOV_PROJECT}/${WOV_PROJECT}${f}"
+    for r in ${RECIPES}; do
+      c=$(echo ${r} | tr '[:upper:]' '[:lower:]')
+      echo "  ... built microservice: '${r}'  container: '${WOV_PROJECT}/${c}'"
     done
     printf "    run locally: 'docker run CONTAINER'\n"
     printf "     open shell: 'docker run --rm -it CONTAINER bash'\n"

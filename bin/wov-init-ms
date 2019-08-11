@@ -1,0 +1,315 @@
+#!/usr/bin/env bash
+
+
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options] [microservice]
+
+Creates a microservice boilerplate inside a project.
+
+EOF
+}
+
+. wov-env-ops fDisplayOptions $*
+
+
+
+
+# ---------------------------------------------------------------------
+# $1 - name of ms
+# ---------------------------------------------------------------------
+function doBuildMicroservice()
+{
+  local msname="$1"
+  local f=
+  local jqrule=
+
+
+  l_ "  ...make MS directory and src"
+  mkdir -p "${WOV_BASEDIR}/${msname}/src"
+
+  l_ "  ...make a nodejs file"
+  f="${WOV_BASEDIR}/${msname}/src/index.js"
+  if [ ! -e "${f}" ]; then
+    cat <<EOFF > "${f}"
+console.log('${msname}');
+EOFF
+  fi
+
+  l_ "  ...make MSNAMEconfig.js file"
+  f="${WOV_BASEDIR}/${msname}/src/${msname}config.js"
+  if [ ! -e "${f}" ]; then
+    cat <<EOFF > "${f}"
+module.exports = class TConfig extends require('woveon-service').Config {
+
+  /**
+   * @param {Logger} _logger - for log spew
+   */
+  constructor(_logger) {
+    super(_logger, [
+      'WOV_${WOV_PROJECT}db_username',     // ex. 'postgres'
+      'WOV_${WOV_PROJECT}db_endpoint',     // 'localhost' for ssh tunneling, AWS db for pod
+      'WOV_${WOV_PROJECT}db_database',     // database name
+      'WOV_${WOV_PROJECT}db_port',         // ssh tunneling port, or postgres default port 5432
+      'WOV_${WOV_PROJECT}db_type',         // postgres, mongo, etc.
+
+      // microservice calls to it
+      'WOV_${msname}_ver',
+      'WOV_${msname}_port',
+
+      'WOV_www_api_urlscheme',
+      'WOV_www_api_url',
+    ],
+    ['WOV_${WOV_PROJECT}db_password']);  // random: try 'openssl rand -hex 40'
+  };
+};
+EOFF
+  fi
+
+  l_ "  ...Make microservice recipe"
+  f="${WOV_BASEDIR}/wovtools/msrecipes/${msname}"
+  if [ ! -e "${f}" ]; then
+    cat <<EOFFF > "${f}"
+#!/usr/bin/env bash
+
+if [ \$DOECHO -ge 2 ]; then echo "  ... add src"; fi
+# ---------------------------------------------------------------------
+rsync -ai \\
+    --exclude etc --exclude doc --exclude Makefile --exclude README.md \\
+    --exclude ".*.swp" --exclude ".*.mk" --exclude ".DS_Store" \\
+    --delete --delete-excluded \\
+    \${MSDIR}/src/* \${DESTDIR}/src/
+
+#if [ \$DOECHO -ge 2 ]; then echo "  ... add node_modules"; fi
+# ---------------------------------------------------------------------
+#rsync -ai \\
+#    --exclude etc --exclude doc --exclude Makefile --exclude README.md \\
+#    --exclude ".*.swp" --exclude ".*.mk" --exclude ".DS_Store" \\
+#    --delete --delete-excluded \\
+#    \${MSDIR}/node_modules/*  \${DESTDIR}/node_modules
+
+if [ \$DOECHO -ge 2 ]; then echo "  ... add individual files"; fi
+# ---------------------------------------------------------------------
+echo "  ... add index.js, package.json, package-lock.json"
+cp \${MSDIR}/index.js \${DESTDIR}/.
+cp \${MSDIR}/package.json \${DESTDIR}/.
+
+# If you need to install private repos, you can add your ssh key to the container here
+# if [ \$DOECHO -ge 2 ]; then echo "    ... add ssh key (NOTE: IT IS REMOVED FROM THE CONTAINER FOR YOU!!!)"; fi
+# ---------------------------------------------------------------------
+# cp \${HOME}/.ssh/id_rsa \${DESTDIR}/id_rsa
+
+# NOTE: WORKDIR is /usr/src/app for all stages
+
+if [ \$DOECHO -ge 2 ]; then echo "  ... Docker commands for build"; fi
+# ---------------------------------------------------------------------
+cat <<EOF > \${DESTDIR}/SECRET/build.docker
+RUN npm install
+EOF
+
+if [ \$DOECHO -ge 2 ]; then echo "  ... Docker commands for run"; fi
+# ---------------------------------------------------------------------
+cat <<EOF > \${DESTDIR}/SECRET/run.docker
+
+# Define default port
+ENV APP_PORT_INT 80
+
+# Run command
+CMD  [ "npm", "run", "start" ]
+EOF
+EOFFF
+    chmod 700 "${f}"
+  fi
+
+  l_ '  ...make a nodejs package and set license to UNLICENSED'
+  f="${WOV_BASEDIR}/${msname}/package.json"
+  if [ ! -e "${f}" ]; then
+    cd ${WOV_BASEDIR}/${msname} ; yarn init --yes
+    jqrule=".license=\"UNLICENSED\" | .version=\"0.0.1\" | .main=\"src/index.js\" | .scripts.start=\"node src\" "
+    jq -r "${jqrule}" "${WOV_BASEDIR}/${msname}/package.json" > "${WOV_BASEDIR}/${msname}/package.json_" ; \
+      mv "${WOV_BASEDIR}/${msname}/package.json_" "${WOV_BASEDIR}/${msname}/package.json"
+  fi
+
+  # l_ '  ...check into git'
+#  git add "${WOV_BASEDIR}/${msname}/src/index.js" "${WOV_BASEDIR}/${msname}/package.json" \
+#          "${WOV_BASEDIR}/${msname}/src/${msname}config.js" "${WOV_BASEDIR}/wovtools/msrecipes/${msname}"
+
+  l_ '  ...make secret for MS'
+  f="${WOV_BASEDIR}/wovtools/secrets/${msname}.json"
+  if [ ! -e "${f}" ]; then
+    cat <<EOF > "${f}"
+{
+  "${msname}" : {
+    "containerfrom" : "node:12.6-alpine",
+    "ver"           : "v1",
+    "port"          : 80,
+    "healthpath"    : "/${msname}/v1/pub/health",
+    "healthprobetime" : 90,
+    "CLUSTERlocal"  : {"port" : 75643}
+  }
+}
+EOF
+  fi
+
+  l_ "  ...add MS json file to myconfig if not in it"
+  jq -r ".secrets.${WOV_ME}[]" ${WOV_CONFIGFILE_MINERAW} | grep "${msname}.json" > /dev/null
+  if [ $? -eq 1 ]; then
+    jqrule=".secrets.${WOV_ME}[ .secrets.${WOV_ME} | length ] |= . + \"${msname}.json\" "
+    jq -r "${jqrule}" "${WOV_CONFIGFILE_MINERAW}" > "${WOV_CONFIGFILE_MINERAW}_" ; \
+      mv "${WOV_CONFIGFILE_MINERAW}_" "${WOV_CONFIGFILE_MINERAW}"
+  fi
+  
+
+  l_ "  ...k8s directory"
+  mkdir -p "${WOV_BASEDIR}/wovtools/k8s"
+
+  f="${WOV_BASEDIR}/wovtools/k8s/${WOV_PROJECT}-ingress.yaml.wov"
+  if [ -e "${f}" ]; then
+    l_ "  ...skipping ingress base k8s"
+  else
+    l_ "  ...adding ingress base k8s"
+    cat <<EOF > ${f}
+# Kubernetes Ingress
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{PROJECT}}-ingress
+  namespace: {{PROJECT}}-{{STAGE}}
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.org/websocket-services: "apisocket"
+spec:
+  rules:
+  - host: api-{{STAGE}}.{{cluster.dns.domain}}
+    http:
+      paths:
+EOF
+  fi
+
+  R=$(cat ${f} | grep "path: /${msname}/" | wc -l | tr -d "[:space:]")
+  if [ "$R" != "0" ]; then
+    l_ "  ...checking for ingress paths '/${msname}/', found '${R}' so skipping"
+  else
+    l_ "  ...adding ingress paths '/${msname}/'"
+    cat <<EOF >> ${f}
+
+      # ---------------------------------------------------------------------
+      # ${msname}
+      # ---------------------------------------------------------------------
+\{{#if_eq {{STAGE}} "prod"}}
+\{{else}}
+      # open up private only if not in production
+      # ---------------------------------------------------------------------
+      - path: /${msname}/{{${msname}.ver}}/priv
+        backend:
+          serviceName: ${msname}
+          servicePort: 80
+
+      # open up doc only if not in production
+      # ---------------------------------------------------------------------
+      - path: /${msname}/{{${msname}.ver}}/doc
+        backend:
+          serviceName: ${msname}
+          servicePort: 80
+\{{/if_eq}}
+      # pub
+      # ---------------------------------------------------------------------
+      - path: /${msname}/{{${msname}.ver}}/pub
+        backend:
+          serviceName: ${msname}
+          servicePort: 80
+EOF
+  fi
+
+ 
+  f="${WOV_BASEDIR}/wovtools/k8s/${msname}-service.yaml.wov"
+  if [ -e "${f}" ]; then
+    l_ "  ...skipping service k8s"
+  else
+    l_ "  ...adding service k8s"
+    cat <<EOF >> ${f}
+# Kubernetes Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{MS}}
+  namespace: {{PROJECT}}-{{STAGE}}
+  labels:
+    app: {{MS}}
+spec:
+  selector:
+    app: {{MS}}
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: \{{{{MS}}.port}}
+EOF
+  fi
+
+
+  f="${WOV_BASEDIR}/wovtools/k8s/${msname}.yaml.wov"
+  if [ -e "${f}" ]; then
+    l_ "  ...skipping deployment k8s"
+  else
+    l_ "  ...adding deployment k8s"
+    cat <<EOF >> ${f}
+# Kubernetes Deployment
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{MS}}
+  namespace: {{PROJECT}}-{{STAGE}}
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{MS}}
+    spec:
+      containers:
+        - image: {{ARCHIVEREPOSITORY}}/{{PROJECT}}/{{MS}}:{{STAGE}}_{{PVER}}
+          name: {{MS}}
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              name: http
+              protocol: TCP
+          envFrom:
+          - secretRef:
+              name: {{MS}}
+          - configMapRef:
+              name: {{MS}}
+          livenessProbe:
+            httpGet:
+              path: \{{{{MS}}.healthpath}}
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: \{{{{MS}}.healthprobetime}}
+EOF
+  fi
+}
+
+
+# ---------------------------------------------------------------------
+# Command line processing
+while [[ $1 =~ ^- ]]; do
+  if [ "$1" == '-e' ]; then
+    ECHOMODE=1
+  else
+    echo
+    echo "***ERROR (`basename $0`): unknown option '$1'."
+    echo
+    exit 1
+  fi
+  shift
+done
+
+if [ "${1}" == "" ]; then
+  echo "ERROR: need a name for this new microservice."
+  exit 1
+fi
+
+doBuildMicroservice $1
+

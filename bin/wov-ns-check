@@ -13,7 +13,7 @@
 if [ "${WOV_VERSION}" == "" ]; then
   args=( "$@" )
   set ""
-  . wov-env
+  . wov-env-loader
   set -- "${args[@]}"
 fi
 

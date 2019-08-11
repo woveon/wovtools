@@ -5,7 +5,11 @@ if [ "${WOV_CLUSTER}" == "" ]; then
   exit 1
 fi
 
-export WOV_cluster_dns_domain=`wov-env --cluster ${WOV_CLUSTER} --var WOV_cluster_dns_domain`
+#export WOV_cluster_dns_domain=`wov-env --cluster ${WOV_CLUSTER} --var WOV_cluster_dns_domain`
+if [ "${WOV_cluster_dns_domain}" == "" ]; then
+  echo "ERROR: provider-wov-env-aws requires variable 'WOV_cluster_dns_domain'."
+  exit 1
+fi
 
 
 # ---------------------------------------------------------------------
@@ -13,13 +17,15 @@ export WOV_cluster_dns_domain=`wov-env --cluster ${WOV_CLUSTER} --var WOV_cluste
 # ---------------------------------------------------------------------
 function fConvertRegionCodeAWS()
 {
+  local retcode=1
   local retval=
   case $1 in
-    va)  retval='us-east-1' ;;
-    iad) retval='us-east-1' ;;
-    *)   printf "\nWARNING: unknown AWS region code of '$1'.\n"
+    va)  retval='us-east-1'; retcode=0 ;;
+    iad) retval='us-east-1'; retcode=0 ;;
+    *)   >&2 printf "WARNING: unknown AWS region code of '$1'.\n"
   esac
   echo "$retval"
+  return $retcode
 }
 
 
@@ -37,5 +43,6 @@ AWS_VPC="$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${WOV_CLUSTER}.
 if [ "$?" != "0" ]; then printf "\n\nERROR: failed to connect to AWS to understand VPC.\n\n"; exit 1; fi
 
 export AWS_REGION
+
 export AWS_ZONES
 export AWS_VPC

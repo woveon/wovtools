@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
 
+# ---------------------------------------------------------------------
 # Echo Undefined if ""
+# ---------------------------------------------------------------------
 function EUndef()
 {
   if [ "$1" != "" ]; then
@@ -13,11 +15,75 @@ function EUndef()
 
 
 # ---------------------------------------------------------------------
+# Sets global RECIPES variable
+# ---------------------------------------------------------------------
+function fGetMicroserviceRecipes()
+{
+  RECIPES=( $(cd ${WOV_BASEDIR}/wovtools/msrecipes && find * -maxdepth 0 -type f 2> /dev/null) )
+
+#  echo "${RECIPES[@]}"
+}
+
+
+# ---------------------------------------------------------------------
+# from: https://stackoverflow.com/a/8574392/2664702
+# Returns: 0 success/found, 1 fail/not found
+# ---------------------------------------------------------------------
+containsElement () {
+  local e match="$1"
+  shift
+  for e; do [[ "$e" == "$match" ]] && return 0; done
+  return 1
+}
+
+# ---------------------------------------------------------------------
+# Used to generate the path where CLuster configuration would sit in
+# the archive.
+#  ex. local path="`getRelativeArchivePath MyCluster`"
+# ---------------------------------------------------------------------
+function getRelativeArchivePath()
+{
+  echo "${1}/${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}"
+}
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function exitIfProd()
+{
+  local R="$(git rev-parse --abbrev-ref HEAD)" ; Re=$?
+  if [ "$Re" != "0" ]; then
+    >&2 printf "ERROR: exiting because could not determine stage. git failed.\n"
+    exit 1
+  fi
+  if [ "${R}" == "prod" ] || [ "${R}" == "dev" ]; then
+    >&2 printf "ERROR: exiting because in stage '${R}'.\n"
+    exit 1
+  fi
+}
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function exitIfProdOrDev()
+{
+  local R="$(git rev-parse --abbrev-ref HEAD)" ; Re=$?
+  if [ "$Re" != "0" ]; then
+    >&2 printf "ERROR: exiting because could not determine stage. git failed.\n"
+    exit 1
+  fi
+  if [ "${R}" == "prod" ]; then
+    >&2 printf "ERROR: exiting because in stage 'prod'.\n"
+    exit 1
+  fi
+}
+
+
+# ---------------------------------------------------------------------
 # Store the local context cluster (from merged raw file) in $LOCALCONTEXT
 # Only checks wovtools/local.json
 # ---------------------------------------------------------------------
 function retreiveLocalContextCluster()
-{ if [ "${LOCALCONTEXT}" == "" ]; then LOCALCONTEXT=`jq -r ".localcontext" ${WOV_BASEDIR}/wovtools/local.json`; fi }
+{ if [ "${LOCALCONTEXT}" == "" ]; then LOCALCONTEXT=`jq -r ".curorigin" "${WOV_CONFIGFILE_MINERAW}"`; fi }
 
 
 
@@ -72,7 +138,7 @@ function doResName()
       echo "${2}-peerconn"
 
     elif [ "$1" == "DNS" ]; then
-      DBNAME=$(doResName DB ${2})
+      DBNAME=$(doResName DB ${2} ${3})
       echo $(aws rds describe-db-instances --db-instance-identifier ${DBNAME} --query 'DBInstances[0].Endpoint.Address' --output text)
     else
       printf "\n\nERROR: unknown resource of ${1} to doResName.\n"

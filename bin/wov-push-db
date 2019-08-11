@@ -1,32 +1,5 @@
 #!/usr/bin/env bash
 
-
-# --------------------------------------------------------------------- 
-# Import Env 
-# --------------------------------------------------------------------- 
-wov-env-build -q --local
-if [ "$?" != "0" ]; then
-  exit 1
-fi
-
-pushenvargs=( "$@" )
-set ""
-. wov-env --provider
-. wov-db-common
-. wov-ns-check
-set -- "${pushenvargs[@]}"
-
-
-DOECHO=1
-DOFORCE=0
-FOLD=$(tput cols)
-DOACTION="commit"
-SKIPGITCHECKS=0
-
-# For dev and prod, check local code and secrets are checked in and pushed.
-doGitChecksOnFormalStages 1
-
-
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 function fDisplayOptions()
@@ -59,13 +32,23 @@ EOF
 }
 
 
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+. wov-env-ops fDisplayOptions $*
+
+DOFORCE=0
+DOACTION="commit"
+SKIPGITCHECKS=0
+
+
 function fFailedDBConnection()
 {
   local RET=$1
   if [ "$2" != "" ]; then
     printf "  > Is db inited?\n"
-    printf "    - init>        'wov-db-connect ${2} -db-init'\n"   
-    printf "    - get version> 'wov-db-connect $2 --db-ver'\n"
+    printf "    - init>        'wov-db ${2} --wdb-init'\n"   
+    printf "    - get version> 'wov-db $2 --wdb-ver'\n"
     printf "\n"
     printf "\n"
   fi
@@ -81,7 +64,7 @@ function fFailedDBConnection()
 # --------------------------------------------------------------------- 
 #function doGetDBSchema()
 #{
-#  local SCHEMA=$(wov-db-connect $1 --schema 2> /dev/null)
+#  local SCHEMA=$(wov-db $1 --schema 2> /dev/null)
 #  if [ "$?" != "0" ]; then printf "\n\nERROR: failed to connect to database server $i.\n"; exit 1; fi
 #  echo ${SCHEMA}
 #}
@@ -92,14 +75,14 @@ function fFailedDBConnection()
 function doHashDBSchema()
 {
   local HASH=0
-  HASH="$(wov-db-connect $1 --schema 2> /dev/null)"; local A=$?
+  HASH="$(wov-db $1 --schema 2> /dev/null)"; local A=$?
   #echo "here1 - $A '$HASH' "
   if [ $A -ne 0 ]; then 
     echo $HASH
     exit 1
   fi
   #echo "here 2 $A $SCK"
-  #local CHKSUM=$(wov-db-connect $1 --schema 2> /dev/null | shasum -a 256 | cut -d' ' -f1)
+  #local CHKSUM=$(wov-db $1 --schema 2> /dev/null | shasum -a 256 | cut -d' ' -f1)
   local CHKSUM=$(echo "${HASH}" | shasum -a 256 | cut -d' ' -f1)
   local A=$?
   #echo "here2 - $A $HASH $CHKSUM"
@@ -120,13 +103,13 @@ function doHashDBSchema()
 function doGetDBPVER()
 {
   local retval=1
-  R=$(wov-db-connect $1 --db-ver 2>&1) ; Re=$?
+  R=$(wov-db $1 --wdb-ver 2>&1) ; Re=$?
   if [ $Re -eq 0 ]; then
     local DB_PVER=`echo ${R} | cut -d'|' -f5`
     retval=0;
   fi
 
-#  DBRAW=$(wov-db-connect $i -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2>&1) ; DBRAWe=$?
+#  DBRAW=$(wov-db $i -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2>&1) ; DBRAWe=$?
 #  if [ "$DBRAWe" != "0" ]; then 
 #    printf "${DBRAW}\n"
 #    printf "\nERROR: failed to connect to database wovtools, table logs, on database server $1.\n\n"; 
@@ -146,7 +129,7 @@ function doGetDBPVER()
 function doGetDBLastLogEntry()
 {
   local retval=1
-  local DB_PVER=$(wov-db-connect $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null)
+  local DB_PVER=$(wov-db $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null)
   if [ "$?" != "0" ]; then 
     printf "\n\nERROR: failed to find wovtools logs on database server $1.\n\n"; 
     fFailedDBConnection 1 $1
@@ -198,7 +181,7 @@ function doPushCheck()
     fi
     DB_PVER=$(doGetDBPVER $1)
     if [ "$?" != "0" ] || [ "$DB_PVER" == "" ]; then
-      printf "${DB_PVER}\nERROR: could not get database version.\n"
+      l_error "${DB_PVER}\nERROR: could not get database version.\n"
       fFailedDBConnection 2 $1
     elif [ ! -e ${WOV_BASEDIR}/wovtools/db/archive/${1}.json ]; then 
       printf "\nERROR: no archive/${1}.json.\n"; 
@@ -278,8 +261,8 @@ function doPushCheck()
       elif [ "${chk_1}" == "T" ]; then # 4 is false then
         printf "FAILED: if you have db schema changes, you need to have deltas in archive to account.\n"
         printf "\n  run: 'wov-push-db -v --any-push-blockage' for more info.\n"
-        printf "\nTo get current schema of database X: 'wov-db-connect DBNAME --schema' (ex. apidb)\n"
-        printf "To diff schema to old version X : 'wov-db-connect DBNAME --schema-diff X'\n"
+        printf "\nTo get current schema of database X: 'wov-db DBNAME --schema' (ex. apidb)\n"
+        printf "To diff schema to old version X : 'wov-db DBNAME --schema-diff X'\n"
   #    elif [ "${chk_4}" == "T" ]; then # 1 is false then
   #      printf "FAILED: if you have deltas in archive, you need to have db schema changes to account.\n"
       fi
@@ -423,7 +406,7 @@ EOF
     # - 2.1 save schema ---------------------------------------------------
     # --------------------------------------------------------------------- 
     mkdir -p ${WOV_BASEDIR}/wovtools/db/archive/$1/schemas
-    wov-db-connect ${1} --schema > ${WOV_BASEDIR}/wovtools/db/archive/$1/schemas/${WOV_PVER}.schema
+    wov-db ${1} --schema > ${WOV_BASEDIR}/wovtools/db/archive/$1/schemas/${WOV_PVER}.schema
     r=$?
     if [ "$r" != "0" ]; then
       printf "\n\nERROR: failed to write schemas to regsitry.\n\n"
@@ -459,7 +442,7 @@ EOF
     # - 4. update archive database log pver number, snapshot, checksum ----
     # --------------------------------------------------------------------- 
     echo "  ... update archive database logs"
-    R=$(wov-db-connect $1 -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( '$1', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER}, '${DB_snapshot}' );")
+    R=$(wov-db $1 -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( '$1', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER}, '${DB_snapshot}' );")
     if [ "$?" != "0" ]; then
       printf "${R}"
       printf "\n\nERROR: failed updating archive database pver number with checksum.\n"
@@ -514,15 +497,7 @@ EOF
 # ---------------------------------------------------------------------
 while [[ $1 =~ ^- ]]; do
 
-  if [ "$1" == "-q" ]; then
-    shift
-    DOECHO=0
-
-  elif [ "$1" == "-v" ]; then
-    shift
-    DOECHO=2
-
-  elif [ "$1" == "--log" ]; then
+  if [ "$1" == "--log" ]; then
     DOACTION="log"
     shift
 
@@ -557,80 +532,95 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
+if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
 
-#echo "... starting"
-retval=1
-if [ "$DOACTION" == "check" ]; then
+  # Load in env
+  . <(wov-env --provider --exports)
+  . wov-env-common
+  . wov-push-common
+  . wov-db-common
 
-  DATABASES=( $(doFindDatabases $*) )
-  # echo "DATABASES: ${DATABASES[@]}"
-  if [ "${#DATABASES[@]}" == "0" ]; then
-    if [ $DOECHO -ge 1 ]; then printf "... no databases to check.\n"; fi
-  fi 
+  # For dev and prod, check local code and secrets are checked in and pushed.
+  doGitChecksOnFormalStages 1
+  exitval=$?
 
-  # check each db
-  retval=0
-  for i in "${DATABASES[@]}"; do
-    doPushCheck $i
-    r=${?}
-    if [ "$r" != "0" ]; then retval=1; fi
-  done
-  # printf "\nAny blockage to pushing?:$R1\n\n"
+  if [ $exitval == 0 ]; then
 
-elif [ "$DOACTION" == "log" ]; then
-  DATABASES=( $(doFindDatabases $*) )
+    #echo "... starting"
+    exitval=1
+    if [ "$DOACTION" == "check" ]; then
 
-  # check each db
-  retval=0
-  for i in "${DATABASES[@]}"; do
-    printf "  ... check db '$i'\n"
-    CHKSUM=$(doHashDBSchema $i)
-    r=${?}
-    # printf "    ... CHKSUM ${CHKSUM}\n"
-    if [ "$r" != "0" ]; then retval=1; fi
-    LLE=$(doGetDBLastLogEntry $i)
-    r=${?}
-    # printf "    ... LLE ${LLE}\n"
-    if [ "$r" != "0" ]; then retval=1; fi
-    DBVER=$(doGetDBPVER $i)
-    r=${?}
-    # printf "    ... DBVER ${DBVER}\n"
-    if [ "$r" != "0" ]; then retval=1; fi
-    echo "$i> ver:${DBVER}  chksum:${CHKSUM} lle:${LLE}"
-  done
+      DATABASES=( $(doFindDatabases $*) )
+      # echo "DATABASES: ${DATABASES[@]}"
+      if [ "${#DATABASES[@]}" == "0" ]; then
+        if [ $DOECHO -ge 1 ]; then printf "... no databases to check.\n"; fi
+      fi 
 
-elif [ "$DOACTION" == "checksum" ]; then
+      # check each db
+      exitval=0
+      for i in "${DATABASES[@]}"; do
+        doPushCheck $i
+        r=${?}
+        if [ "$r" != "0" ]; then exitval=1; fi
+      done
+      # printf "\nAny blockage to pushing?:$R1\n\n"
 
-  DATABASES=( $(doFindDatabases $*) )
-  # echo "DATABASES: ${DATABASES[@]}"
+    elif [ "$DOACTION" == "log" ]; then
+      DATABASES=( $(doFindDatabases $*) )
 
-  # check each db
-  retval=0
-  for i in "${DATABASES[@]}"; do
-    CHKSUM=$(doHashDBSchema $i)
-    r=${?}
-    if [ "$r" != "0" ]; then retval=1; fi
-    echo "${CHKSUM} $i"
-  done
+      # check each db
+      exitval=0
+      for i in "${DATABASES[@]}"; do
+        printf "  ... check db '$i'\n"
+        CHKSUM=$(doHashDBSchema $i)
+        r=${?}
+        # printf "    ... CHKSUM ${CHKSUM}\n"
+        if [ "$r" != "0" ]; then exitval=1; fi
+        LLE=$(doGetDBLastLogEntry $i)
+        r=${?}
+        # printf "    ... LLE ${LLE}\n"
+        if [ "$r" != "0" ]; then exitval=1; fi
+        DBVER=$(doGetDBPVER $i)
+        r=${?}
+        # printf "    ... DBVER ${DBVER}\n"
+        if [ "$r" != "0" ]; then exitval=1; fi
+        echo "$i> ver:${DBVER}  chksum:${CHKSUM} lle:${LLE}"
+      done
 
-elif [ "$DOACTION" == "commit" ]; then
+    elif [ "$DOACTION" == "checksum" ]; then
 
-  DATABASES=( $(doFindDatabases $*) )
-#  echo "DATABASES: ${DATABASES[@]}"
-#  if [ "${#DATABASES[@]}" == "0" ]; then
-#    echo "no databases found"
-#  fi
+      DATABASES=( $(doFindDatabases $*) )
+      # echo "DATABASES: ${DATABASES[@]}"
 
-  doCommit
-  retval=$?
-  # echo $R
-else
-  printf "\n\nERROR: unknown action to take!?! '$DOACTION'.\n"
-  fDisplayOptions
-  exit 1
+      # check each db
+      exitval=0
+      for i in "${DATABASES[@]}"; do
+        CHKSUM=$(doHashDBSchema $i)
+        r=${?}
+        if [ "$r" != "0" ]; then exitval=1; fi
+        echo "${CHKSUM} $i"
+      done
+
+    elif [ "$DOACTION" == "commit" ]; then
+
+      DATABASES=( $(doFindDatabases $*) )
+      #  echo "DATABASES: ${DATABASES[@]}"
+      #  if [ "${#DATABASES[@]}" == "0" ]; then
+      #    echo "no databases found"
+      #  fi
+
+      doCommit
+      exitval=$?
+      # echo $R
+    else
+      printf "\n\nERROR: unknown action to take!?! '$DOACTION'.\n"
+      fDisplayOptions
+      exit 1
+    fi
+  fi
+
+
+
+  #echo "exitval $exitval"
+  exit $exitval
 fi
-
-
-
-#echo "retval $retval"
-exit $retval

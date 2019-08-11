@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+
+# - scans command line params for common vars across files
+# - include in every file
+# - only runs once
+
+if [ "${WOV_ENV_COMMONCMDS}" != "1" ]; then
+  WOV_ENV_COMMONCMDS="1"
+    # --- block this being called multiple times
+
+  DOECHO=1
+    # --- output spew levels: 0 - quiet, 1 - normal, 2 - verbose
+
+  FOLD=`tput cols`
+    # --- width of terminal for output spew
+
+  HELPCOMMAND=$1
+    # --- name of the function that does help
+
+  WOV_DODEFAULTCOMMAND=1
+    # --- many scripts have a default behavior. if a comman like '--version' is
+    #     called, then turn off the default command of the script
+  shift
+
+  newparams=()
+
+  function l_()
+  {
+    if [ ${DOECHO} -ge 1 ]; then echo "${*}"; fi
+  }
+  function l_verbose()
+  {
+    if [ ${DOECHO} -ge 2 ]; then echo "${*}"; fi
+  }
+  function l_error()
+  {
+    echo "ERROR  (`basename $0`:${BASH_LINENO}): ${*}"
+  }
+  function l_warn()
+  {
+    echo "WARNING(`basename $0`:${BASH_LINENO}): ${*}"
+  }
+
+  # ---------------------------------------------------------------------
+  # Read through params, placing unused on newparams, which will be
+  # set back for actual program to handle
+  # ---------------------------------------------------------------------
+  while [[ $# -ne 0 ]]; do
+    # echo "check $1"
+    if [[ $1 =~ ^- ]]; then
+
+      if [ "$1" == "-q" ]; then
+        shift
+        DOECHO=0
+
+      elif [ "$1" == "-v" ]; then
+        shift
+        DOECHO=2
+
+      elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+        shift
+        $HELPCOMMAND
+        WOV_DODEFAULTCOMMAND=0
+
+      elif [ "$1" == "--vh-label" ]; then
+        shift
+        ISWOVPROJECT="0"
+        . wov-env-loader
+        echo "${WOV_VH_VERSION}";
+        WOV_DODEFAULTCOMMAND=0
+
+      elif [ "$1" == "--version" ]; then
+        shift
+        ISWOVPROJECT="0"
+        . wov-env-loader
+        echo "${WOV_VERSION}";
+        WOV_DODEFAULTCOMMAND=0
+
+      elif [ "$1" == "--context" ]; then
+        shift
+        export WOV_CONTEXT="$1"
+        shift
+
+      elif [ "$1" == "--origin" ]; then
+        shift
+        export WOV_ORIGIN="$1"
+        shift
+
+      else
+        newparams+=( "$1" )
+        shift
+      fi
+    else
+      newparams+=( "$1" )
+      shift
+    fi
+  done
+
+  # append remaining
+  # newparams+=( $* )
+
+  # set params with above stripped out
+  set -- "${newparams[@]}"
+
+#  echo "resulting : ${@}"
+
+  # load env vars
+  wovenvcommoncmdsargs=( "$@" )
+  set ""
+  . wov-env-loader
+
+  set -- "${wovenvcommoncmdsargs[@]}"
+fi

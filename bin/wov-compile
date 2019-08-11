@@ -200,12 +200,17 @@ SEDCMD=''$WARNINGLINE"i$WARNING"
 # >&2 echo "TEMPLATEFILE : ${TEMPLATEFILE}  SED ${SEDCMD}" 
 if [ "$DS" == "" ]; then
   wov-hbs -sf $SCF -d "${D}"  < $TEMPLATEFILE && exit 1  | $SED "$SEDCMD"
+  Re=$?
 else
   wov-hbs -sf $SCF -ds $DS -d "${D}" < $TEMPLATEFILE && exit 1  | $SED "$SEDCMD"
+  Re=$?
 fi
+#echo "Re ${Re}"
 #echo "/time wov-hbs" 1>&2
 
 rm $TMPFILE
 
 #echo "wov-compile end" 1>&2
 #node -e 'console.log("10: ", Date.now())' 1>&2
+
+exit $Re

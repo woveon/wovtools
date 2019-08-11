@@ -2,7 +2,7 @@
 
 DOECHO=1
 DOFORCE=0
-FOLD=80
+FOLD=$(tput cols)
 
 
 # --------------------------------------------------------------------- 
@@ -137,6 +137,12 @@ function doTestStage()
       >&2 echo "WARNING: git repo has issues. Fix."
       wov-git-check -v
     fi
+    >&2 echo "   : If you want to carry over these changes to a new branch, use 'git stash'."
+    >&2 echo "   :   'git stash'       <-- to store changes temporarily"
+    >&2 echo "   :   'wov-stage X'     <-- which changes branch"
+    >&2 echo "   :   'git stash apply' <-- to apply previous modifications"
+    >&2 echo "   :   'git stash drop'  <-- to remove stash"
+    exit ${Re}
   fi
 
   # Output spew
