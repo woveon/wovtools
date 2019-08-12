@@ -215,7 +215,7 @@ function InitProject()
     "local" : {
       "description" : "For deverlopers to develop locally.",
       "routes": [
-        [ "${WOV_PROJECT}db.CLUSTERlocal",      "${WOV_PROJECT}db"     ]
+        [ "${WOV_PROJECT}db.ORIGINlocal",      "${WOV_PROJECT}db"     ]
       ]
     },
     "vh" : {
@@ -374,13 +374,20 @@ EOF
       "class"   : "db.t2.small",
       "storage" : 20
     },
-    "CLUSTERlocal" : {
-      "localdesc": "This is for connecting locally to a running system.",
+    "ORIGINlocal" : {
+      "//desc"   : "This is for connecting to a locally running system.",
+      "subhost"  : "localhost",
+      "endpoint" : "localhost",
+      "//port"   : "This is the direct port the local POSTGRES db is listening to.",
+      "port"     : 5432
+    },
+    "ORIGINremote" : {
+      "//desc"   : "This is for connecting to a remotely running system.",
       "subhost"  : "localhost",
       "endpoint" : "localhost",
       "//port"   : "This is the ssh tunnel port opened through bastion.",
       "port"     : 65432
-    }
+    },
   }
 }
 EOF

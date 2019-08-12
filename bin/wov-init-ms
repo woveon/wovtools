@@ -148,7 +148,7 @@ EOFFF
     "port"          : 80,
     "healthpath"    : "/${msname}/v1/pub/health",
     "healthprobetime" : 90,
-    "CLUSTERlocal"  : {"port" : 75643}
+    "ORIGINlocal"  : {"port" : 75643}
   }
 }
 EOF
