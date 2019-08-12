@@ -16,15 +16,17 @@ Displays status of WovTools environment.
 
   --commands : show commands
 
-  --(show|hide)-kube : show/hide Kubernetes on status
+  --(show|hide)-kube : show/hide Kubernetes on status (default is hide)
+  -k/K               : show/hide Kubernetes on status (default is hide)
 
 EOF
 }
 
 . wov-env-ops fDisplayOptions $*
+
 SHOWPERSIST=1
 SHOWSYSTEM=1
-SHOWKUBE=1
+SHOWKUBE=0
 
 
 # ---------------------------------------------------------------------
@@ -117,17 +119,17 @@ function doDisplayStatus()
   . <(wov-env --exports)
   . wov-push-common
   echo ""
-  echo "P ${WOV_PROJECT}"
   figlet ${WOV_PROJECT}
   echo "WovTools Project '${WOV_PROJECT}' - "${WOV_PROJECTTITLE}""
   echo "  Stage   : ${WOV_STAGE}"
+  echo " Origin   : ${WOV_ORIGIN}"
   echo "  Version : ${WOV_PVER}$(wov-git-check -q ; if [ $? != 0 ]; then echo "*"; fi )_${WOV_SVER}$(cd ${WOV_BASEDIR}/wovtools/secrets ; wov-git-check -q ; if [ $? != 0 ]; then echo "*"; fi )"
 
   if [ $SHOWPERSIST -eq 1 ]; then
     echo ""
     echo " Persistent Storage:"
     echo " ---"
-    echo "  Data Sets : $(wov-db -ldbs)"
+    echo "  Data Sets : $(wov-db -lds)"
     echo "  Databases :"
     DBS=( ${WOV_DATABASES} )
     for k in ${DBS[@]}; do
@@ -191,10 +193,10 @@ while [[ $1 =~ ^- ]]; do
     WOV_DODEFAULTCOMMAND=0
 
 
-  elif [ "$1" == "--show-kube" ]; then
+  elif [ "$1" == "--show-kube" ] || [ "$1" == "-k" ]; then
     shift
     SHOWKUBE=1
-  elif [ "$1" == "--hide-kube" ]; then
+  elif [ "$1" == "--hide-kube" ] || [ "$1" == "-K" ]; then
     shift
     SHOWKUBE=0
 
@@ -209,4 +211,7 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
-if [ "${WOV_DODEFAULTCOMMAND}" == "1" ]; then doDisplayStatus; fi
+if [ "${WOV_DODEFAULTCOMMAND}" == "1" ]; then 
+  . wov-env-common
+  doDisplayStatus
+fi

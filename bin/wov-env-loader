@@ -75,6 +75,7 @@ function isProject()
   if [      "${WOV_BASEDIR}" == "" ]; then echo "WARNING: not in wovtools project (no git)."; retval=0; fi
   if [ ! -d "${WOV_BASEDIR}/wovtools" ]; then echo "WARNING: not in wovtools project (no wovtools directory)."; retval=0; fi
   if [ ! -f "${WOV_BASEDIR}/${WOV_CONFIGFILE_MAIN}" ]; then echo "WARNING: not in wovtools project (no ${WOV_CONFIGFILE_MAIN} file)."; retval=0; fi
+  if [ ! -f "${WOV_BASEDIR}/${WOV_CONFIGFILE_MINE}" ]; then echo "WARNING: not in wovtools project (no ${WOV_CONFIGFILE_MINE} file)."; retval=0; fi
   return $retval;
 }
 
@@ -101,7 +102,7 @@ function getWovProjectVars()
   # --------------------------------------------------------------------- 
   R=( "$(isProject)" )
   if [ ${?} != 1 ]; then
-    echo "ERROR: not in a WovTools project. Try using wov-init to create a project here."
+    echo "ERROR: not in a WovTools project. Try using wov-init or correcting the errors to have a recognized WovTools project here."
     ( IFS=$'\n'; echo "${R[*]}" )
     exit 1
   fi
@@ -131,7 +132,7 @@ function getWovProjectVars()
   # --------------------------------------------------------------------- 
   # Merge if out of date
   if [ ${WOV_CONFIGFILE_MAINRAW} -nt ${WOV_CONFIGFILE_MERGED} ] || [ ${WOV_CONFIGFILE_MINERAW} -nt ${WOV_CONFIGFILE_MERGED} ]; then
-    echo "... merged file out of date, creating: ${WOV_CONFIGFILE_MERGED}"
+    if [ $DOECHO -ge 2 ]; then echo "... merged file out of date, creating: ${WOV_CONFIGFILE_MERGED}" ; fi
     echo "" > ${WOV_CONFIGFILE_MERGED}
     chmod 600 ${WOV_CONFIGFILE_MERGED}
     jq -s ".[0] * .[1]" ${WOV_CONFIGFILE_MAINRAW} ${WOV_CONFIGFILE_MINERAW} >> ${WOV_CONFIGFILE_MERGED} 2> /dev/null

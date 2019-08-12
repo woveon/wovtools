@@ -141,6 +141,7 @@ function fBuildConfig()
 {
   # if verbose, keep intermediate files for debugging
   local MV=mv
+  local needles=( "CLUSTER" "STAGE" "ORIGIN" )
   if [ "$DOECHO" == "2" ]; then MV=cp; fi
 
   mkdir -p ${WOV_CLUSTERDIR}
@@ -230,25 +231,29 @@ EOF
   done
 
 
-  # STEP 3: CLUSTER Select
-  # - concat child attributes into parent that are prefixed by CLUSTERx, where x is your CLUSTER
-  echo "" > ${WOV_SECRETFILE}.3
-  chmod 600 ${WOV_SECRETFILE}.3
-  if [[ $DOECHO -ge 1 ]]; then   echo "  ... using cluster     : ${WOV_CLUSTER}"; fi
-  wov_stage-select ${WOV_SECRETFILE}_ CLUSTER ${WOV_CLUSTER} >> ${WOV_SECRETFILE}.3
-  if [ "$?" != "0" ]; then exit 1; fi
-  ${MV} ${WOV_SECRETFILE}.3  ${WOV_SECRETFILE}_
+  # STEP 3: Needle in Haystack Selection
+  # - concat child attributes into parent that are prefixed by NEEDLEx, where x is your CLUSTER, STAGE or ORIGIN
+  for needle in "${needles[@]}"; do
+    local fullneedle=WOV_${needle}
+    fullneedle=${!fullneedle}
+    echo "" > ${WOV_SECRETFILE}.3${needle}
+    chmod 600 ${WOV_SECRETFILE}.3${needle}
+    l_ "  ... replace needle    : ${fullneedle} => ${needle}"
+    wov_stage-select ${WOV_SECRETFILE}_ ${needle} ${fullneedle} >> ${WOV_SECRETFILE}.3${needle}
+    if [ "$?" != "0" ]; then exit 1; fi
+    ${MV} ${WOV_SECRETFILE}.3${needle}  ${WOV_SECRETFILE}_
+  done
 
 
-  # STEP 4: STAGE Select
-  # - concat child attributes into parent that are prefixed by STAGEx, where x is your stage
-  # cat ${WOV_SECRETFILE}
-  echo "" > ${WOV_SECRETFILE}.4
-  chmod 600 ${WOV_SECRETFILE}.4
-  if [[ $DOECHO -ge 1 ]]; then   echo "  ... using stage       : ${WOV_STAGE}"; fi
-  wov_stage-select ${WOV_SECRETFILE}_ STAGE ${WOV_STAGE} >> ${WOV_SECRETFILE}.4
-  if [ "$?" != "0" ]; then exit 1; fi
-  ${MV} ${WOV_SECRETFILE}.4  ${WOV_SECRETFILE}_
+#  # STEP 4: STAGE Select
+#  # - concat child attributes into parent that are prefixed by STAGEx, where x is your stage
+#  # cat ${WOV_SECRETFILE}
+#  echo "" > ${WOV_SECRETFILE}.4
+#  chmod 600 ${WOV_SECRETFILE}.4
+#  l_ "  ... using stage       : ${WOV_STAGE}"
+#  wov_stage-select ${WOV_SECRETFILE}_ STAGE ${WOV_STAGE} >> ${WOV_SECRETFILE}.4
+#  if [ "$?" != "0" ]; then exit 1; fi
+#  ${MV} ${WOV_SECRETFILE}.4  ${WOV_SECRETFILE}_
 
 
   # STEP 5: Secrets Mods for a cluster (from wovtools/config.json|myconfig.json), which applies modifications for a cluster to MERGED_RAW data
@@ -269,7 +274,7 @@ EOF
       #echo "rt: ${rtfrom} -> ${rtto}"
       # rewrite any ME->STAGE in route
       rtto=$(echo $rtto | sed "s/ME/${WOV_STAGE}/")
-      # echo "rt: ${rtfrom} -> ${rtto}"
+      l_verbose "  ... stage 5: ${rtfrom} -> ${rtto}"
 
       # rewrite routes in WOV_SECRETFILE, remove original graft, then move back to SECREFILE for next mod
       echo "" > ${WOV_SECRETFILE}.5
@@ -295,18 +300,32 @@ EOF
 #    ${MV} ${WOV_SECRETFILE}_  ${WOV_SECRETFILE}
   fi
 
-  # STEP 6&7: Clean CLUSTER and STAGE from the raw code. Have to do it after the mods above since those
-  #           can rewrite CLUSTER over STAGE.
-  echo "" > ${WOV_SECRETFILE}.6
-  chmod 600 ${WOV_SECRETFILE}.6
-  wov_stage-select ${WOV_SECRETFILE}_ CLUSTER ${WOV_CLUSTER} clean >> ${WOV_SECRETFILE}.6
-  if [ "$?" != "0" ]; then exit 1; fi
-  ${MV} ${WOV_SECRETFILE}.6  ${WOV_SECRETFILE}_
+#  # STEP 6,6a&7: Clean CLUSTER, STAGE and ORIGIN from the raw code. Have to do it after the mods above since those
+#  #           can rewrite CLUSTER over STAGE.
+#  echo "" > ${WOV_SECRETFILE}.6a
+#  chmod 600 ${WOV_SECRETFILE}.6a
+#  wov_stage-select ${WOV_SECRETFILE}_ ORIGIN ${WOV_ORIGIN} clean >> ${WOV_SECRETFILE}.6a
+#  #wov_stage-select ${WOV_SECRETFILE}_ CLUSTER ${WOV_CLUSTER} clean >> ${WOV_SECRETFILE}.6
+#  if [ "$?" != "0" ]; then exit 1; fi
+#  ${MV} ${WOV_SECRETFILE}.6a  ${WOV_SECRETFILE}_
+#
+#  echo "" > ${WOV_SECRETFILE}.7
+#  chmod 600 ${WOV_SECRETFILE}.7
+#  wov_stage-select ${WOV_SECRETFILE}_ STAGE ${WOV_STAGE} clean >> ${WOV_SECRETFILE}.7
+#  ${MV} ${WOV_SECRETFILE}.7  ${WOV_SECRETFILE}_
 
-  echo "" > ${WOV_SECRETFILE}.7
-  chmod 600 ${WOV_SECRETFILE}.7
-  wov_stage-select ${WOV_SECRETFILE}_ STAGE ${WOV_STAGE} clean >> ${WOV_SECRETFILE}.7
-  ${MV} ${WOV_SECRETFILE}.7  ${WOV_SECRETFILE}_
+  # STEP 6/7: Clean CLUSTER, STAGE and ORIGIN from the raw code. Have to do it after the mods above since those
+  #           can rewrite CLUSTER over STAGE.
+  for needle in "${needles[@]}"; do
+    local fullneedle=WOV_${needle}
+    fullneedle=${!fullneedle}
+    echo "" > ${WOV_SECRETFILE}.6${needle}
+    chmod 600 ${WOV_SECRETFILE}.6${needle}
+    l_ "  ... clean needle      : ${fullneedle} => ${needle}"
+    wov_stage-select ${WOV_SECRETFILE}_ ${needle} ${fullneedle} clean >> ${WOV_SECRETFILE}.6${needle}
+    if [ "$?" != "0" ]; then exit 1; fi
+    ${MV} ${WOV_SECRETFILE}.6${needle}  ${WOV_SECRETFILE}_
+  done
 
   # Specific post-processing of variables
   fPostBuildSecretsJSON 8 ${WOV_SECRETFILE}

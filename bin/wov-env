@@ -115,14 +115,12 @@ function ensureSetContext()
 # ---------------------------------------------------------------------
 function doSetOrigin()
 {
-  set -x
   jq '.curorigin="'"${1}"'"' "${WOV_CONFIGFILE_MINERAW}" > "${WOV_CONFIGFILE_MINERAW}_.$$" 
   if [ $? == 0 ]; then
     cp "${WOV_CONFIGFILE_MINERAW}_.$$" "${WOV_CONFIGFILE_MINERAW}"
   else
     rm -f "${WOV_CONFIGFILE_MINERAW}_.$$" || true
   fi
-  set +x
 }
 
 
