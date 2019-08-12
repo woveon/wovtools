@@ -621,7 +621,16 @@ while [[ $1 =~ ^- ]] && [ ${DOCONT} -eq 0 ]; do
     done
     #PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USERNAME} -c "create database ${DB_DATABASE}"  > /dev/null
     #if [ "$?" != "0" ]; then echo "ERROR: could not create database of '${DB_DATABASE}'."; exit 1; fi
-    echo "  ... success"
+    l_ "    ... success starting db server"
+    l_ "  ... creating Wov Database"
+    doWovDBCreateIfMissing
+    if [ $? -eq 0 ]; then
+      l_ "    ... success. Now might want to load a Data Set 'wov-db --ds-full DATASET' "
+      l_ " DataSets :"
+      doDataSetList
+    else
+      l_ "    ... failed. "
+    fi
     exit 0
 
   elif [ "$1" == "--docker-postgres-stop" ]; then
