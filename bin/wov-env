@@ -29,11 +29,12 @@ Command Options:
  
   Basic Environment Configuration:
 #  -g/--global X : target output for another context (not from Kubernetes)  NOTE: must be 1st param
-  -e            : echo the output with newlines
-  -E            : echo the output on one line (bash executable)
-  -p/--provider : run cluster config as well (queries cloud provider via wov-env-PROVIDER)
-  --health      : check routes of a deployment
+  -e             : echo the output with newlines
+  -E             : echo the output on one line (bash executable)
+  -p/--provider  : run cluster config as well (queries cloud provider via wov-env-PROVIDER)
+  --health       : check routes of a deployment
     --health-no-tls/--health-tls : force http/https on routes
+  --set-origin X : sets the origin in wovtools/myconfig.json
 
   Resource Names:
   --res SN RES ZONE  : subnet name
@@ -107,6 +108,23 @@ function ensureSetContext()
 {
   if [ ${CONTEXTSET} -eq 0 ]; then doSetContext $1; fi
 }
+
+
+# ---------------------------------------------------------------------
+# $1 - new origin
+# ---------------------------------------------------------------------
+function doSetOrigin()
+{
+  set -x
+  jq '.curorigin="'"${1}"'"' "${WOV_CONFIGFILE_MINERAW}" > "${WOV_CONFIGFILE_MINERAW}_.$$" 
+  if [ $? == 0 ]; then
+    cp "${WOV_CONFIGFILE_MINERAW}_.$$" "${WOV_CONFIGFILE_MINERAW}"
+  else
+    rm -f "${WOV_CONFIGFILE_MINERAW}_.$$" || true
+  fi
+  set +x
+}
+
 
 # --------------------------------------------------------------------- 
 # TODO: UPDATE DOCUMENATION HERE AS IT IS WRONG
@@ -646,6 +664,11 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == '-E' ]; then
     ECHOMODE=2
+
+  elif [ "$1" == '--set-origin' ]; then
+    shift
+    doSetOrigin "$1"
+    shift
 
   elif [ "$1" == '--context' ]; then
     shift

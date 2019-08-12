@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
   
 
-DOECHO=1
-FOLD=$(tput cols)
-DIDCOMMAND=0
-SHOWPERSIST=1
-SHOWSYSTEM=1
-SHOWKUBE=1
 
 
 # ---------------------------------------------------------------------
@@ -26,6 +20,11 @@ Displays status of WovTools environment.
 
 EOF
 }
+
+. wov-env-ops fDisplayOptions $*
+SHOWPERSIST=1
+SHOWSYSTEM=1
+SHOWKUBE=1
 
 
 # ---------------------------------------------------------------------
@@ -118,6 +117,7 @@ function doDisplayStatus()
   . <(wov-env --exports)
   . wov-push-common
   echo ""
+  echo "P ${WOV_PROJECT}"
   figlet ${WOV_PROJECT}
   echo "WovTools Project '${WOV_PROJECT}' - "${WOV_PROJECTTITLE}""
   echo "  Stage   : ${WOV_STAGE}"
@@ -184,18 +184,11 @@ fi
 # ---------------------------------------------------------------------
 while [[ $1 =~ ^- ]]; do
 
-  if [ "$1" == "-q" ]; then
-    shift
-    DOECHO=0
 
-  elif [ "$1" == "-v" ]; then
-    shift
-    DOECHO=2
-
-  elif [ "$1" == "--commands" ]; then
+  if [ "$1" == "--commands" ]; then
     shift
     fDisplayCommands
-    DIDCOMMAND=1
+    WOV_DODEFAULTCOMMAND=0
 
 
   elif [ "$1" == "--show-kube" ]; then
@@ -205,11 +198,6 @@ while [[ $1 =~ ^- ]]; do
     shift
     SHOWKUBE=0
 
-
-  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-    fDisplayOptions
-    DIDCOMMAND=1
-    exit 0
 
   else
     echo
@@ -221,6 +209,4 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
-if [ "$DIDCOMMAND" == "0" ]; then
-  doDisplayStatus
-fi
+if [ "${WOV_DODEFAULTCOMMAND}" == "1" ]; then doDisplayStatus; fi

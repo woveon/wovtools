@@ -30,9 +30,8 @@ PROJDIR="${TESTDIR}/${TEST}"
   mkdir -p "${TESTREPO}/${TEST}_db.git"
 
   # init git
-  cd "${TESTREPO}/${TEST}.git" ; git init --bare
-  cd "${TESTREPO}/${TEST}_db.git" ; git init --bare
-
+  git -C "${TESTREPO}/${TEST}.git" init --bare
+  git -C "${TESTREPO}/${TEST}_db.git" init --bare
 
   # add to wovtools/myconfig.json
   tr_dir "${TESTDIR}/${TEST}"
@@ -40,7 +39,7 @@ PROJDIR="${TESTDIR}/${TEST}"
 #  exit 1
   tr_comment '...starting wov-init'
   wov-init <<STDIN
-test1
+Y
 ${TESTREPO}/${TEST}.git
 john doe
 jd@example.com
@@ -52,17 +51,23 @@ A description.
 
 
 STDIN
-exit 1
-
-#/Users/cwingrav/code/woveon/src/wovtools/test/testrepo/test1.git
-#/Users/cwingrav/code/woveon/src/wovtools/test/testrepo/test1_db.git
-
-
-  rm -Rf ${TESTREPO}/${TEST}x
-  wov-init-ms ${TEST}x
-
-  tr_test_skip "git checkin"
-
   tr_section '/mk-proj'
 }
 
+
+
+{
+  tr_section 'mk-ms'
+
+  rm -Rf ${TESTREPO}/${TEST}X
+  wov-init-ms ${TEST}X
+
+  tr_test_skip "git checkin"
+  git add test1X wovtools
+  git commit -a -m 'first commit'
+  git push
+
+  tr_section '/mk-ms'
+}
+
+tr_popdir

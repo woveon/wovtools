@@ -2,7 +2,8 @@
 
 . /usr/local/bin/wtrunner
 
-tr_tests_on
+#tr_tests_on
+#tr_tests_off
 
 tr_h1 "wov-env commands : $0"
 tr_comment 'This runs on existing project from test1.sh'
@@ -53,9 +54,9 @@ tr_section 'context-tests'
 {
 
   tr_test "simple context" \
-    'wov-env --context wov-aws-va-grape-test1-cw --var WOV_VERSION --var WOV_PVER --var WOV_SVER' \
-    0 3 \
-    '2' '1' '[ "${result}" != "" ]'
+    'wov-env --context wov-aws-va-grape-test1-cw --var WOV_VERSION ; wov-env --context wov-aws-va-grape-test1-cw --var WOV_SVER' \
+    0 2 \
+    '2' '[ "${result}" != "" ]'
 
   tr_test "context set test" \
     'wov-env --context wov-aws-va-grape-test1-cw --var WOV_CONTEXT' \
@@ -178,10 +179,9 @@ tr_h2 'wov-env'
     "wov-env --conf | grep -oh -e \"WOV_FLAVOR='grape'\"" \
     0 1 "WOV_FLAVOR='grape'"
 
-
   tr_test "--exports works" \
     "wov-env --exports | grep -oh \"export WOV_PROVIDER='aws'\"" \
-    0 2 "export" "WOV_PROVIDER='aws'"
+    0 1 "export WOV_PROVIDER='aws'"
 
   tr_test "--secrets dump" \
     'wov-env --secrets | tail +4 | jq -r ".test1X.port"' \
@@ -250,4 +250,4 @@ tr_tests_on
 
 
 tr_results
-
+tr_popdir

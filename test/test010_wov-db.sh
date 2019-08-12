@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
 . /usr/local/bin/wtrunner
 
-tr_tests_off
+#tr_tests_off
 tr_vverbose
 tr_dir test1
 
 tr_h1 "wov-db"
 tr_comment "Tests the wov-db command. Assumes test1 has been created with 'test1.sh' test case"
 
+tr_run 'set origin to here' 'wov-env --set-origin here'
+
 {
   tr_section 'non-database-specific'
 
   tr_test 'help' 'wov-db -h' 0 -1
 
-  tr_test 'list wov databases' 'wov-db -lwdb' 0 1 ''
+  tr_test_todo 'here, need to delete and rebuild the database Archive.'
 
-  tr_test 'list wov data sets' 'wov-db -lds' 0 1 ''
+  tr_test 'list wov databases' 'wov-db -lwdb' 0 -1 ''
+
+  tr_test 'list wov data sets' 'wov-db -lds' 0 -1 ''
   tr_section '/non-database-specific'
 }
 
@@ -43,7 +47,7 @@ tr_comment "Tests the wov-db command. Assumes test1 has been created with 'test1
     'wov-db --context wov-aws-va-grape-test1-cw --docker-postgres-start test1db' 0 -1
 
   tr_test 'create a Wov database with correct context' \
-    'wov-db --context wov-aws-va-grape-test1-cw --wdb-create test1db' 0 -1
+    'wov-db --context here:wov-aws-va-grape-test1-cw --wdb-create test1db' 0 -1
 
   tr_test 'info on db shows values (assumed db)' \
     'wov-db --context wov-aws-va-grape-test1-cw --info' 0 -1
@@ -65,15 +69,15 @@ tr_comment "Tests the wov-db command. Assumes test1 has been created with 'test1
   tr_test_skip 'database server wait --dbs-wait'
 
   tr_test 'Create and init Wov database' \
-    'wov-db --context wov-aws-va-grape-test1-cw test1db --wdb-init' 0 -1
+    'wov-db --context wov-aws-va-grape-test1-cw --wdb-init test1db' 0 -1
   tr_section '/wov-db-create-and-init'
 }
 
 
 {
   tr_section 'wov-db-server'
-  tr_test_skip 'create a server'
-  tr_test_skip 'wait for it'
+  tr_test_todo 'create a server'
+  tr_test_todo 'wait for it'
   tr_section '/wov-db-server'
 }
 
@@ -85,7 +89,7 @@ tr_comment "Tests the wov-db command. Assumes test1 has been created with 'test1
     'wov-db --context wov-aws-va-grape-test1-cw test1db --schema | wc -l | tr -d "[:space:]"' 0 1 36
 
   tr_test 'Schema diff against 0 but no version' \
-    'wov-db --context wov-aws-va-grape-test1-cw test1db --schema-diff' 1 1 "ERROR: no schema for database 'test1db', schema version '0'."
+    'wov-db --context wov-aws-va-grape-test1-cw test1db --schema-diff 0' 1 1 "ERROR: no schema for database 'test1db', schema version '0'."
 
   tr_test_skip 'schema hash'
 

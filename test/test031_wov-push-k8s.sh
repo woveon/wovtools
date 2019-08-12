@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 . /usr/local/bin/wtrunner
 
-tr_tests_off
-tr_vverbose
+#tr_tests_off
+#tr_vverbose
 tr_dir test1
 
 tr_h1 "wov-push-k8s - $0"
@@ -10,8 +10,6 @@ tr_comment "Tests the wov-push-k8s. Assumes test1 has been created with 'test1.s
 
 tr_section 'basic'
 {
-  tr_tests_on
- 
   tr_test "wov-push-k8s help" \
     "wov-push-k8s -h" 0 -1
 

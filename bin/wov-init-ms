@@ -161,6 +161,20 @@ EOF
     jq -r "${jqrule}" "${WOV_CONFIGFILE_MINERAW}" > "${WOV_CONFIGFILE_MINERAW}_" ; \
       mv "${WOV_CONFIGFILE_MINERAW}_" "${WOV_CONFIGFILE_MINERAW}"
   fi
+
+  l_ "  ...add MS json file to config dev and prod if not in it"
+  jq -r ".secrets.dev[]" ${WOV_CONFIGFILE_MAINRAW} | grep "${msname}.json" > /dev/null
+  if [ $? -eq 1 ]; then
+    jqrule=".secrets.dev[ .secrets.dev | length ] |= . + \"${msname}.json\" "
+    jq -r "${jqrule}" "${WOV_CONFIGFILE_MAINRAW}" > "${WOV_CONFIGFILE_MAINRAW}_" ; \
+      mv "${WOV_CONFIGFILE_MAINRAW}_" "${WOV_CONFIGFILE_MAINRAW}"
+  fi
+  jq -r ".secrets.prod[]" ${WOV_CONFIGFILE_MAINRAW} | grep "${msname}.json" > /dev/null
+  if [ $? -eq 1 ]; then
+    jqrule=".secrets.prod[ .secrets.prod | length ] |= . + \"${msname}.json\" "
+    jq -r "${jqrule}" "${WOV_CONFIGFILE_MAINRAW}" > "${WOV_CONFIGFILE_MAINRAW}_" ; \
+      mv "${WOV_CONFIGFILE_MAINRAW}_" "${WOV_CONFIGFILE_MAINRAW}"
+  fi
   
 
   l_ "  ...k8s directory"

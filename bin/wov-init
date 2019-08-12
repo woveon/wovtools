@@ -51,9 +51,9 @@ echo "`basename $0`"
 echo "Initializes this directory as a wovtools project. This should be non-destructive, only adding at .git and wovtools directories." | fold -w ${FOLD} -s
 echo ""
 
-PROJECT=$(basename $(pwd))
+WOV_PROJECT=$(basename $(pwd))
 while true; do
-  read -r -p "One word PROJECT name (not a title!) : (\"${PROJECT}\") ... Correct? [Y/n] " A
+  read -r -p "One word PROJECT name (not a title!) : (\"${WOV_PROJECT}\") ... Correct? [Y/n] " A
 
   case $A in
     ""|[Yy][Ee][Ss]|[Yy])
@@ -61,14 +61,14 @@ while true; do
     ;;
     [Nn][Oo]|[Nn])
     printf "ok, enter project name: "
-    read PROJECT
-    if [[ ! $PROJECT =~ ^[A-Za-z][A-Za-z_0-9]+$ ]];  then
+    read WOV_PROJECT
+    if [[ ! $WOV_PROJECT =~ ^[A-Za-z][A-Za-z_0-9]+$ ]];  then
       echo "ERROR: bad project name, needs to be a string with no spaces (i.e. [A-Za-z][A-Za-z_0-9]*)" 
-      PROJECT=$(basename $(pwd))
+      WOV_PROJECT=$(basename $(pwd))
     fi
     ;;
   *)
-    echo "Invalid input..."
+    echo "Invalid input... (${A})"
     ;;
   esac
 done
@@ -84,11 +84,11 @@ function timeout_monitor() {
 
 
 # Ensure global entry for the project
-WOV_PROJDIR=$(cat ${HOME}/.wovtools | jq -r ".projects[\"${PROJECT}\"].dir")
+WOV_PROJDIR=$(cat ${HOME}/.wovtools | jq -r ".projects[\"${WOV_PROJECT}\"].dir")
 if [ "${WOV_PROJDIR}" == "null" ]; then
   echo "  ... creating project entry in: ~/.wovtools"
   CWD=`pwd`
-  cat ~/.wovtools | jq " .projects[\"${PROJECT}\"].dir = \"${CWD}\"" > ~/.wovtools.$$ && cp ~/.wovtools.$$ ~/.wovtools
+  cat ~/.wovtools | jq " .projects[\"${WOV_PROJECT}\"].dir = \"${CWD}\"" > ~/.wovtools.$$ && cp ~/.wovtools.$$ ~/.wovtools
 fi
 
 
@@ -184,7 +184,7 @@ function InitProject()
   "ver" : "initing",
   "project" : {
     "type" : "",
-    "project" : "${PROJECT}",
+    "project" : "${WOV_PROJECT}",
     "title" : "",
     "description" : ""
   },
@@ -195,29 +195,27 @@ function InitProject()
   "nodeploy" : [],
   "secrets" : {
     "dev" : [ 
-      "cluster_defaults.json",
       "cluster_mymanaged.json",
       "repositories.json",
-      "${PROJECT}.json",
-      "${PROJECT}db.json",
-      "${PROJECT}_${WOV_ME}.json",
-      "${PROJECT}db_${WOV_ME}.json"
+      "${WOV_PROJECT}.json",
+      "${WOV_PROJECT}db.json",
+      "${WOV_PROJECT}_${WOV_ME}.json",
+      "${WOV_PROJECT}db_${WOV_ME}.json"
     ],
     "prod" : [
-      "cluster_defaults.json",
       "cluster_mymanaged.json",
       "repositories.json",
-      "${PROJECT}.json",
-      "${PROJECT}db.json",
-      "${PROJECT}_prod.json",
-      "${PROJECT}db_prod.json"
+      "${WOV_PROJECT}.json",
+      "${WOV_PROJECT}db.json",
+      "${WOV_PROJECT}_prod.json",
+      "${WOV_PROJECT}db_prod.json"
     ]
   },
   "originmods": {
     "local" : {
       "description" : "For deverlopers to develop locally.",
       "routes": [
-        [ "${PROJECT}db.CLUSTERlocal",      "${PROJECT}db"     ]
+        [ "${WOV_PROJECT}db.CLUSTERlocal",      "${WOV_PROJECT}db"     ]
       ]
     },
     "vh" : {
@@ -246,10 +244,10 @@ EOF
     "${WOV_ME}" : [
       "cluster_mymanaged.json",
       "repositories.json",
-      "${PROJECT}.json",
-      "${PROJECT}db.json",
-      "${PROJECT}_${WOV_ME}.json",
-      "${PROJECT}db_${WOV_ME}.json"
+      "${WOV_PROJECT}.json",
+      "${WOV_PROJECT}db.json",
+      "${WOV_PROJECT}_${WOV_ME}.json",
+      "${WOV_PROJECT}db_${WOV_ME}.json"
     ]
   },
   "originmods" : {
@@ -329,43 +327,43 @@ fi
   SECRETSDIR="`wov-cd -e secrets`"
   if [ "${SECRETSDIR}" == "" ]; then echo "ERROR: Unknown secrets dir. Add an entry to ~/.wovtools, for : dirs.secrets.dir."; exit 1; fi
   if [ ! -e "${SECRETSDIR}" ]; then mkdir -p "${SECRETSDIR}"; chmod 600 "${SECRETSDIR}"; fi
-  if [ ! -e "${SECRETSDIR}/${PROJECT}_secrets" ]; then mkdir -p "${SECRETSDIR}/${PROJECT}_secrets"; chmod 600 "${SECRETSDIR}/${PROJECT}_secrets"; fi
+  if [ ! -e "${SECRETSDIR}/${WOV_PROJECT}_secrets" ]; then mkdir -p "${SECRETSDIR}/${WOV_PROJECT}_secrets"; chmod 600 "${SECRETSDIR}/${WOV_PROJECT}_secrets"; fi
 
   # remake the softlink
   rm -f "${WOV_BASEDIR}/wovtools/secrets" || true
-  ln -s "${SECRETSDIR}/${PROJECT}_secrets" "${WOV_BASEDIR}/wovtools/secrets"
+  ln -s "${SECRETSDIR}/${WOV_PROJECT}_secrets" "${WOV_BASEDIR}/wovtools/secrets"
   if [ "$?" != "0" ]; then
-    echo "ERROR: failed linking to '${SECRETSDIR}/${PROJECT}_secrets' at '${WOV_BASEDIR}/wovtools/secrets'."
+    echo "ERROR: failed linking to '${SECRETSDIR}/${WOV_PROJECT}_secrets' at '${WOV_BASEDIR}/wovtools/secrets'."
     exit 1
   fi
 
   # make sure default secret files exist
-  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${PROJECT}.json" ]; then 
-    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${PROJECT}.json"
+  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}.json" ]; then 
+    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}.json"
 {
   "www" : {
     "STAGEdev" : {
-      "api"   : {"urlscheme" : "https", "url" : "api-dev.${PROJECT}.com"},
-      "app"   : {"urlscheme" : "https", "url" : "app-dev.${PROJECT}.com"}
+      "api"   : {"urlscheme" : "https", "url" : "api-dev.${WOV_PROJECT}.com"},
+      "app"   : {"urlscheme" : "https", "url" : "app-dev.${WOV_PROJECT}.com"}
     },
     "STAGEprod" : {
-      "api"   : {"urlscheme" : "https", "url" : "api.${PROJECT}.com"},
-      "app"   : {"urlscheme" : "https", "url" : "app.${PROJECT}.com"}
+      "api"   : {"urlscheme" : "https", "url" : "api.${WOV_PROJECT}.com"},
+      "app"   : {"urlscheme" : "https", "url" : "app.${WOV_PROJECT}.com"}
     }
   }
 }
 EOF
   fi
 
-  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${PROJECT}db.json" ]; then 
-    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${PROJECT}db.json"
+  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}db.json" ]; then 
+    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}db.json"
 {
-  "${PROJECT}db" : {
+  "${WOV_PROJECT}db" : {
     "//subhost" : "combined with WOV_CLUSTER to create host name. if localhost, only localhost",
-    "subhost"      : "${PROJECT}dev",
+    "subhost"      : "${WOV_PROJECT}dev",
     "username"     : "postgres",
     "endpoint"     : "unknown.rds.amazonaws.com",
-    "database"     : "${PROJECT}dev",
+    "database"     : "${WOV_PROJECT}dev",
     "port"         : 5432,
     "type"         : "postgres",
     "version"      : "9.6.11-R1",
@@ -388,8 +386,8 @@ EOF
 EOF
   fi
 
-  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${PROJECT}_${WOV_ME}.json" ]; then 
-    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${PROJECT}_${WOV_ME}.json"
+  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}_${WOV_ME}.json" ]; then 
+    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}_${WOV_ME}.json"
 {
   "//tokencmd" : "openssl rand -hex 20",
   "microservice" : { "STAGE${WOV_ME}" : { "token" : "GENERATE A TOKEN" } },
@@ -404,10 +402,10 @@ EOF
   fi
 
 
-  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${PROJECT}db_${WOV_ME}.json" ]; then 
-    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${PROJECT}db_${WOV_ME}.json"
+  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}db_${WOV_ME}.json" ]; then 
+    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}db_${WOV_ME}.json"
 {
-  "${PROJECT}db" : { "STAGE${WOV_ME}" : { "//" : "Separate database, should use separate user/pass", "database" : "${PROJECT}${WOV_ME}" } }
+  "${WOV_PROJECT}db" : { "STAGE${WOV_ME}" : { "//" : "Separate database, should use separate user/pass", "database" : "${WOV_PROJECT}${WOV_ME}" } }
 }
 EOF
   fi
@@ -426,67 +424,6 @@ EOF
 }
 
 
-function InitDBArchive()
-{
-echo ""
-if [ -e "${WOV_BASEDIR}/wovtools/db" ] &&
-   [ -e "${WOV_BASEDIR}/wovtools/db/archive" ] &&
-   [ -e "${WOV_BASEDIR}/wovtools/db/archive/.git" ] &&
-   [ -e "${WOV_BASEDIR}/wovtools/db/archive/.gitignore" ] &&
-   [ -e "${WOV_BASEDIR}/wovtools/db/archive/.git/config" ]; then
-  echo "ARCHIVE> Database Registry exists (at wovtools/db/archive)"
-else
-
-  # ensure directory
-  if [ ! -e "${WOV_BASEDIR}/wovtools/db/archive" ]; then
-    mkdir -p ${WOV_BASEDIR}/wovtools/db/archive
-  fi
-  chmod -R 700 "${WOV_BASEDIR}/wovtools/db"
-
-  # make gitignore
-  if [ ! -e "${WOV_BASEDIR}/wovtools/db/archive/.gitignore" ]; then
-    cat <<EOF > ${WOV_BASEDIR}/wovtools/db/archive/.gitignore
-  *.swp
-EOF
-  fi
-
-  WOV_DBREGISTRY=`git config --get remote.origin.url`
-  WOV_DBREGISTRY="${WOV_DBREGISTRY%.git}_db.git"
-  if [ "$?" != "0" ]; then
-    printf "\nERROR: remote origin is not set for this repository.\n"
-    printf "  Use 'git remote add origin X' to set your remote repository.\n\n"
-    exit 1
-  fi
-  #  WOV_DBREGISTRY="${WOV_DBREGISTRY::-4}_archive.git"
-
-  read -r -p "ARCHIVE> Database Registry git location: (\"${WOV_DBREGISTRY}\") ... Correct? [Y/n] " A
-  if [ "${A}" != "" ]; then WOV_DBREGISTRY="${A}"; fi
-
-  # make git repository
-  cd ${WOV_BASEDIR}/wovtools/db/archive && git init -q
-
-  # configure it
-  cat <<EOF > ${WOV_BASEDIR}/wovtools/db/archive/.git/config
-[core]
-  repositoryformatversion = 0
-  filemode = true
-  bare = false
-  logallrefupdates = true
-  ignorecase = true
-  precomposeunicode = true
-[remote "origin"]
-  url = ${WOV_DBREGISTRY}
-  fetch = +refs/heads/*:refs/remotes/origin/*
-[user]
-  name = ${WOV_USERNAME}
-  email = ${WOV_USEREMAIL}
-[branch "master"]
-  remote = origin
-  merge = refs/heads/master
-EOF
-
-fi
-}
 
 
 # ---------------------------------------------------------------------
@@ -552,13 +489,23 @@ if [ "$(wov-env &> /dev/null ; echo $?)" == "1" ]; then
   echo "... creating new wovtools project in this directory."
   InitProject
 else
-  echo "... updating project: ${PROJECT}"
+  echo "... updating project: ${WOV_PROJECT}"
   WOV_BASEDIR=$(git rev-parse --show-toplevel)
 fi
 
 
-# Ensure DB structure so wov-env can run
-InitDBArchive
+echo "...Ensure DB Archive structure so wov-env can run (interactive mode)"
+wov-init-dba --exists-check
+if [ $? -eq  1 ]; then 
+  echo "  ...creating Database Archive"
+  wov-init-dba
+  if [ $? -ne 0 ]; then
+    echo "ERROR: failed to create Database Archive"
+    exit 1
+  fi
+else
+  echo "  ...skipping DB Archive creation"
+fi
 
 echo "... loading WovTools values."
 initargs=( "$@" )
@@ -601,7 +548,7 @@ while true; do
       read WOV_ARCHIVEREPOSITORY
     ;;
   *)
-    echo "Invalid input..."
+    echo "Invalid input... (${A})"
     ;;
   esac
 done

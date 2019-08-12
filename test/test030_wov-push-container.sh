@@ -2,7 +2,9 @@
 . /usr/local/bin/wtrunner
 
 
-tr_tests_off
+#tr_tests_off
+#tr_vverbose
+#tr_tests_on
 tr_dir test1
 
 tr_h1 "wov-push-container - $0"
@@ -11,8 +13,6 @@ tr_comment "Tests the wov-push-container. Assumes test1 has been created with 't
 tr_section 'basic'
 {
 
-  tr_tests_on
-  tr_vverbose
   tr_test 'List microservices' \
     'wov-env --lms' 0 1 test1X
 

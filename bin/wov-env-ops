@@ -46,7 +46,7 @@ if [ "${WOV_ENV_COMMONCMDS}" != "1" ]; then
   # set back for actual program to handle
   # ---------------------------------------------------------------------
   while [[ $# -ne 0 ]]; do
-    # echo "check $1"
+
     if [[ $1 =~ ^- ]]; then
 
       if [ "$1" == "-q" ]; then

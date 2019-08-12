@@ -310,6 +310,34 @@ function doCommit()
   done
 }
 
+
+# Add an entry to the deltas so it gets logged and then update the log 
+# $1 - dbname
+# $2 - snapshot
+function doSetSnapshot()
+{
+  DB_snapshot="${2}"
+  echo "# Snapshot : ${DB_snapshot}" >> "${WOV_BASEDIR}/wovtools/db/${1}.deltas"
+  doUpdateDBArchiveLog "$1" "${WOV_PVER}" "${WOV_SVER}" "${2}"
+}
+
+
+# $1 - dbname
+# $2 - PVER
+# $3 - SVER
+# $4 - DB_snapshot
+function doUpdateDBArchiveLog()
+{
+  echo "  ... update Database Archive logs :$1 $2 $3 $4"
+  R=$(wov-db $1 -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( '$1', '${WOV_VERSION}', '${2}_${3}', ${2}, ${3}, '${4}' );")
+  if [ "$?" != "0" ]; then
+    printf "${R}"
+    printf "\n\nERROR: failed updating archive database(${1}) ${2}_${3} snapshot(${4}).\n"
+    fFailedDBConnection 3 $1
+  fi
+}
+
+
 # - 2-4 --------------------------------------------------------------- 
 # TODO: make these transactional, since if these don't complete, system 
 #       can be in a bad state
@@ -329,47 +357,68 @@ function doCommitDB()
   # check deltas exist
   deltafile=${WOV_BASEDIR}/wovtools/db/$1.deltas
   if [ ! -e $deltafile ]; then
-    printf "\n\nERROR: can't find deltas file: 'wovtools/db/$1.deltas'.\n\n"
+    l_error "Can't find deltas file: 'wovtools/db/$1.deltas'."
     fFailedDBConnection 1 $1
   fi
 
   # make sure directory exists for database
   mkdir -p ${WOV_BASEDIR}/wovtools/db/archive/$1
 
-
   # get current db wovtools pver
   DB_ENTRY=$(doGetDBLastLogEntry $1)
   if [ "$?" != "0" ]; then
-    printf "\n\n***ERROR: database not inited.\n"
+    l_error "***ERROR: database not inited."
     fFailedDBConnection 1 $1
   fi
-#  printf "\nDB_ENTRY '${DB_ENTRY}'\n"
+  printf "\nDB_ENTRY '${DB_ENTRY}'\n"
 
-
-  # No parent, consider this the first entry
+  # should have been at least a snapshot entry
   if [ "${DB_ENTRY}" == "" ]; then
-    if [ "${DB_SNAPSHOT}" == "" ]; then
-      printf "\nERROR: need to provide a snapshot for first commit of database. Use --snapshot X. ex. rds:wov-aws-va-ant-db-alywandev-2017-07-17-07-20.\n"
-      fFailedDBConnection 3 $1
-    fi
-    DB_PVER=${WOV_PVER}
-    DB_snapshot="${DB_SNAPSHOT}"
-  else
-    OLDIFS=$IFS
-    IFS='|'
-    DB_ENTRY=( $(echo "${DB_ENTRY[@]}") )
-    IFS=$OLDIFS
-    DB_PVER="$( echo -e "${DB_ENTRY[4]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    DB_snapshot="$( echo -e "${DB_ENTRY[6]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    l_error "ERROR: need to provide a snapshot for first commit of database. Use wov-db --snapshot X. ex. rds:wov-aws-va-ant-db-alywandev-2017-07-17-07-20."
+    fFailedDBConnection 3 $1
+    retval=3
   fi
 
-  if [ "$retval" == "0" ]; then
+  # look for existing data
+#  DB_ENTRY=( "${DB_ENTRY//|/ }" )
+#  printf "DB_ENTRY array '${DB_ENTRY[@]}'\n"
+  # DB_PVER="${DB_ENTRY[4]}"
+#  DB_snapshot="${DB_ENTRY[6]}"
+
+#    if [ "${DB_SNAPSHOT}" == "" ]; then
+#      l_error "ERROR: need to provide a snapshot for first commit of database. Use --snapshot X. ex. rds:wov-aws-va-ant-db-alywandev-2017-07-17-07-20."
+#      fFailedDBConnection 3 $1
+#    fi
+#    DB_PVER=${WOV_PVER}
+#    DB_snapshot="${DB_SNAPSHOT}"
+#  else
+#    DB_snapshot="${DB_SNAPSHOT}"
+#    set -x
+#    #OLDIFS=$IFS
+#    #IFS='|'
+#    #DB_ENTRY=( $(echo "${DB_ENTRY[@]}") )
+#    #IFS=$OLDIFS
+#    DB_ENTRY=( "${DB_ENTRY//|/ }" )
+#    printf "DB_ENTRY array '${DB_ENTRY[@]}'\n"
+#    # DB_PVER="$( echo -e "${DB_ENTRY[4]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+#    # DB_snapshot="$( echo -e "${DB_ENTRY[6]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+#    DB_PVER="${DB_ENTRY[4]}"
+#    DB_snapshot="${DB_ENTRY[6]}"
+#    set +x
+#    if [ "${DB_SNAPSHOT}" != "" ]; then
+#      l_warn "  ... overwriting existing snapshot with '${DB_SNAPSHOT}'"
+#      DB_snapshot="${DB_SNAPSHOT}"
+#    fi
+#  fi
+#  echo "Using DB_snapshot ${DB_snapshot}"
+
+  if [ $retval -eq 0 ]; then
 
     # validate json file first
     R=$(cat ${WOV_BASEDIR}/wovtools/db/archive/$1.json | jq empty 2>&1) ; Re=$?
     if [ $Re != 0 ]; then
-      echo "${R}"
-      echo "ERROR: wovtools/db/archive/$1.json file is not valid JSON. Exiting."
+      l_ "${R}"
+      l_error "wovtools/db/archive/$1.json file is not valid JSON. Exiting."
       exit 3
     fi
 
@@ -377,15 +426,15 @@ function doCommitDB()
     CHKSUM=$(doHashDBSchema $1)
     DB_PVER=$(doGetDBPVER $1)
     if [ "$?" != "0" ]; then
-      printf "**ERROR: failed connecting to db.\n\n"
+      l_error "failed connecting to db."
       fFailedDBConnection 1 $1
     fi
 
-    echo "Chksum : ${CHKSUM}  DBPVER: ${DB_PVER}  PVER: ${WOV_PVER}"
+    l_ "Chksum : ${CHKSUM}  DBPVER: ${DB_PVER}  PVER: ${WOV_PVER}"
 
     # - 2 ----------------------------------------------------------------- 
     # --------------------------------------------------------------------- 
-    echo "  ... move deltas into archive"
+    l_ "  ... move deltas into archive"
 
     # append delta to file
     appendfile=${WOV_BASEDIR}/wovtools/db/archive/$1/${WOV_PVER}.deltas
@@ -399,7 +448,7 @@ function doCommitDB()
 EOF
     cat ${deltafile} >> ${appendfile}
 
-    echo "  ... cache deltas locally (in case of screw up): wovtools/cache/db/$1.${WOV_PVER}.$(date +%s).deltas"
+    l_ "  ... cache deltas locally (in case of screw up): wovtools/cache/db/$1.${WOV_PVER}.$(date +%s).deltas"
     mv ${deltafile} ${WOV_BASEDIR}/wovtools/cache/db/$1.${WOV_PVER}.$(date +%s).deltas
 
 
@@ -441,13 +490,14 @@ EOF
 
     # - 4. update archive database log pver number, snapshot, checksum ----
     # --------------------------------------------------------------------- 
-    echo "  ... update archive database logs"
-    R=$(wov-db $1 -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( '$1', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER}, '${DB_snapshot}' );")
-    if [ "$?" != "0" ]; then
-      printf "${R}"
-      printf "\n\nERROR: failed updating archive database pver number with checksum.\n"
-      fFailedDBConnection 3 $1
-    fi
+#    echo "  ... update archive database logs"
+#    R=$(wov-db $1 -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( '$1', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER}, '${DB_snapshot}' );")
+#    if [ "$?" != "0" ]; then
+#      printf "${R}"
+#      printf "\n\nERROR: failed updating archive database pver number with checksum.\n"
+#      fFailedDBConnection 3 $1
+#    fi
+    doUpdateDBArchiveLog "${1}" ${WOV_PVER} ${WOV_SVER} "${DB_snapshot}"
 
     # - 5. push db git repo
 
@@ -469,7 +519,7 @@ EOF
     fi
 
     if [ ${DOECHO} -ge 1 ]; then echo "    ... git commit Database Archive"; fi
-    git -C ${WOV_BASEDIR}/wovtools/db/archive commit -a ; Re=$?
+    git -C ${WOV_BASEDIR}/wovtools/db/archive commit -a -m "Version ${WOV_ME}_${WOV_PVER}" ; Re=$?
     if [ $Re != 0 ]; then
       echo "ERROR: failed to commit Database Archive git repo in: ${WOV_BASEDIR}/wovtools/db/archive"
       fFailedDBConnection 4 $1
@@ -511,7 +561,9 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == "--snapshot" ]; then
     shift
-    DB_SNAPSHOT=$1
+    doSetSnapshot $1 $2
+    echo "WovDB $1 SNAPSHOT $2"
+    shift
     shift
 
   elif [ "$1" == "--any-push-blockage" ] || [ "$1" == "-pc" ] || [ "$1" == "--push-check" ]; then
@@ -532,6 +584,7 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
+echo "WOV_DODEFAULTCOMMAND ${WOV_DODEFAULTCOMMAND} ${DOACTION}"
 if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
 
   # Load in env

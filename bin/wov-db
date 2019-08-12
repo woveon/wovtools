@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 function fDisplayOptions()
@@ -94,7 +93,7 @@ function doDBList()
 
 # Now check options
 # ---------------------------------------------------------------------
-. wov-env-ops fDisplayOptions $*
+. wov-env-ops fDisplayOptions "$@"
 
 # exit here to avoid importing all the rest
 if [ ${WOV_DODEFAULTCOMMAND} == 0 ]; then exit 0; fi
@@ -386,6 +385,27 @@ EOF
 EOF
   fi
 
+  l_ "  ...add to git"
+  local R=$(git -C ${WOV_BASEDIR}/wovtools/db/archive add ${WOVDBNAME}.json) ; Re=$?
+  if [ $Re != 0 ]; then
+    l_error "failed to add files to DB Archive. go to wovtools/db/archive and 'git status'"
+    l_warn "${R}"
+  fi
+
+  l_ "  ...git commit : git -C ${WOV_BASEDIR}/wovtools/db/archive commit -a -m \"Created wov db ${WOVDBNAME}\""
+  local R=$(git -C ${WOV_BASEDIR}/wovtools/db/archive commit -a -m "Created wov db ${WOVDBNAME}") ; Re=$?
+  if [ $Re != 0 ]; then
+    l_error "failed to commit DB Archive. go to wovtools/db/archive and 'git status'"
+    l_warn "${R}"
+  fi
+
+  l_ "  ... git push"
+  local R=$(git -C ${WOV_BASEDIR}/wovtools/db/archive push) ; Re=$?
+  if [ $Re != 0 ]; then
+    l_error "failed to push DB Archive. go to wovtools/db/archive and 'git status'"
+    l_warn "${R}"
+  fi
+
 }
 
 
@@ -431,7 +451,7 @@ function doDBGetLog()
 {
   local retval=1
 
-  R=$(PGPASSWORD=${DB_PASSWORD} psql -h localhost -d wovtools -p ${DB_PORT} -U ${DB_USERNAME} --tuples-only -c "SELECT * from logs order by id DESC;" 2> /dev/null ) ; Re=$?
+  R=$(PGPASSWORD=${DB_PASSWORD} psql -h localhost -d wovtools -p ${DB_PORT} -U ${DB_USERNAME} --tuples-only -c "SELECT * from logs order by id DESC LIMIT 1;" 2> /dev/null ) ; Re=$?
   if [ ${Re} == "0" ] ; then
     if [ "${R}" == "" ]; then echo "None"; 
     else echo $R; fi
@@ -548,23 +568,23 @@ while [[ $1 =~ ^- ]] && [ ${DOCONT} -eq 0 ]; do
   # Wov Database
   # ---------------------------------------------------------------------
 
-#  elif [ "$1" == "--wdb-init" ]; then
-#    shift
-#    WOVDBNAME="$1"
-#    doSetDBData
-#    shift
-#    doWovDBInit
-#    exit $?
-#    WOV_DODEFAULTCOMMAND=0
-#
-#  elif [ "$1" == "--wdb-create" ]; then
-#    shift
-#    WOVDBNAME="$1"
-#    doSetDBData
-#    shift
-#    doWovDBCreateIfMissing
-#    exit $?
-#    WOV_DODEFAULTCOMMAND=0
+  elif [ "$1" == "--wdb-init" ]; then
+    shift
+    WOVDBNAME="$1"
+    doSetDBData
+    shift
+    doWovDBInit
+    exit $?
+    WOV_DODEFAULTCOMMAND=0
+
+  elif [ "$1" == "--wdb-create" ]; then
+    shift
+    WOVDBNAME="$1"
+    doSetDBData
+    shift
+    doWovDBCreateIfMissing
+    exit $?
+    WOV_DODEFAULTCOMMAND=0
 
   # --------------------------------------------------------------------- 
   # Local Docker Postgres DB 
@@ -625,7 +645,6 @@ done
 # exit here to avoid importing all the rest
 if [ ${WOV_DODEFAULTCOMMAND} == 0 ]; then exit 0; fi
 
-
 # ---------------------------------------------------------------------
 # Get Wov Database from command line
 # 1st param might be Wov DB Name, if not, use default
@@ -634,8 +653,11 @@ if [[ $1 =~ ^- ]] || [ "${1}" == "" ]; then
 
   if [ "${#WOVDATABASES[@]}" -eq 1 ]; then
     WOVDBNAME="${WOVDATABASES[0]}"
+  elif [ "${#WOVDATABASES[@]}" -eq 0 ]; then
+    l_error "No Wov Database so can't assume name."
+    exit 1
   else
-    l_error "Multiple Wov Databases so can't assume. Need to provide the name on commandline."
+    l_error "Multiple Wov Databases so can't assume name. Need to provide the name on commandline."
     printf  "  : known Wov Databases : ${WOVDATABASES[@]}"
     exit 1
   fi
@@ -714,8 +736,9 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-c" ]; then
     shift
     DB_OP="command"
-    DB_COMMAND="$1" # ( $1 )
-    shift
+    DB_COMMAND=$*
+    l_verbose "DB_COMMAND '${DB_COMMAND}'"
+    set -- ""
 
   elif [ "$1" == "--schema" ]; then
     shift
@@ -780,15 +803,16 @@ while [[ $1 =~ ^- ]]; do
   # Wov Database
   # --------------------------------------------------------------------- 
 
-  elif [ "$1" == "--wdb-init" ]; then
-    shift
-    doWovDBInit
-    WOV_DODEFAULTCOMMAND=0
+#  elif [ "$1" == "--wdb-init" ]; then
+#    shift
+#    doWovDBInit
+#    WOV_DODEFAULTCOMMAND=0
+#
+#  elif [ "$1" == "--wdb-create" ]; then
+#    shift
+#    doWovDBCreateIfMissing
+#    WOV_DODEFAULTCOMMAND=0
 
-  elif [ "$1" == "--wdb-create" ]; then
-    shift
-    doWovDBCreateIfMissing
-    WOV_DODEFAULTCOMMAND=0
 
   elif [ "$1" == "--wdb-ver" ]; then
     shift
@@ -804,6 +828,13 @@ while [[ $1 =~ ^- ]]; do
     shift
     doDBEditDeltas
     exit 0
+
+#  elif [ "$1" == "--wdb-snapshot" ]; then
+#    shift
+#    DB_SNAPSHOT=$1
+#    # Create an entry in the log for that database
+#    echo "# Snapshot : ${DB_SNAPSHOT}" >> "${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}.deltas"
+#    shift
 
   # ---------------------------------------------------------------------
   # Database Server
@@ -916,6 +947,7 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
       #      PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\"
       #    fi
 
+      l_verbose "PGPASSWORD=XXX psql ${DB_HEADEROPTIONS} -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\""
       R=$(PGPASSWORD="${DB_PASSWORD}" psql ${DB_HEADEROPTIONS} -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"  2>&1 ) ; Re=$?
       #PGPASSWORD=${DB_PASSWORD} psql --tuples-only -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"
       if [ "${Re}" != "0" ]; then
