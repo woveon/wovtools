@@ -16,7 +16,7 @@ Creates a microservice Database Archive. Called by wov-init normally. By default
 EOF
 }
 
-. wov-env-ops fDisplayOptions $*
+. wov-env-ops fDisplayOptions "$@"
 
 # Temporary storage
 REPO=
@@ -104,21 +104,21 @@ EOF
 EOF
 
   echo "  ...add to Database Archive Git repo"
-  local R=$(git -C ${WOV_BASEDIR}/wovtools/db/archive add .gitignore) ; Re=$?
+  local R=$(git -C "${WOV_BASEDIR}/wovtools/db/archive" add .gitignore) ; Re=$?
   if [ $Re != 0 ]; then
     >&2 echo "ERROR: failed to add .gitignore to DB Archive. go to wovtools/db/archive and 'git status'"
     >&2 echo "  : ${R}"
   fi
 
   echo "  ...initial Database Archive Git commit"
-  local R=$(git -C ${WOV_BASEDIR}/wovtools/db/archive commit -a -m "Initial Database Archive Git Commit for: ${WOV_PROJECT}") ; Re=$?
+  local R=$(git -C "${WOV_BASEDIR}/wovtools/db/archive" commit -a -m "Initial Database Archive Git Commit for: ${WOV_PROJECT}") ; Re=$?
   if [ $Re != 0 ]; then
     >&2 echo "ERROR: failed to commit DB Archive. go to wovtools/db/archive and 'git status'"
     >&2 echo "  : ${R}"
   fi
 
   echo "  ...initial Database Archive Git push"
-  git -C "${WOV_BASEDIR}/wovtools/db/archive push"
+  git -C "${WOV_BASEDIR}/wovtools/db/archive" push
 }
 
 
