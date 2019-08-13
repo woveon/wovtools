@@ -318,8 +318,8 @@ function doSetSnapshot()
 {
   DB_snapshot="${2}"
   echo "# Snapshot : ${DB_snapshot}" >> "${WOV_BASEDIR}/wovtools/db/${1}.deltas"
-  wov-env -e
-  l__ "doUpdateDBArchiveLog with ${WOV_PVER} ${WOV_SVER}"
+  # wov-env -e
+  # l__ "doUpdateDBArchiveLog with ${WOV_PVER} ${WOV_SVER}"
   doUpdateDBArchiveLog "$1" "${WOV_PVER}" "${WOV_SVER}" "${2}"
 }
 
@@ -591,9 +591,9 @@ done
 if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
 
 #  echo "--- pre  ${WOV_PVER} ${WOV_WORKINGCONTEXT}"
-  wov-env --var PVER
-  wov-env --provider --exports
-  wov-env --var PVER
+  #wov-env --var PVER
+  #wov-env --provider --exports
+  #wov-env --var PVER
   # Load in env
   . <(wov-env --provider --exports)
   . wov-env-common
