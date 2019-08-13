@@ -70,7 +70,7 @@ Example Usage:
 
 EOF
 }
-. wov-env-ops fWovEnvDisplayOptions $*
+. wov-env-ops fWovEnvDisplayOptions "$@"
 
 
 ECHOMODE=0
@@ -154,14 +154,16 @@ function doSetContext
   #  - changes to kube config
   #  - newly merged wovtools/config.json|myconfig.json
   #  - wovtools/secrets directory has changes
+  #  - git commits that chagne PVER/SVER
   if [ ! -f "${WOV_SECRETFILE}" ] || 
      [ "$2" == 'true' ] ||
-     [ "${HOME}/.kube/config"            -nt "${WOV_SECRETFILE}" ] ||
-     [ "${WOV_CONFIGFILE_MERGED}"        -nt "${WOV_SECRETFILE}" ] || 
-     [ "${WOV_BASEDIR}/wovtools/secrets" -nt "${WOV_SECRETFILE}" ] ||
-     [ "${WOV_CONFIGFILE_MAIN}"          -nt "${WOV_SECRETFILE}" ] ||
-     [ "${WOV_CONFIGFILE_MINE}"          -nt "${WOV_SECRETFILE}" ] ||
-     [ "${WOV_BASEDIR}/.git/config"      -nt "${WOV_SECRETFILE}" ]; then
+     [ "${HOME}/.kube/config"                 -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_CONFIGFILE_MERGED}"             -nt "${WOV_SECRETFILE}" ] || 
+     [ "${WOV_BASEDIR}/wovtools/secrets"      -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_CONFIGFILE_MAIN}"               -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_CONFIGFILE_MINE}"               -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_BASEDIR}/wovtools/secrets/.git" -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_BASEDIR}/.git"                  -nt "${WOV_SECRETFILE}" ]; then
     
     # Builds files but does not import
     fBuildClusterSecrets force 
@@ -673,17 +675,6 @@ while [[ $1 =~ ^- ]]; do
     doSetContext "$1"
     shift
 
-  
-#  elif [ "$1" == '-c' ] || [ "$1" == '--cluster' ]; then
-#    shift
-#    doSetContext "$1-${WOV_NS}"
-#    shift
-#
-#  elif [ "$1" == '-n' ] || [ "$1" == '--namespace' ]; then
-#    shift
-#    doSetContext "${WOV_CLUSTER}-${1}"
-#    shift
-
   elif [ "$1" == '-p' ] || [ "$1" == '--provider' ]; then
     # build the context, building secrets as needed, and then source the secrets file
     ensureSetContext ${WOV_CONTEXT}
@@ -753,6 +744,7 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--clear-cluster-cache" ]; then
     shift
     doClearClusterCache
+    WOV_DODEFAULTCOMMAND=0
 
   elif [ "$1" == '--var' ]; then
     shift 
