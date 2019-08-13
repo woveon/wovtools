@@ -13,7 +13,7 @@ Creates a microservice boilerplate inside a project.
 EOF
 }
 
-. wov-env-ops fDisplayOptions $*
+. wov-env-ops fDisplayOptions "$@"
 
 
 

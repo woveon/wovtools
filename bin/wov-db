@@ -305,6 +305,7 @@ function doDatabaseConnectMessage()
   printf "\n\n"
   figlet "${WOV_NS}"
   printf "  DBServer : ${WOVDBNAME}\n"
+  printf "  Origin   : ${WOV_ORIGIN}\n"
   printf "  Type     : ${DB_TYPE}\n"
   printf "  User     : ${DB_USERNAME}\n"
   printf "  Host     : ${DB_HOST}\n"
@@ -828,7 +829,7 @@ while [[ $1 =~ ^- ]]; do
     doDBGetVer
     exit 0
 
-  elif [ "$1" == "--wdb-log" ]; then
+  elif [ "$1" == "--wdb-log" ] || [ "$1" == "--wdb-logs" ]; then
     shift
     doDBGetLog
     exit 0

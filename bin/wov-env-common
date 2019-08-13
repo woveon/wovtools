@@ -38,10 +38,12 @@ containsElement () {
 
 # ---------------------------------------------------------------------
 # Used to generate the path where CLuster configuration would sit in
-# the archive.
-#  ex. local path="`getRelativeArchivePath MyCluster`"
+# the Archive. 
+#  NOTE: The local Cluster Configuration is not generated with this.
+#        Use WOV_getClusterConfigDir for that.
+#  $1 - Cluster
 # ---------------------------------------------------------------------
-function getRelativeArchivePath()
+function WOV_getArchiveRelativePath()
 {
   echo "${1}/${WOV_PROJECT}/${WOV_STAGE}/${WOV_PVER}_${WOV_SVER}"
 }

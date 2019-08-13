@@ -48,7 +48,7 @@ EOF
 # --------------------------------------------------------------------- 
 # Import Env 
 # --------------------------------------------------------------------- 
-. wov-env-ops fDisplayOptions $*
+. wov-env-ops fDisplayOptions "$@"
 
 #pushcontainersargs=( "$@" )
 #set ""

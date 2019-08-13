@@ -22,7 +22,7 @@ Displays status of WovTools environment.
 EOF
 }
 
-. wov-env-ops fDisplayOptions $*
+. wov-env-ops fDisplayOptions "$@"
 
 SHOWPERSIST=1
 SHOWSYSTEM=1

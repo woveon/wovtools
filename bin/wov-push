@@ -1,33 +1,10 @@
 #!/usr/bin/env bash
 
-DOECHO=1
-DOFORCE=0
-FOLD=$(tput cols)
-BLOCK=0
-SKIPDBCHECKS=0
-
-# Force build as git won't force a change
-wov-env-build -q -f -c `wov-env --var WOV_CLUSTER`
-if [ "$?" != "0" ]; then
-  exit 1
-fi
-
-# ---------------------------------------------------------------------
-# Import Env
-# ---------------------------------------------------------------------
-pushargs=( "$@" )
-set ""
-. wov-env
-. wov-ns-check
-set -- "${pushargs[@]}"
-
-
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 function fDisplayOptions()
 {
   cat <<EOF | fold -w ${FOLD} -s
-
 
 usage: `basename $0` [options]
 
@@ -35,68 +12,86 @@ Formal push of a version into the archive. This is a macro command that pushes c
 
   --skip-db-checks : skip the checks for database inconsistencies (DB checks are slow)
 
+  --check : just do a bunch of checks first
+
   -h : this help
   -q/-v : quiet/verbose
 
 EOF
 }
-if [ "$1" == "-h" ] || [ "$1" == "--help" ]; then fDisplayOptions; exit 0; fi
+. wov-env-ops fDisplayOptions "$@"
+
+DOFORCE=0
+SKIPDBCHECKS=0
+
+# ---------------------------------------------------------------------
+# RETURNS: 0 on sucess, 1 on fail
+# ---------------------------------------------------------------------
+function doPushChecks()
+{
+  local retval=1
+
+#  l_ "  ... build cluster's environment (origin self)"
+#  wov-env-build -q -f --origin self --cluster
+#  if [ "$?" != "0" ]; then exit 1; fi
+
+  printf "\n"
+  figlet wov-push
+  printf " version: ${WOV_STAGE}_${WOV_PVER}_${WOV_SVER}\n\n"
 
 
-printf "\n"
-figlet wov-push
-printf " version: ${WOV_STAGE}_${WOV_PVER}_${WOV_SVER}\n\n"
+  l_ "  ...check namespace alignment"
+  pushargs=( "$@" )
+  set ""
+  . wov-ns-check
+  set -- "${pushargs[@]}"
 
 
-# Check all stagemods are off
-#ONSTAGEMODS=( $(jq -r '.stagemods[] | select(.status == "on") | .["name"]' ${WOV_BASEDIR}/wovtools/config.json ) )
-#if [[ "$ONSTAGEMODS" != "" ]]; then
-#  printf "\nERROR: turn off stagemods when pushing content.\n"
-#  printf "  active stagemods: ${ONSTAGEMODS[*]}\n\n"
-#  for sm in ${ONSTAGEMODS[@]}; do
-#    printf "  ex. wov-mod --off ${sm}\n"
-#  done
-#  printf "\n"
-#  exit 1
-#fi
+  l_ '  ...check local code is checked in and pushed'
+  wov-git-check ${WOV_BASEDIR}
+  R1=$?
+  wov-git-check ${WOV_BASEDIR}/wovtools/secrets
+  R2=$?
+  if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then 
+    printf "\nERROR: wov-push exiting.\n" 1>&2
+    exit 1
+  fi
 
-# Check local code is checked in and pushed
-wov-git-check ${WOV_BASEDIR}
-R1=$?
-wov-git-check ${WOV_BASEDIR}/wovtools/secrets
-R2=$?
-if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then 
-  printf "\nERROR: wov-push exiting.\n" 1>&2
-  exit 1
-fi
+  if [ "$SKIPDBCHECKS" != "1" ]; then
+    l_ "  ... check for database changes that could block the push"
+    wov-push-db -v --any-push-blockage
+    Re=$?
+    if [ "$Re" != 0 ]; then exit 1; fi
+  else
+    l_warn "Skipping check for database changes that could block the push"
+  fi
+
+  l_ "  ... wov-push-k8s check: ${WOV_ORIGIN}"
+  wov-push-k8s  --check ${WOV_METAARGS}
+  if [ "$?" != "0" ]; then
+    l_error "   ... wov-push-k8s check failed"
+    exit 1
+  fi
+
+  return $retval
+}
 
 
-
-
-METAARGS=""
 
 # ---------------------------------------------------------------------
 # Handle Params
 # ---------------------------------------------------------------------
 while [[ $1 =~ ^- ]]; do
 
-  if [ "$1" == "-q" ]; then
-    shift
-    DOECHO=0
-    METAARGS="${METAARGS} -q "
-
-  elif [ "$1" == "-v" ]; then
-    shift
-    DOECHO=2
-    METAARGS="${METAARGS} -v "
-
-  elif [ "$1" == "--skip-db-checks" ]; then
+  if [ "$1" == "--skip-db-checks" ]; then
     shift
     SKIPDBCHECKS=1
 
-  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-    fDisplayOptions
-    exit 0
+  elif [ "$1" == "--check" ]; then
+    shift
+    doPushChecks
+    exit $?
+    WOV_DEDEFAULTCOMMAND=0
 
   else
     echo
@@ -107,40 +102,32 @@ while [[ $1 =~ ^- ]]; do
   fi
 done
 
-if [ "$SKIPDBCHECKS" != "1" ]; then
-  echo "  ... check for database changes that could block the push"
-  wov-push-db -v --any-push-blockage
-  R3=$?
-  if [ "$R3" != 0 ]; then exit 1; fi
-else
-  echo "  ... WARNING: skipping check for database changes that could block the push"
-fi
 
-echo "  ... wov-push-k8s check"
-wov-push-k8s --check ${METAARGS}
-if [ "$?" != "0" ]; then
-  echo "   ... wov-push-k8s check failed"
-  exit 1
-fi
+if [ ${WOV_DODEFAULTCOMMAND} == 1 ]; then
 
-echo "  ... wov-push-container ${METAARGS}"
-wov-push-container ${METAARGS}
-if [ "$?" != "0" ]; then
-  echo "   ... wov-push-container failed"
-  exit 1
-fi
-echo "  ... wov-push-k8s ${METAARGS}"
-wov-push-k8s ${METAARGS}
-if [ "$?" != "0" ]; then
-  echo "   ... wov-push-k8s failed"
-  exit 1
-fi
+  doPushChecks
+  if [ $? != 0 ]; then l_error "Failed checks."; exit 1; fi
 
-echo "  ... wov-push-db ${METAARGS}"
-wov-push-db ${METAARGS}
-if [ "$?" != "0" ]; then
-  echo "   ... wov-push-db failed"
-  exit 1
-fi
+  l_ "  ... wov-push-container ${WOV_METAARGS}"
+  wov-push-container ${WOV_METAARGS}
+  if [ "$?" != "0" ]; then
+    l_error "   ... wov-push-container failed"
+    exit 1
+  fi
 
-echo "   ... wov-push success"
+  l_ "  ... wov-push-k8s ${WOV_METAARGS}"
+  wov-push-k8s ${WOV_METAARGS}
+  if [ "$?" != "0" ]; then
+    l_error "   ... wov-push-k8s failed"
+    exit 1
+  fi
+
+  l_ "  ... wov-push-db ${WOV_METAARGS}"
+  wov-push-db ${WOV_METAARGS}
+  if [ "$?" != "0" ]; then
+    l_error "   ... wov-push-db failed"
+    exit 1
+  fi
+
+  l_ "   ... wov-push success"
+fi

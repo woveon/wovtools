@@ -249,5 +249,5 @@ tr_tests_on
 }
 
 
-tr_results
 tr_popdir
+tr_results

@@ -24,7 +24,7 @@ EOF
 
 }
 
-. wov-env-ops fDisplayOptions $* 
+. wov-env-ops fDisplayOptions "$@"
 
 # ---------------------------------------------------------------------
 # Import Env

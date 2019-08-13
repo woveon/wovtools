@@ -35,7 +35,7 @@ EOF
 }
 
 
-. wov-env-ops fWovEnvBuildDisplayOptions $*
+. wov-env-ops fWovEnvBuildDisplayOptions "$@"
 
 HAS_SECRET=0
 HAS_CLEAN=0
@@ -238,7 +238,7 @@ EOF
     fullneedle=${!fullneedle}
     echo "" > ${WOV_SECRETFILE}.3${needle}
     chmod 600 ${WOV_SECRETFILE}.3${needle}
-    l_ "  ... replace needle    : ${fullneedle} => ${needle}"
+    l_verbose "  ... replace needle    : ${fullneedle} => ${needle}"
     wov_stage-select ${WOV_SECRETFILE}_ ${needle} ${fullneedle} >> ${WOV_SECRETFILE}.3${needle}
     if [ "$?" != "0" ]; then exit 1; fi
     ${MV} ${WOV_SECRETFILE}.3${needle}  ${WOV_SECRETFILE}_
@@ -264,7 +264,7 @@ EOF
     if [[ $DOECHO -ge 1 ]]; then echo "  ... using originmods  : ${WOV_CLUSTER}"; fi
 
     local rts=( $(jq -r '.originmods.'"${WOV_ORIGIN}"' | .routes[] | "\(.[0]) \(.[1])"' ${WOV_CONFIGFILE_MERGED} 2> /dev/null ) )
-    if [ $DOECHO -ge 2 ]; then echo "rts: ${#rts[@]} ${rts[@]}"; fi
+    #l_verbose "rts: ${#rts[@]} ${rts[@]}"
 
     # NOTE: doing this in order of entries
     while [[ "${#rts[@]}" != "0" ]]; do
@@ -321,7 +321,7 @@ EOF
     fullneedle=${!fullneedle}
     echo "" > ${WOV_SECRETFILE}.6${needle}
     chmod 600 ${WOV_SECRETFILE}.6${needle}
-    l_ "  ... clean needle      : ${fullneedle} => ${needle}"
+    l_verbose "  ... clean needle      : ${fullneedle} => ${needle}"
     wov_stage-select ${WOV_SECRETFILE}_ ${needle} ${fullneedle} clean >> ${WOV_SECRETFILE}.6${needle}
     if [ "$?" != "0" ]; then exit 1; fi
     ${MV} ${WOV_SECRETFILE}.6${needle}  ${WOV_SECRETFILE}_
@@ -503,7 +503,7 @@ fBuildCluster()
         fi
 
       else
-        if [ "$DOECHO" == "2" ]; then echo "  ... skipping ${SRC}"; fi
+        l_verbose "  ... no compile needed, skipping ${SRC}"
       fi
 
     done
@@ -526,7 +526,6 @@ fBuildCluster()
   fGetMicroserviceRecipes
   for f in "${RECIPES[@]}"; do
 
-
     # Create CM file to dump into and clear out
     # NOTE: if builing to CMFILE2, then all recipes would build that and only need to build once... TODO / OPTIMIZATION
     if [ $DOECHO -ge 2 ]; then echo "  ... review ConfigMap and Secret for '${f}${CONFEXT}'."; fi
@@ -546,13 +545,13 @@ fBuildCluster()
       rm -f ${CMFILE} || true
       touch ${CMFILE}
       chmod 600 ${CMFILE}
-      wov-env --cm ${f} >> ${CMFILE} 2>&1
+      wov-env --context ${WOV_WORKINGCONTEXT} --cm ${f} >> ${CMFILE} 2>&1
       local a=$?
       if [ "$a" == "1" ]; then
-        if [ $DOECHO -ge 2 ]; then printf "  ... skipping ${WOV_CLUSTER}/cm/${f}.\n"; fi
+        if [ $DOECHO -ge 1 ]; then l_error "Missing Config needed to generate ConfigMap for recipe ${f}  ... skipping ${WOV_CLUSTER}/cm/${f}.\n"; fi
         rm ${CMFILE} 
       elif [ "$a" == "2" ]; then
-        printf "ERROR: failed generating configmap in cluster: '${WOV_CLUSTER}' for: '${f}'.\n" >&2
+        l_error "Failed generating configmap in cluster: '${WOV_CLUSTER}' for: '${f}'.\n" >&2
         cat ${CMFILE}
         exit 1
       else
@@ -579,13 +578,13 @@ fBuildCluster()
       rm -f ${SEFILE} || true
       touch ${SEFILE}
       chmod 600 ${SEFILE}
-      wov-env --se ${f} >> ${SEFILE} 2>&1
+      wov-env --context ${WOV_WORKINGCONTEXT} --se ${f} >> ${SEFILE} 2>&1
       local a=$?
       if [ "$a" == "1" ]; then
-        if [ $DOECHO -ge 2 ]; then printf "  ... skipping ${WOV_CLUSTER}/se/${f}.\n"; fi
+        if [ $DOECHO -ge 1 ]; then l_error "Missing Config needed to generate K8s Secrets for recipe ${f}  ... skipping ${WOV_CLUSTER}/se/${f}.\n"; fi
         rm ${SEFILE} 
       elif [ "$a" == "2" ]; then
-        printf "ERROR: failed generating secret in cluster: '${WOV_CLUSTER}' for: '${f}'.\n" >&2
+        l_error "Failed generating K8s Secret in cluster: '${WOV_CLUSTER}' for: '${f}'.\n" >&2
         cat ${SEFILE}
         exit 1
       else

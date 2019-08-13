@@ -41,5 +41,5 @@ tr_section 'basic'
 }
 
 
-tr_results
 tr_popdir
+tr_results

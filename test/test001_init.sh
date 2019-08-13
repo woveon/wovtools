@@ -51,6 +51,19 @@ A description.
 
 
 STDIN
+  if [ $? != 0 ]; then
+    exit 1
+  fi
+# PROJECT
+# Remote git repository
+# User name
+# email
+# db test repo
+# title
+
+
+
+
   tr_section '/mk-proj'
 }
 
@@ -71,3 +84,4 @@ STDIN
 }
 
 tr_popdir
+tr_results

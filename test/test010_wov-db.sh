@@ -117,5 +117,5 @@ tr_run 'set origin to here' 'wov-env --set-origin here'
 }
 
 
-tr_results
 tr_popdir
+tr_results

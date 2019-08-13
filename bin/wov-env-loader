@@ -5,6 +5,10 @@
 #  NOTE: This does not contain secrets variables or do any importing. 
 # --------------------------------------------------------------------- 
 
+#if [ "${WOV_VERSION}" != "" ]; then
+#  >&2 echo "NOTE(`basename $0`:${BASH_LINENO}) ${WOV_ORIGIN}: wov-env-loader called again..."
+#fi
+
 # --------------------------------------------------------------------- 
 # Versions
 # --------------------------------------------------------------------- 
@@ -94,6 +98,16 @@ export WOV_CONFIGFILE_MAINRAW="${WOV_BASEDIR}/${WOV_CONFIGFILE_MAIN}"
 export WOV_CONFIGFILE_MINERAW="${WOV_BASEDIR}/${WOV_CONFIGFILE_MINE}"
 export WOV_CONFIGFILE_MERGED="${WOV_CACHEDIR}/.merged.json"
 SED=`which gsed`
+
+# --------------------------------------------------------------------- 
+# Used for generating paths to Cluster Configurations that include 
+# origin and context.
+# $1 WOV_ORIGIN, $2 WOV_CONTEXT
+# --------------------------------------------------------------------- 
+function WOV_getClusterConfigDir()
+{
+  echo "${WOV_CACHEDIR}/clusters/${1}__${2}"
+}
 
 function getWovProjectVars() 
 {
@@ -211,7 +225,7 @@ function getWovProjectVars()
   export WOV_CONTEXT="${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}-${WOV_KPROJECT}-${WOV_KSTAGE}"
   export WOV_CLUSTER="${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}"
   export WOV_WORKINGCONTEXT="${WOV_ORIGIN}:${WOV_CONTEXT}"
-#  echo "WOV_ORIGIN: ${WOV_ORIGIN}"
+#  >&2 echo "WOV_ORIGIN: ${WOV_ORIGIN}"
 #  echo "WOV_CONTEXT: ${WOV_CONTEXT}"
 #  echo "WOV_WORKINGCONTEXT: ${WOV_WORKINGCONTEXT}"
 
@@ -228,11 +242,13 @@ function getWovProjectVars()
   # --------------------------------------------------------------------- 
   # vars computed from above
   # --------------------------------------------------------------------- 
-  export WOV_CLUSTERDIR="${WOV_CACHEDIR}/clusters/${WOV_ORIGIN}__${WOV_CONTEXT}"
-#  mkdir -m 700 -p ${WOV_SECRETFILE_path}
+  # export WOV_CLUSTERDIR="${WOV_CACHEDIR}/clusters/${WOV_ORIGIN}__${WOV_CONTEXT}"
+  export WOV_CLUSTERDIR="$(WOV_getClusterConfigDir ${WOV_ORIGIN} ${WOV_CONTEXT})"
+  # mkdir -m 700 -p ${WOV_SECRETFILE_path}
   export WOV_SECRETFILE=${WOV_CLUSTERDIR}/config.json
 
 }
+
 
 # if it is set to 0, skip, and all other cases load it up
 if [ "${ISWOVPROJECT}" == "0" ]; then ISWOVPROJECT=${ISWOVPROJECT}; else getWovProjectVars; fi

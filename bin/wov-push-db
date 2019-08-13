@@ -23,8 +23,8 @@ By default, checks all database delta files that exist.
 Switches:
   --checksum
   --skip-git-checks  : ignores unchecked git changes of secrets and code (dev and prod stages will override this). Does not skip archive checks.
-  --snapshot X : a snapshot to use for this push (i.e. a new checkpoint, not a delta)
-  -pc|--push-check|--any-push-blockage : checks if the database changes are checked in for pver, and ready to push to archive
+  --snapshot WOVDB SNAPSHOT : a snapshot to use for this push, for this Wov DB (i.e. a new checkpoint, not a delta)
+  --check|-pc|--push-check|--any-push-blockage : checks if the database changes are checked in for pver, and ready to push to archive
   -h : this help
   -q/-v : quiet/verbose
 
@@ -35,7 +35,7 @@ EOF
 # ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
-. wov-env-ops fDisplayOptions $*
+. wov-env-ops fDisplayOptions "$@"
 
 DOFORCE=0
 DOACTION="commit"
@@ -288,7 +288,7 @@ function doCommit()
   #   database using that pver.
   R=$(wov-git-check ${WOV_BASEDIR})
   if [ "$?" != "0" ] && [ $SKIPGITCHECKS -eq 0 ]; then
-    printf "\n\nERROR: check in main git repo, then continue with $1.\n"
+    printf "\n\nERROR: check in main git repo, then continue with commit.\n"
     fFailedDBConnection 1
     exit 1
   fi
@@ -318,6 +318,8 @@ function doSetSnapshot()
 {
   DB_snapshot="${2}"
   echo "# Snapshot : ${DB_snapshot}" >> "${WOV_BASEDIR}/wovtools/db/${1}.deltas"
+  wov-env -e
+  l__ "doUpdateDBArchiveLog with ${WOV_PVER} ${WOV_SVER}"
   doUpdateDBArchiveLog "$1" "${WOV_PVER}" "${WOV_SVER}" "${2}"
 }
 
@@ -370,7 +372,7 @@ function doCommitDB()
     l_error "***ERROR: database not inited."
     fFailedDBConnection 1 $1
   fi
-  printf "\nDB_ENTRY '${DB_ENTRY}'\n"
+  #printf "\nDB_ENTRY '${DB_ENTRY}'\n"
 
   # should have been at least a snapshot entry
   if [ "${DB_ENTRY}" == "" ]; then
@@ -497,6 +499,7 @@ EOF
 #      printf "\n\nERROR: failed updating archive database pver number with checksum.\n"
 #      fFailedDBConnection 3 $1
 #    fi
+    l__ "doUpdateDBArchiveLog with ${WOV_PVER} ${WOV_SVER}"
     doUpdateDBArchiveLog "${1}" ${WOV_PVER} ${WOV_SVER} "${DB_snapshot}"
 
     # - 5. push db git repo
@@ -562,11 +565,11 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--snapshot" ]; then
     shift
     doSetSnapshot $1 $2
-    echo "WovDB $1 SNAPSHOT $2"
+    # echo "WovDB $1 SNAPSHOT $2"
     shift
     shift
 
-  elif [ "$1" == "--any-push-blockage" ] || [ "$1" == "-pc" ] || [ "$1" == "--push-check" ]; then
+  elif [ "$1" == "--any-push-blockage" ] || [ "$1" == "-pc" ] || [ "$1" == "--push-check" ] || [ "$1" == "--check" ]; then
     shift
     DOACTION="check"
 
@@ -584,14 +587,19 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
-echo "WOV_DODEFAULTCOMMAND ${WOV_DODEFAULTCOMMAND} ${DOACTION}"
+#echo "WOV_DODEFAULTCOMMAND ${WOV_DODEFAULTCOMMAND} ${DOACTION}"
 if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
 
+#  echo "--- pre  ${WOV_PVER} ${WOV_WORKINGCONTEXT}"
+  wov-env --var PVER
+  wov-env --provider --exports
+  wov-env --var PVER
   # Load in env
   . <(wov-env --provider --exports)
   . wov-env-common
   . wov-push-common
   . wov-db-common
+#  echo "--- post ${WOV_PVER} ${WOV_WORKINGCONTEXT}"
 
   # For dev and prod, check local code and secrets are checked in and pushed.
   doGitChecksOnFormalStages 1

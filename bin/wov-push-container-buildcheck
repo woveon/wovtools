@@ -38,7 +38,7 @@ EOF
 # ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
-. wov-env-ops fDisplayOptions $*
+. wov-env-ops fDisplayOptions "$@"
 . wov-push-common
 
 
@@ -156,8 +156,8 @@ function fCheckForRemoteImage()
       fi
     fi
   else
-    printf "\n\nERROR: Unknown provider to check (only AWS known in wov-pushcontainer-check).\n" 1>&2&
-    printf "    NOTE: sohuld be an easy fix for regular git!\n\n" 1>&2
+    l_error "Unknown provider to check '${WOV_ARCHIVEREPOSITORY}' (only AWS known in wov-pushcontainer-check).\n"
+    l_error "  :   NOTE: should be an easy fix for regular git!"
     retval=101
   fi
 

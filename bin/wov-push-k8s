@@ -11,6 +11,10 @@ usage: `basename $0` [options]
 
 Pushes the Kubernetes files to the archive. Makes sure they are built and then pushes the conf and k8s to the Archive, from which we can deploy. This works with pushing secrets and containers into the Archive (which is actually several storage mediums).
 
+ COMMANDS:
+  --push
+  --check 
+
   --conf-ext    : extension to the default conf file (ex. foo/conf/cm/apisocket -> foo/conf/cm/apisocket-vh with --conf-ext '-vh')
 #  --nogitchecks : turns off the checks for changes to local code
 
@@ -25,7 +29,8 @@ EOF
 # ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
-. wov-env-ops fDisplayOptions $*
+. wov-env-ops fDisplayOptions "$@"
+wov-env-build --origin self --cluster
 
 RESULT=0
 COMMAND="push"
@@ -54,46 +59,43 @@ function doPushClusterToArchiveChecks()
 {
   local retval=0
 
-  if [ "${WOV_ORIGIN}" != "self" ]; then
-    l_warn "Cannot push Cluster Configuration to Archive that is not set to Origin self. WOV_ORIGIN is '${WOV_ORIGIN}'"
-    retval=1
-  else
-    local ARCHPATH="`getRelativeArchivePath ${WOV_CLUSTER}`"
+  # Using already built configuration with ORIGIN of self, use that when testing things below
+  local PUSH_CLUSTERDIR="$(WOV_getClusterConfigDir self ${WOV_CONTEXT})"
 
-    for ms in ${RECIPES[@]}; do
+  for ms in ${RECIPES[@]}; do
 
-      # each ms should have a cm
-      if [ ! -e "${WOV_CLUSTERDIR}/cm/${ms}" ]; then
-        l_warn "microservice '${ms}' has no K8s ConfigMap file.";
-        retval=1;
-      fi
-
-      # each microservice should have a secrets file
-      if [ ! -e "${WOV_CLUSTERDIR}/se/${ms}" ]; then
-        l_warn "microservice '${ms}' has no K8s Secrets file.";
-        retval=1;
-      fi
-
-      # each microservice should have a k8s deployment file
-      if [ ! -e "${WOV_CLUSTERDIR}/k8s/${ms}.yaml" ]; then
-        l_warn "microservice '${ms}' has no K8s Deployment file.";
-        retval=1;
-      fi
-
-      # each microservice should have a k8s service file
-      if [ ! -e "${WOV_CLUSTERDIR}/k8s/${ms}-service.yaml" ]; then
-        l_warn "microservice '${ms}' has no K8s Service file.";
-        retval=1;
-      fi
-
-    done
-
-    # each cluster should have a k8s ingress file
-    if [ ! -e "${WOV_CLUSTERDIR}/k8s/${WOV_PROJECT}-ingress.yaml" ]; then
-      l_warn "project '${WOV_PROJECT}' has no K8s Ingress file ${WOV_PROJECT}-ingress.yaml.";
+    # each ms should have a cm
+    if [ ! -e "${PUSH_CLUSTERDIR}/cm/${ms}" ]; then
+      l_warn "microservice '${ms}' has no K8s ConfigMap file in ${PUSH_CLUSTERDIR}/cm/${ms}";
       retval=1;
     fi
+
+    # each microservice should have a secrets file
+    if [ ! -e "${PUSH_CLUSTERDIR}/se/${ms}" ]; then
+      l_warn "microservice '${ms}' has no K8s Secrets file.";
+      retval=1;
+    fi
+
+    # each microservice should have a k8s deployment file
+    if [ ! -e "${PUSH_CLUSTERDIR}/k8s/${ms}.yaml" ]; then
+      l_warn "microservice '${ms}' has no K8s Deployment file.";
+      retval=1;
+    fi
+
+    # each microservice should have a k8s service file
+    if [ ! -e "${PUSH_CLUSTERDIR}/k8s/${ms}-service.yaml" ]; then
+      l_warn "microservice '${ms}' has no K8s Service file.";
+      retval=1;
+    fi
+
+  done
+
+  # each cluster should have a k8s ingress file
+  if [ ! -e "${PUSH_CLUSTERDIR}/k8s/${WOV_PROJECT}-ingress.yaml" ]; then
+    l_warn "project '${WOV_PROJECT}' has no K8s Ingress file ${WOV_PROJECT}-ingress.yaml.";
+    retval=1;
   fi
+  #  fi
 
   return $retval
 }
@@ -104,25 +106,51 @@ function doPushClusterToArchiveChecks()
 # ---------------------------------------------------------------------
 function doPushClusterToArchive() 
 {
-  local ARCHPATH="`getRelativeArchivePath ${WOV_CLUSTER}`"
+  local R=
+  local Re=
 
+  if [ "${WOV_ARCHIVEENV}" == "" ]; then
+    l_error "No WOV_ARCHIVEENV set. Update your '${WOV_CONFIGFILE_MAIN}' file's '.archive.env' entry."
+    exit 1
+  fi
 
-  # already set and built by now
-  #l_  "  ... building cluster configuration: '${WOV_CLUSTER}'"
-  #wov-env-build -q --cluster ${CLUSTER}
-  #A=$?
-  #if [ "$A" != "0" ]; then exit $A; fi
+  # Using already built configuration with ORIGIN of self, use that when testing things below
+  local ARCHPATH="$(WOV_getArchiveRelativePath ${WOV_CLUSTER})"
+  local PUSH_CLUSTERDIR="$(WOV_getClusterConfigDir self ${WOV_CONTEXT})"
+
+  if [ ! -e "${PUSH_CLUSTERDIR}" ]; then
+    l_error "Can not push Cluster Config for ${WOV_WORKINGCONTEXT}. Dir '${PUSH_CLUSTERDIR}' does not exist."
+    exit 1
+  fi
 
   l_ "  ... pushing to archive: '${WOV_ARCHIVEENV}/${ARCHPATH}'"
-  l_verbose "$(cd ${WOV_CLUSTERDIR} ; ls -d * */* )"
-  R=$(cd ${WOV_CLUSTERDIR} ; aws s3 sync cm  ${WOV_ARCHIVEENV}/${ARCHPATH}/cm  --delete)
-  if [ "${R}" != "" ]; then printf "$R\n"; fi
-  R=$(cd ${WOV_CLUSTERDIR} ; aws s3 sync se  ${WOV_ARCHIVEENV}/${ARCHPATH}/se  --delete)
-  if [ "${R}" != "" ]; then printf "$R\n"; fi
-  R=$(cd ${WOV_CLUSTERDIR} ; aws s3 sync k8s ${WOV_ARCHIVEENV}/${ARCHPATH}/k8s --delete)
-  if [ "${R}" != "" ]; then printf "$R\n"; fi
+  # l_verbose "$(cd ${WOV_CLUSTERDIR} ; ls -d * */* )"
 
-  l_ "  ... success"
+  R=$(cd ${PUSH_CLUSTERDIR} ; aws s3 sync cm  "${WOV_ARCHIVEENV}/${ARCHPATH}/cm"  --delete) ; Re=$?
+  if [ $Re -ne 0 ] ; then
+    l_error "${R}"
+    l_error "Failed pushing to AWS S3."
+    l_error " SRC : ${PUSH_CLUSTERDIR}"
+    l_error " DEST: ${WOV_ARCHIVEENV}/${ARCHPATH}/cm"
+    exit 1
+  fi
+  R=$(cd ${PUSH_CLUSTERDIR} ; aws s3 sync se  ${WOV_ARCHIVEENV}/${ARCHPATH}/se  --delete) ; Re=$?
+  if [ $Re -ne 0 ] ; then
+    l_error "${R}"
+    l_error "Failed pushing to AWS S3."
+    l_error " SRC : ${PUSH_CLUSTERDIR}"
+    l_error " DEST: ${WOV_ARCHIVEENV}/${ARCHPATH}/cm"
+    exit 1
+  fi
+  R=$(cd ${PUSH_CLUSTERDIR} ; aws s3 sync k8s ${WOV_ARCHIVEENV}/${ARCHPATH}/k8s --delete) ; Re=$?
+  if [ $Re -ne 0 ] ; then
+    l_error "${R}"
+    l_error "Failed pushing to AWS S3."
+    l_error " SRC : ${PUSH_CLUSTERDIR}"
+    l_error " DEST: ${WOV_ARCHIVEENV}/${ARCHPATH}/cm"
+    exit 1
+  fi
+
 }
 
 
@@ -147,13 +175,13 @@ function doPushK8sPush()
     l_error "Skipping push due to warnings."
     retval=2
   else
-    echo "Push to Archive for Cluster: $WOV_CLUSTER"
+    l_verbose "Push to Archive for Cluster: $WOV_CLUSTER"
     doPushClusterToArchive
     retval=$?
     if [ $? != 0 ]; then
       l_error "  ... failed"
     else
-      l_ "  ... success"
+      l__ "  ... success"
     fi
   fi
   return $retval
@@ -232,17 +260,17 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
   doGitChecksOnFormalStages 1
   RESULT=$?
 
-  if [ $RESULT -eq 0 ]; then
-    l_verbose "  ... ensure WOV_ORIGIN is to self."
-    if [ "${WOV_ORIGIN}" != "self" ]; then
-      l_warn "Cannot push Cluster Configuration to Archive that is not set to Origin self. WOV_ORIGIN is '${WOV_ORIGIN}'"
-      RESULT=1
-    fi
-  fi
+  #if [ $RESULT -eq 0 ]; then
+  #  l_verbose "  ... ensure WOV_ORIGIN is to self."
+  #  if [ "${WOV_ORIGIN}" != "self" ]; then
+  #    l_warn "Cannot push Cluster Configuration to Archive that is not set to Origin self. WOV_ORIGIN is '${WOV_ORIGIN}'"
+  #    RESULT=1
+  #  fi
+  #fi
 
   if [ $RESULT -eq 0 ]; then
     l_verbose "  ... make sure cluster information is built."
-    wov-env-build --cluster
+    wov-env-build -q -f --origin self --cluster
     RESULT=$?
   fi
 

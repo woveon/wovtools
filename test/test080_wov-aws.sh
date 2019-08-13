@@ -9,5 +9,5 @@ tr_vverbose
 tr_dir test1
 tr_test "Convert Region Code" 'wov-aws --convertrc va' 0 1 "us-east-1"
 
-tr_results
 tr_popdir
+tr_results
