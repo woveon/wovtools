@@ -181,7 +181,7 @@ function doPushK8sPush()
     if [ $? != 0 ]; then
       l_error "  ... failed"
     else
-      l__ "  ... success"
+      l_ "  ... success"
     fi
   fi
   return $retval

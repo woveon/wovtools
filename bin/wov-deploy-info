@@ -1,26 +1,5 @@
 #!/usr/bin/env bash
 
-DOECHO=1
-DOFORCE=0
-FOLD=`tput cols`
-
-
-# --------------------------------------------------------------------- 
-# Import Env 
-# --------------------------------------------------------------------- 
-#wov-env-build -q --local
-#if [ "$?" != "0" ]; then
-#  exit 1
-#fi
-pushenvargs=( "$@" )
-set ""
-. wov-env #--provider
-. wov-ns-check
-set -- "${pushenvargs[@]}"
-
-
-
-
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 function fDisplayOptions()
@@ -44,48 +23,41 @@ Shows information of a running project.
 EOF
 }
 
+. wov-env-ops fDisplayOptions "$@"
 
+
+
+
+NS=$(kubectl get namespace ${WOV_NS} -o json) ; Re=$?
+if [ $Re -ne 0 ]; then
+  l_error "Failed to connect to deployment: ${WOV_CONTEXT}"
+  exit 1
+fi
 
 # ---------------------------------------------------------------------
 # Handle Params
 # ---------------------------------------------------------------------
 while [[ $1 =~ ^- ]]; do
 
-  if [ "$1" == "-q" ]; then
+  if [ "$1" == "--pver" ]; then
     shift
-    DOECHO=0
-
-  elif [ "$1" == "--pver" ]; then
-    shift
-    kubectl get namespace ${WOV_NS} -o json | jq -r '.metadata.labels.WOV_PVER'
+    echo "${NS}" | jq -r '.metadata.labels.WOV_PVER'
 
   elif [ "$1" == "--sver" ]; then
     shift
-    kubectl get namespace ${WOV_NS} -o json | jq -r '.metadata.labels.WOV_SVER'
+    echo "${NS}" | jq -r '.metadata.labels.WOV_SVER'
 
   elif [ "$1" == "--deployed" ]; then
     shift
-    kubectl get namespace ${WOV_NS} -o json | jq -r '.metadata.labels.WOV_DEPLOYED'
+    echo "${NS}" | jq -r '.metadata.labels.WOV_DEPLOYED'
 
   elif [ "$1" == "--deployed-hr" ]; then  # human readable
     shift
-    date -j -r $(kubectl get namespace ${WOV_NS} -o json | jq -r '.metadata.labels.WOV_DEPLOYED')
+    date -j -r $(echo "${NS}" | jq -r '.metadata.labels.WOV_DEPLOYED')
 
   elif [ "$1" == "--meta" ]; then
     shift
-    kubectl get namespace ${WOV_NS} -o json | jq -r '.metadata.labels'
-
-  elif [ "$1" == "-v" ]; then
-    shift
-    DOECHO=2
-
-  elif [ "$1" == "-f" ]; then
-    shift
-    DOFORCE=1
-
-  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-    fDisplayOptions
-    exit 0
+    echo "${NS}" | jq -r '.metadata.labels'
 
   else
     echo

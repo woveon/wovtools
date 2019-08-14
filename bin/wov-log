@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
 
-DOECHO=1
-FOLD=$(tput cols)
-NAMESPACE=
-
-
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 function fDisplayOptions()
@@ -18,11 +13,10 @@ This logs a pod, using a curses UI to select.
   -h                  : this help
   -q/-v               : quiet/verbose
   
-  -n/--namespace/--ns : select another namespace
-
-
 EOF
 }
+
+. wov-env-ops fDisplayOptions "$@"
 
 
 
@@ -43,11 +37,6 @@ while [[ $1 =~ ^- ]]; do
     fDisplayOptions
     exit 0
 
-  elif [ "$1" == "-n" ] || [ "$1" == "--ns" ] || [ "$1" == "--namespace" ]; then
-    shift
-    NAMESPACE=" -n $1 "
-    shift
-
   else
     echo
     echo "***ERROR: unknown option '$1'."
@@ -60,7 +49,7 @@ done
 
 
 
-PODS=( $(kubectl get pods ${NAMESPACE} --no-headers=true) )
+PODS=( $(kubectl -n ${WOV_NS} get pods --no-headers=true) )
 echo "PODS: ${PODS[@]}"
 
 RL=""
@@ -83,8 +72,8 @@ done
 # exec 3>&1; result=$(dialog --keep-tite --title 'Log Pod' --radiolist 'Select a pod to log' 15 80 6 ${RL} 2>&1 1>&3); ret=$? ; exec 3>&-
 exec 3>&1; result=$(dialog --keep-tite --title 'Log Pod' --menu 'Select a pod to log' 15 80 6 ${RL} 2>&1 1>&3); ret=$? ; exec 3>&-
 if [ "$ret" == "0" ]; then
-  kubectl ${NAMESPACE} describe pod $result
-  kubectl ${NAMESPACE} logs -f $result
+  kubectl -n ${WOV_NS} describe pod $result
+  kubectl -n ${WOV_NS} logs -f $result
 else
   exit $ret
 fi

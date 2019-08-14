@@ -8,6 +8,9 @@ if [ "${WOV_ENV_COMMONCMDS}" != "1" ]; then
   WOV_ENV_COMMONCMDS="1"
     # --- block this being called multiple times
 
+  WOV_DEBUGMODE=${WOV_DEBUGMODE}
+    # --- spew file/line numbers in debug mode
+
   DOECHO=1
     # --- output spew levels: 0 - quiet, 1 - normal, 2 - verbose
 
@@ -30,27 +33,33 @@ if [ "${WOV_ENV_COMMONCMDS}" != "1" ]; then
   # Typical logging
   function l_()
   {
-    if [ ${DOECHO} -ge 1 ]; then echo "${*}"; fi
-  }
-  # Logging with line number/file
-  function l__()
-  {
-    if [ ${DOECHO} -ge 1 ]; then echo "(`basename $0`:${BASH_LINENO}): ${*}"; fi
+    if [ ${DOECHO} -ge 1 ]; then 
+      if [ "${WOV_DEBUGMODE}" == "1" ]; then
+        echo "(`basename $0`:${BASH_LINENO}): ${*}"
+      else
+        echo "${*}"
+      fi
+    fi
   }
   # Verbose logging
   function l_verbose()
   {
-    if [ ${DOECHO} -ge 2 ]; then echo "(`basename $0`:${BASH_LINENO}): ${*}"; fi
+    if [ ${DOECHO} -ge 2 ]; then 
+      if [ "${WOV_DEBUGMODE}" == "1" ]; then echo "(`basename $0`:${BASH_LINENO}): ${*}";
+      else echo "${*}"; fi
+    fi
   }
   # Error logging
   function l_error()
   {
-    echo "ERROR  (`basename $0`:${BASH_LINENO}): ${*}"
+    if [ "${WOV_DEBUGMODE}" == "1" ]; then echo "(`basename $0`:${BASH_LINENO})ERROR  : ${*}";
+    else echo "ERROR  ${*}"; fi
   }
   # Warning logging
   function l_warn()
   {
-    echo "WARNING(`basename $0`:${BASH_LINENO}): ${*}"
+    if [ "${WOV_DEBUGMODE}" == "1" ]; then echo "(`basename $0`:${BASH_LINENO})WARNING: ${*}";
+    else echo "WARNING${*}"; fi
   }
 
   # ---------------------------------------------------------------------
@@ -65,6 +74,10 @@ if [ "${WOV_ENV_COMMONCMDS}" != "1" ]; then
         shift
         DOECHO=0
         WOV_METAARGS="${WOV_METAARGS} -q "
+
+      elif [ "$1" == "--debug" ]; then
+        shift
+        export WOV_DEBUGMODE=1
 
       elif [ "$1" == "-v" ]; then
         shift

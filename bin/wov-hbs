@@ -73,9 +73,11 @@ readInputStream(process.stdin, function(err, tmpl) {
   */
 
   /**
-   * @param {String} tmpl - template
-   * @param {Object} args - arguments to it
-   * @return {String}
+   * Runs the templating engine.
+   *
+   * @param {string} tmpl - template
+   * @param {object} args - arguments to it
+   * @return {string} -
    */
   function handle(tmpl, args) {
 
@@ -84,6 +86,9 @@ readInputStream(process.stdin, function(err, tmpl) {
       let f = fs.readFileSync(file); // eslint-disable-line security/detect-non-literal-fs-filename
       return handle(f, context);
     });
+
+    h.registerHelper('toLowerCase', function(_str) { return _str.toLowerCase(); });
+    h.registerHelper('lc', function(_str) { return _str.toLowerCase(); });
 
     // https://code-maven.com/handlebars-conditionals
     h.registerHelper('if_eq', function(a, b, opts) {

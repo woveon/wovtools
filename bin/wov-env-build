@@ -545,13 +545,14 @@ fBuildCluster()
       rm -f ${CMFILE} || true
       touch ${CMFILE}
       chmod 600 ${CMFILE}
-      wov-env --context ${WOV_WORKINGCONTEXT} --cm ${f} >> ${CMFILE} 2>&1
+      wov-env --context ${WOV_WORKINGCONTEXT} --cm ${f} 2> /dev/null  >> ${CMFILE}
+      # wov-env --context ${WOV_WORKINGCONTEXT} --cm ${f} >> ${CMFILE} 2>&1
       local a=$?
       if [ "$a" == "1" ]; then
         if [ $DOECHO -ge 1 ]; then l_error "Missing Config needed to generate ConfigMap for recipe ${f}  ... skipping ${WOV_CLUSTER}/cm/${f}.\n"; fi
         rm ${CMFILE} 
       elif [ "$a" == "2" ]; then
-        l_error "Failed generating configmap in cluster: '${WOV_CLUSTER}' for: '${f}'.\n" >&2
+        l_error "Failed generating configmap in cluster: '${WOV_CLUSTER}' for: '${f}'.\n"
         cat ${CMFILE}
         exit 1
       else
@@ -578,13 +579,13 @@ fBuildCluster()
       rm -f ${SEFILE} || true
       touch ${SEFILE}
       chmod 600 ${SEFILE}
-      wov-env --context ${WOV_WORKINGCONTEXT} --se ${f} >> ${SEFILE} 2>&1
+      wov-env --context ${WOV_WORKINGCONTEXT} --se ${f} 2> /dev/null >> ${SEFILE}
       local a=$?
       if [ "$a" == "1" ]; then
         if [ $DOECHO -ge 1 ]; then l_error "Missing Config needed to generate K8s Secrets for recipe ${f}  ... skipping ${WOV_CLUSTER}/se/${f}.\n"; fi
         rm ${SEFILE} 
       elif [ "$a" == "2" ]; then
-        l_error "Failed generating K8s Secret in cluster: '${WOV_CLUSTER}' for: '${f}'.\n" >&2
+        l_error "Failed generating K8s Secret in cluster: '${WOV_CLUSTER}' for: '${f}'.\n"
         cat ${SEFILE}
         exit 1
       else

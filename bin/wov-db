@@ -908,6 +908,12 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
 
     elif [ "${DB_OP}" == "schemadiff" ]; then
 
+      if [ "${SCHEMADIFFVER}" == "" ]; then
+        SCHEMADIFFVER=$(wov-db ${WOVDBNAME} --wdb-ver) ; Re=$?
+        if [ $Re -ne 0 ]; then l_error "Failed to get Wov Database version. Is it inited?"; exit 1; fi
+        l_verbose "  ... using version ${SCHEMADIFFVER}"
+      fi
+
       SDF="${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}/schemas/${SCHEMADIFFVER}.schema"
       if [ ! -e ${SDF} ]; then echo "ERROR: no schema for database '${WOVDBNAME}', schema version '${SCHEMADIFFVER}'."; exit 1; fi
 
@@ -916,12 +922,15 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
       touch ${SDF1}
       chmod 600 ${SDF1}
 
+      l_verbose "  ...grabbing schema"
       PGPASSWORD="${DB_PASSWORD}" pg_dump -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -s >> ${SDF1} ; Re=$?
       if [ $Re != 0 ]; then
         showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n"
         exit 1
       fi
+      l_verbose "  ...diff current '${WOVDBNAME}' to version: ${SCHEMADIFFVER}"
       diff ${SDF} ${SDF1}
+      if [ $? == 0 ]; then l_ 'No differences'; fi
       rm ${SDF1}
 
     elif [ "${DB_OP}" == "schemahash" ]; then

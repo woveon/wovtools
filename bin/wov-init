@@ -266,8 +266,6 @@ fi
   fi
 
 
-
-
   # ---------------------------------------------------------------------
   # Create branches
 
@@ -415,6 +413,35 @@ EOF
   "${WOV_PROJECT}db" : { "STAGE${WOV_ME}" : { "//" : "Separate database, should use separate user/pass", "database" : "${WOV_PROJECT}${WOV_ME}" } }
 }
 EOF
+  fi
+
+
+  # Guess at secrets remote (current repo plus _secrets)
+  WOV_SECRETSARCHIVE=`git config --get remote.origin.url`
+  WOV_SECRETSARCHIVE="${WOV_SECRETSARCHIVE%.git}_secrets.git"
+
+  # ---------------------------------------------------------------------
+  # Set secrets remote origin if not set
+  RR=$(git -C "${WOV_BASEDIR}/wovtools/secrets" config --get remote.origin.url 2> /dev/null)
+  if [ "$?" != "0" ]; then
+    echo ""
+    l_ "Git SECRETS repository has no remote repository to push code to. Set that up now, and enter URL below."
+    read -r -p "SECRETS ARCHIVE> Secrets Remote Git repository (${WOV_SECRETSARCHIVE}) [Y/*]:  " A
+    if   [ "${A}" == "Y" ] || [ "${A}" == "y" ]; then WOV_SECRETSARCHIVE=${WOV_SECRETSARCHIVE}; 
+    elif [ "${A}" != "" ]; then WOV_SECRETSARCHIVE="${A}"; fi
+
+    # set remote origin
+    git -C "${WOV_BASEDIR}/wovtools/secrets" remote add origin $A
+    if [ "$?" != "0" ]; then l_error "SECRETS ARCHIVE> Setting git remote origin failed."; exit 1; fi
+
+    # test newly set remote origin
+    RR=$(git -C "${WOV_BASEDIR}/wovtools/secrets" remote -v) ; Re=$?
+    if   [ $Re -ne 0 ]; then l_error "SECRETS ARCHIVE> Testing of remote git repo failed."; exit 1; 
+    elif [ "${RR}" == "" ]; then l_error "SECRETS ARCHIVE> Remote git repo was not set correctly."; exit 1; fi
+
+    # set upstream
+    git -C "${WOV_BASEDIR}/wovtools/secrets" push --set-upstream origin master
+    if [ "$?" != "0" ]; then l_error "SECRETS ARCHIVE> Pushing upstream failed."; exit 1; fi
   fi
 
 

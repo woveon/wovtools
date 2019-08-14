@@ -15,6 +15,7 @@ PROJDIR="${TESTDIR}/${TEST}"
   # Remove old dirs and git test git repo
   rm -Rf "${TESTDIR}/${TEST}"
   rm -Rf "${TESTREPO}/${TEST}.git"
+  rm -Rf "${TESTREPO}/${TEST}_secrets.git"
   rm -Rf "${TESTREPO}/${TEST}_db.git"
 
   tr_section '/clean-proj'
@@ -27,6 +28,7 @@ PROJDIR="${TESTDIR}/${TEST}"
   # make dirs
   mkdir -p "${TESTDIR}/${TEST}"
   mkdir -p "${TESTREPO}/${TEST}.git"
+  mkdir -p "${TESTREPO}/${TEST}_secrets.git"
   mkdir -p "${TESTREPO}/${TEST}_db.git"
 
   # init git

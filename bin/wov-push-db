@@ -72,26 +72,26 @@ function fFailedDBConnection()
 # NOTE: just hashes return, fail messages included!
 # $1 = database name
 # --------------------------------------------------------------------- 
-function doHashDBSchema()
-{
-  local HASH=0
-  HASH="$(wov-db $1 --schema 2> /dev/null)"; local A=$?
-  #echo "here1 - $A '$HASH' "
-  if [ $A -ne 0 ]; then 
-    echo $HASH
-    exit 1
-  fi
-  #echo "here 2 $A $SCK"
-  #local CHKSUM=$(wov-db $1 --schema 2> /dev/null | shasum -a 256 | cut -d' ' -f1)
-  local CHKSUM=$(echo "${HASH}" | shasum -a 256 | cut -d' ' -f1)
-  local A=$?
-  #echo "here2 - $A $HASH $CHKSUM"
-  if [ "$A" != "0" ]; then 
-    printf "\n\nERROR: failed to connect to database server '$1'.\n"; 
-    fFailedDBConnection 2 $1
-  fi
-  echo ${CHKSUM}
-}
+#function doHashDBSchema()
+#{
+#  local HASH=0
+#  HASH="$(wov-db $1 --schema 2> /dev/null)"; local A=$?
+#  #echo "here1 - $A '$HASH' "
+#  if [ $A -ne 0 ]; then 
+#    echo $HASH
+#    exit 1
+#  fi
+#  #echo "here 2 $A $SCK"
+#  #local CHKSUM=$(wov-db $1 --schema 2> /dev/null | shasum -a 256 | cut -d' ' -f1)
+#  local CHKSUM=$(echo "${HASH}" | shasum -a 256 | cut -d' ' -f1)
+#  local A=$?
+#  #echo "here2 - $A $HASH $CHKSUM"
+#  if [ "$A" != "0" ]; then 
+#    printf "\n\nERROR: failed to connect to database server '$1'.\n"; 
+#    fFailedDBConnection 2 $1
+#  fi
+#  echo ${CHKSUM}
+#}
 
 
 # --------------------------------------------------------------------- 
@@ -173,12 +173,13 @@ function doPushCheck()
   #     or if nothing checked in yet, then db's pver is parent pver, so hash that
   if [ "$retval" == "0" ]; then
     if [ $DOECHO -ge 1 ]; then printf "... retrieve db hash.\n"; fi
-    DB_HASH=$(doHashDBSchema $1) ; local A=$?
-    # echo "db hash: $A '${DB_HASH}'"
-    if [ $A -ne 0 ]; then
-      echo "${DB_HASH}"
+    #DB_HASH=$(doHashDBSchema $1) ; local A=$?
+    local DB_HASH=$(wov-db $1 --schema-hash) ; Re=$?
+    if [ $Re -ne 0 ]; then
+      echo "DB_HASH result ${Re} : '${DB_HASH}'"
       fFailedDBConnection 2 $1
     fi
+    echo "db hash: $A '${DB_HASH}'"
     DB_PVER=$(doGetDBPVER $1)
     if [ "$?" != "0" ] || [ "$DB_PVER" == "" ]; then
       l_error "${DB_PVER}\nERROR: could not get database version.\n"
@@ -269,7 +270,11 @@ function doPushCheck()
     else
       if [ "${chk_2}" == "T" ] ; then printf "BLOCK: you have ${1}.deltas in wovtools/db to commit. Run 'wov-push-db' to push deltas into archive.\n"; fi
       if [ "${chk_3}" == "T" ] ; then printf "BLOCK: project has changes to check into git.\n"; fi
-      if [ "${chk_5}" == "T" ] ; then printf "BLOCK: wovtools/db/archive has changes to check into git.\n"; fi
+      if [ "${chk_5}" == "T" ] ; then
+        l_ "BLOCK: wovtools/db/archive has changes to check into git. Do this manually.\n"
+        l_ "  : git status -> "
+        git -C ${WOV_BASEDIR}/wovtools/db/archive status | gsed 's/^/    : /g'
+      fi
     fi
 
     if [ $DOECHO -ge 1 ]; then
@@ -425,7 +430,9 @@ function doCommitDB()
     fi
 
     # get current db checksum
-    CHKSUM=$(doHashDBSchema $1)
+    #CHKSUM=$(doHashDBSchema $1)
+    local CHKSUM=$(wov-db $1 --schema-hash) ; Re=$?
+    if [ $Re -ne 0 ]; then l_error "Failed getting database hash."; exit $Re; fi
     DB_PVER=$(doGetDBPVER $1)
     if [ "$?" != "0" ]; then
       l_error "failed connecting to db."
@@ -633,10 +640,10 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
       exitval=0
       for i in "${DATABASES[@]}"; do
         printf "  ... check db '$i'\n"
-        CHKSUM=$(doHashDBSchema $i)
-        r=${?}
+        #CHKSUM=$(doHashDBSchema $i)
+        local CHKSUM=$(wov-db $i --schema-hash) ; Re=$?
         # printf "    ... CHKSUM ${CHKSUM}\n"
-        if [ "$r" != "0" ]; then exitval=1; fi
+        if [ $Re -ne 0 ]; then exitval=1; fi
         LLE=$(doGetDBLastLogEntry $i)
         r=${?}
         # printf "    ... LLE ${LLE}\n"
@@ -656,9 +663,9 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
       # check each db
       exitval=0
       for i in "${DATABASES[@]}"; do
-        CHKSUM=$(doHashDBSchema $i)
-        r=${?}
-        if [ "$r" != "0" ]; then exitval=1; fi
+        #CHKSUM=$(doHashDBSchema $i)
+        local CHKSUM=$(wov-db $i --schema-hash) ; Re=$?
+        if [ $Re -ne 0 ]; then exitval=1; fi
         echo "${CHKSUM} $i"
       done
 

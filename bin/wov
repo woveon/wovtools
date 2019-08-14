@@ -144,19 +144,20 @@ function doDisplayStatus()
     echo " System:"
     echo " ---"
     echo "  Cluster       : ${WOV_CLUSTER} - ${WOV_cluster_dns_domain}"
-    DEPNS=$(kubectl get namespaces ${WOV_PROJECT}-${WOV_STAGE}  -o json)
-    echo "  Configured    : v$(echo ${DEPNS} | jq -r .metadata.labels.WOV_PVER)_$(echo ${DEPNS} | jq -r .metadata.labels.WOV_SVER) : deployed($(date -r $(echo ${DEPNS} | jq -r .metadata.labels.WOV_DEPLOYED)))"
+    DEPNS=$(kubectl -n ${WOV_NS} get namespaces ${WOV_PROJECT}-${WOV_STAGE}  -o json)
+    echo "  Configured    : v$(echo ${DEPNS} | jq -r .metadata.labels.WOV_PVER)_$(echo ${DEPNS} | jq -r .metadata.labels.WOV_SVER)"
+    echo "  Deployed      : $(date -r $(echo ${DEPNS} | jq -r .metadata.labels.WOV_DEPLOYED)) (epoc $(echo ${DEPNS} | jq -r .metadata.labels.WOV_DEPLOYED))"
     echo "  Microservices :"
 
     fGetMicroserviceRecipes
     for r in ${RECIPES[@]}; do
       #echo "r: ${r}"
-      local depraw=$(kubectl get deployment "${r}" -o json 2> /dev/null)
+      local depraw=$(kubectl -n ${WOV_NS} get deployment "${r}" -o json 2> /dev/null)
       local depimage=$(echo ${depraw} | jq -r '.spec.template.spec.containers[0].image')
       local depimagebits=( ${depimage//:/ } )
       #echo "depimagebits: ${depimagebits[@]}"
 
-      local selector=`kubectl get services "${r}" -o json 2> /dev/null | jq -r ".spec.selector.app"`
+      local selector=`kubectl -n ${WOV_NS} get services "${r}" -o json 2> /dev/null | jq -r ".spec.selector.app"`
       if [ "${selector}" == "${r}" ]; then selector="self"; fi
 
       if [ "${depimagebits[1]}" == "" ]; then depimagebits[1]='not running'; fi
@@ -170,9 +171,9 @@ fi
     echo ""
     echo " Kubernetes:"
     echo " ---"
-    echo "  Deployments:" ; kubectl get deployments | sed 's/^/    /'
-    echo "  Pods       :" ; kubectl get pods        | sed 's/^/    /'
-    echo "  Services   :" ; kubectl get services    | sed 's/^/    /'
+    echo "  Deployments:" ; kubectl -n ${WOV_NS} get deployments | sed 's/^/    /'
+    echo "  Pods       :" ; kubectl -n ${WOV_NS} get pods        | sed 's/^/    /'
+    echo "  Services   :" ; kubectl -n ${WOV_NS} get services    | sed 's/^/    /'
   fi
 
   echo ""
@@ -213,5 +214,10 @@ done
 
 if [ "${WOV_DODEFAULTCOMMAND}" == "1" ]; then 
   . wov-env-common
+  wov-ns-check
+  if [ $? -ne 0 ]; then
+    l_error "Correct your Kubernetes/Git conflict and then run again."
+    exit 1
+  fi
   doDisplayStatus
 fi

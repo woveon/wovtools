@@ -29,7 +29,7 @@ SKIPDBCHECKS=0
 # ---------------------------------------------------------------------
 function doPushChecks()
 {
-  local retval=1
+  local retval=0
 
 #  l_ "  ... build cluster's environment (origin self)"
 #  wov-env-build -q -f --origin self --cluster
@@ -39,13 +39,9 @@ function doPushChecks()
   figlet wov-push
   printf " version: ${WOV_STAGE}_${WOV_PVER}_${WOV_SVER}\n\n"
 
-
   l_ "  ...check namespace alignment"
-  pushargs=( "$@" )
-  set ""
-  . wov-ns-check
-  set -- "${pushargs[@]}"
-
+  wov-ns-check
+  retval=$?
 
   l_ '  ...check local code is checked in and pushed'
   wov-git-check ${WOV_BASEDIR}
@@ -53,24 +49,23 @@ function doPushChecks()
   wov-git-check ${WOV_BASEDIR}/wovtools/secrets
   R2=$?
   if [ "$R1" != "0" ] || [ "$R2" != "0" ]; then 
-    printf "\nERROR: wov-push exiting.\n" 1>&2
-    exit 1
+    retval=1
   fi
 
   if [ "$SKIPDBCHECKS" != "1" ]; then
     l_ "  ... check for database changes that could block the push"
     wov-push-db -v --any-push-blockage
     Re=$?
-    if [ "$Re" != 0 ]; then exit 1; fi
+    if [ "$Re" != 0 ]; then retval=1; fi
   else
     l_warn "Skipping check for database changes that could block the push"
   fi
 
   l_ "  ... wov-push-k8s check: ${WOV_ORIGIN}"
   wov-push-k8s  --check ${WOV_METAARGS}
-  if [ "$?" != "0" ]; then
+  if [ $? -ne 0 ]; then
     l_error "   ... wov-push-k8s check failed"
-    exit 1
+    retval=1
   fi
 
   return $retval
@@ -106,7 +101,7 @@ done
 if [ ${WOV_DODEFAULTCOMMAND} == 1 ]; then
 
   doPushChecks
-  if [ $? != 0 ]; then l_error "Failed checks."; exit 1; fi
+  if [ $? != 0 ]; then l_error "Failed one or more checks. Correct the above and retry push."; exit 1; fi
 
   l_ "  ... wov-push-container ${WOV_METAARGS}"
   wov-push-container ${WOV_METAARGS}

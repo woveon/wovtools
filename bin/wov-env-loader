@@ -116,6 +116,8 @@ function getWovProjectVars()
   # --------------------------------------------------------------------- 
   R=( "$(isProject)" )
   if [ ${?} != 1 ]; then
+    # skip out of error if WOV_DODEFAULTCOMMANDS is 0.. they probably called -h/--help
+    if [ ${WOV_DODEFAULTCOMMAND} == 0 ]; then return; fi
     echo "ERROR: not in a WovTools project. Try using wov-init or correcting the errors to have a recognized WovTools project here."
     ( IFS=$'\n'; echo "${R[*]}" )
     exit 1

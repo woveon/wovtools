@@ -24,6 +24,7 @@ EOF
 function doBuildMicroservice()
 {
   local msname="$1"
+  local msname_l="$(echo ${msname} | tr '[:upper:]' '[:lower:]')"
   local f=
   local jqrule=
 
@@ -190,14 +191,14 @@ EOF
 apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
-  name: {{PROJECT}}-ingress
-  namespace: {{PROJECT}}-{{STAGE}}
+  name: {{lc PROJECT}}-ingress
+  namespace: {{lc PROJECT}}-{{lc STAGE}}
   annotations:
     kubernetes.io/ingress.class: nginx
     nginx.org/websocket-services: "apisocket"
 spec:
   rules:
-  - host: api-{{STAGE}}.{{cluster.dns.domain}}
+  - host: api-{{lc STAGE}}.{{cluster.dns.domain}}
     http:
       paths:
 EOF
@@ -219,21 +220,21 @@ EOF
       # ---------------------------------------------------------------------
       - path: /${msname}/{{${msname}.ver}}/priv
         backend:
-          serviceName: ${msname}
+          serviceName: ${msname_l}
           servicePort: 80
 
       # open up doc only if not in production
       # ---------------------------------------------------------------------
       - path: /${msname}/{{${msname}.ver}}/doc
         backend:
-          serviceName: ${msname}
+          serviceName: ${msname_l}
           servicePort: 80
 \{{/if_eq}}
       # pub
       # ---------------------------------------------------------------------
       - path: /${msname}/{{${msname}.ver}}/pub
         backend:
-          serviceName: ${msname}
+          serviceName: ${msname_l}
           servicePort: 80
 EOF
   fi
@@ -249,13 +250,13 @@ EOF
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{MS}}
-  namespace: {{PROJECT}}-{{STAGE}}
+  name: {{lc MS}}
+  namespace: {{lc PROJECT}}-{{lc STAGE}}
   labels:
-    app: {{MS}}
+    app: {{lc MS}}
 spec:
   selector:
-    app: {{MS}}
+    app: {{lc MS}}
   ports:
   - port: 80
     protocol: TCP
@@ -274,17 +275,17 @@ EOF
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{MS}}
-  namespace: {{PROJECT}}-{{STAGE}}
+  name: {{lc MS}}
+  namespace: {{lc PROJECT}}-{{lc STAGE}}
 spec:
   template:
     metadata:
       labels:
-        app: {{MS}}
+        app: {{lc MS}}
     spec:
       containers:
-        - image: {{ARCHIVEREPOSITORY}}/{{PROJECT}}/{{MS}}:{{STAGE}}_{{PVER}}
-          name: {{MS}}
+        - image: {{ARCHIVEREPOSITORY}}/{{PROJECT}}/{{lc MS}}:{{lc STAGE}}_{{PVER}}
+          name: {{lc MS}}
           imagePullPolicy: Always
           ports:
             - containerPort: 80
@@ -292,9 +293,9 @@ spec:
               protocol: TCP
           envFrom:
           - secretRef:
-              name: {{MS}}
+              name: {{lc MS}}
           - configMapRef:
-              name: {{MS}}
+              name: {{lc MS}}
           livenessProbe:
             httpGet:
               path: \{{{{MS}}.healthpath}}
