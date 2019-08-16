@@ -129,9 +129,12 @@ function doGetDBPVER()
 function doGetDBLastLogEntry()
 {
   local retval=1
-  local DB_PVER=$(wov-db $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null)
-  if [ "$?" != "0" ]; then 
-    printf "\n\nERROR: failed to find wovtools logs on database server $1.\n\n"; 
+  local Re=
+  local DB_PVER=$(wov-db $i -q -d wovtools -c "SELECT * FROM logs WHERE database='$1' ORDER BY id DESC LIMIT 1;" 2> /dev/null) ; Re=$?
+
+  l_verbose "  ...doGetDBLatLogEntry db '${1}' '${i}' DB_PVER=${DB_PVER}"
+  if [ $Re -ne 0 ]; then 
+    l_error "Failed to find wovtools logs on database server $1." 
     fFailedDBConnection 1 $1
   else
     retval=0
@@ -358,30 +361,33 @@ function doUpdateDBArchiveLog()
 function doCommitDB()
 {
   local retval=0
+  local Re=
 
 #  echo "commit db $1"
 
   # check deltas exist
-  deltafile=${WOV_BASEDIR}/wovtools/db/$1.deltas
+  deltafile="${WOV_BASEDIR}/wovtools/db/$1.deltas"
+  l_verbose "  ...deltafile : ${deltafile}"
   if [ ! -e $deltafile ]; then
     l_error "Can't find deltas file: 'wovtools/db/$1.deltas'."
     fFailedDBConnection 1 $1
   fi
 
   # make sure directory exists for database
-  mkdir -p ${WOV_BASEDIR}/wovtools/db/archive/$1
+  mkdir -p "${WOV_BASEDIR}/wovtools/db/archive/$1"
 
   # get current db wovtools pver
-  DB_ENTRY=$(doGetDBLastLogEntry $1)
-  if [ "$?" != "0" ]; then
-    l_error "***ERROR: database not inited."
+  DB_ENTRY=$(doGetDBLastLogEntry $1) ; Re=$?
+  l_verbose "  ...DB_ENTRY ${DB_ENTRY}"
+  if [ $Re -ne 0 ]; then
+    l_error "Database not inited."
     fFailedDBConnection 1 $1
   fi
   #printf "\nDB_ENTRY '${DB_ENTRY}'\n"
 
   # should have been at least a snapshot entry
   if [ "${DB_ENTRY}" == "" ]; then
-    l_error "ERROR: need to provide a snapshot for first commit of database. Use wov-db --snapshot X. ex. rds:wov-aws-va-ant-db-alywandev-2017-07-17-07-20."
+    l_error "Need to provide a snapshot for first commit of database. Use wov-db --snapshot X. ex. rds:wov-aws-va-ant-db-alywandev-2017-07-17-07-20."
     fFailedDBConnection 3 $1
     retval=3
   fi
