@@ -218,7 +218,9 @@ function getWovProjectVars()
   else
     if [ "${WOV_ORIGIN}" != "" ]; then
 #      echo "2) Ignore origin"
-      >&2 echo "WARNING: ORIGIN '${WOV_ORIGIN}' explicitly set on commandline. Ignoring origin from CONTEXT of '${cltypearray[0]}'."
+      if [ "${WOV_ORIGIN}" != "${cltypearray[0]}" ]; then
+        >&2 echo "WARNING: ORIGIN '${WOV_ORIGIN}' explicitly set on commandline. Ignoring origin from CONTEXT of '${cltypearray[0]}'."
+      fi
     else
 #      >&2 echo "3) Set to part of context"
       export WOV_ORIGIN=${cltypearray[0]}

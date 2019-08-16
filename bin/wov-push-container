@@ -291,9 +291,7 @@ function doDockerizeContainer
 
   echo "    ... archiving build of container '${CONTAINER}'"
   mkdir -p ${ARCHDIR}
-  set -x
   rsync -ai --delete ${DESTDIR}/ ${ARCHDIR} &> /dev/null
-  set +x
 }
 
 

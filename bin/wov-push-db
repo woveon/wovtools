@@ -400,7 +400,6 @@ function doCommitDB()
 #    DB_snapshot="${DB_SNAPSHOT}"
 #  else
 #    DB_snapshot="${DB_SNAPSHOT}"
-#    set -x
 #    #OLDIFS=$IFS
 #    #IFS='|'
 #    #DB_ENTRY=( $(echo "${DB_ENTRY[@]}") )
@@ -411,7 +410,6 @@ function doCommitDB()
 #    # DB_snapshot="$( echo -e "${DB_ENTRY[6]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 #    DB_PVER="${DB_ENTRY[4]}"
 #    DB_snapshot="${DB_ENTRY[6]}"
-#    set +x
 #    if [ "${DB_SNAPSHOT}" != "" ]; then
 #      l_warn "  ... overwriting existing snapshot with '${DB_SNAPSHOT}'"
 #      DB_snapshot="${DB_SNAPSHOT}"

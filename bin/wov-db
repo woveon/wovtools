@@ -979,7 +979,6 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
 
     elif [ "${DB_OP}" == "file" ]; then
 
-      set -x
       R=$(PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}) ; Re=$?
       if [ ${Re} -ne 0 ]; then
         wov-bastion-connection -q --test-port ${DB_PORT}
@@ -996,7 +995,6 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
       else
         l_ "$R"
       fi
-      set +x
 
     elif [ "${DB_OP}" == "" ]; then
       # Log into pod 'vh', run psql

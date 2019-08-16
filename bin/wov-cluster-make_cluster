@@ -14,7 +14,6 @@ if [ -z ${WOV_cluster_node_size+x} ];   then echo "var WOV_cluster_node_size is 
 
 # ---------------------------------------------------------------------
 # Create cluster with kops
-set -x
 kops create cluster \
   --ssh-public-key ${KEY_PUBLIC} \
   --cloud ${WOV_PROVIDER} \
@@ -31,7 +30,6 @@ kops create cluster \
   --topology private
 
 #   --vpc ${WOV_cluster_vpc_id} \
-set +x
 if [ "$?" != "0" ]; then printf "\n\nERROR: failed creating cluster.\n"; exit 1; fi
 
 # Apply Cluster
