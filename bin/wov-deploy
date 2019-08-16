@@ -17,19 +17,23 @@ files   : all by default, or type them here and do individual only
   --dev   : Push current development environment to current development cluster (NOT PRODUCTION). 
   --stage : Proper call to roll a version to a stage in the cluster
 
- Deploy Options:
-  --pver|--sver X : sets the Project and Secret version for roll-backs
-  -f : force push
-  --vh : build vh configuration (default)
-  --VH : no build VH configuration
+   Deploy Options:
+    --pver|--sver X : sets the Project and Secret version for roll-backs
+    --conf-only        : Only push configuration files (ConfigMaps and Secrets)
+    -f : force push
+    --vh : build vh configuration (default)
+    --VH : no build VH configuration
+    -r|--retain        : retains the deployment values locally (potential security risk)
+    --dry-run          : pull files but don't deploy
 
 
  Utility:
-  -lversions   : list deployable versions in the Archive
+  -lversions         : list deployable versions in the Archive
   --check-containers : check that these containers exist in the container repository
-  --conf-only : Only push configuration files (ConfigMaps and Secrets)
-  --dry-run : pull files but don't deploy
-  -r|--retain : retains the deployment values locally (potential security risk)
+  --health           : checks health of deployed microservices
+    --health-no-tls/--health-tls : force http/https on routes
+
+ General Options:
   -h : this help
   -q/-v : quiet/verbose
 
@@ -587,6 +591,104 @@ function doDeployStage()
 
 
 # ---------------------------------------------------------------------
+# Check routes. Uses a search for '.healthpath' as opposed to recipes.
+#  NOTE: This is pretty limited since it only has 3 vars.
+# $1= if exists, use it's value for http/https (otherwise, use http/https as specified)
+# ---------------------------------------------------------------------
+doHealthChecks()
+{
+  local ccd=`WOV_getClusterConfigDir ${WOV_ORIGIN} ${WOV_CONTEXT}`
+  local routes=( "/healthz" $(cat ${ccd}/config.json | jq -r '.. | select( type=="object" ) | select(.healthpath != null) | .healthpath' 2> /dev/null) ) ; Re=$?
+  # local routes=( "/healthz" $(cat ${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/secrets.json | jq -r '.. | select( type=="object" ) | select(.healthpath != null) | .healthpath' 2> /dev/null) ) ; Re=$?
+#  local routes=$(cat ${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/secrets.json | jq -r ".health.routes[]" 2> /dev/null ); Re=$?
+  if [ $Re != 0 ] || [ "$routes" == "" ]; then printf "ERROR: failed finding .*.healthroutes in secrets.\n"; exit 1; fi
+
+  local retval=0
+  local MSG=
+  local PROTO=
+  local STATUS=
+  local CT=
+  local SERVER=
+
+  if [[ ${DOECHO} -ge 2 ]]; then echo "Health Routes: ${routes[@]}"; fi
+
+  for r in ${routes[@]}; do
+    local URL=`echo "${r}" | sed  \
+      -e 's/{WOV_STAGE}/'"${WOV_STAGE}"'/g' \
+      -e 's/{WOV_ME}/'"${WOV_ME}"'/g' \
+      -e 's/{WOV_PROJECT}/'"${WOV_PROJECT}"'/g'`
+    # echo " check route ${r}: ${URL}"
+    local domain="$(wov-env --var WOV_www_api_url)"
+    local schema="$(wov-env --var WOV_www_api_urlscheme)"
+    if [ "${1}" != "" ]; then local schema=$1; fi
+    local URL="${schema}://${domain}${URL}"
+
+    local CMD="curl -sS $URL"
+    printf "  ... health check: ${URL}'\n"
+    #printf "  ... ${URL}\n"
+    local R=$(${CMD} 2>&1)
+    local RR=$?
+    # echo " '$R:$RR' "
+    if [ "$RR" != "0" ]; then
+      printf "\n\nERROR ($RR) : $R\n"
+      retval=1
+    else
+      # parse http header
+      # FROM : https://stackoverflow.com/questions/24943170/how-to-parse-http-headers-using-bash
+      shopt -s extglob # Required to trim whitespace; see below
+      while IFS=':' read key value; do
+        # trim whitespace in "value"
+        value=${value##+([[:space:]])}; value=${value%%+([[:space:]])}
+        case "$key" in
+          Server) SERVER="$value"
+            ;;
+          Content-Type) CT="$value"
+          ;;
+          #        HTTP*) read PROTO STATUS MSG <<< "$key$value}"
+#        HTTP*) read PROTO STATUS MSG <<< "$key{$value:+:$value}"
+          HTTP*) read PROTO STATUS MSG <<< "$key$value"
+              ;;
+        esac
+      done < <(curl -sI ${URL})
+
+      MSG=${MSG/$'\r'/} # remove \r that gets match in sed above
+
+      if [[ ${CT} = application/json* ]]; then
+        printf "    - application/json: '${PROTO}' '${STATUS}' "
+        echo "$R" | jq -c
+      elif [[ ${CT} = text/html* ]]; then
+        # curl -sI ${URL}
+        # echo "CT: ${CT}"
+        # echo "'${STATUS}' '${SERVER}' '${MSG}'"
+        if [ "${STATUS}" == "200" ]; then
+          printf "    - text/html: ${PROTO} ${STATUS} ${MSG}\n"
+        else
+          printf "\n*** ERROR: Failed retreiving ${CT}: ${STATUS} ${MSG}\n"
+          echo "$R"
+          retval=1
+        fi
+      elif [[ ${CT} = text/plain* ]]; then
+        if [ "${STATUS}" == "200" ]; then
+          printf "    - text/plain: '${PROTO}' '${STATUS}' '${MSG}'\n"
+        else
+          printf "\n*** ERROR: Failed retreiving ${CT}: ${STATUS} ${MSG}\n"
+          echo "$R"
+          retval=1
+        fi
+      else
+        printf "\nRESULT(${RR}): $R\n"
+        printf "*** ERROR: Unknown content type : '${CT}'\n"
+        curl -sI ${URL}
+        retval=1
+      fi
+    fi
+  done
+}
+
+
+
+
+# ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 function doListVersions
 {  
@@ -669,6 +771,13 @@ while [[ $1 =~ ^- ]]; do
     shift
     WOV_SVER="$1"
     shift
+
+  elif [ "$1" == "--health" ]; then
+    shift ; doHealthChecks ; WOV_DODEFAULTCOMMAND=0;
+  elif [ "$1" == "--health-tls" ]; then
+    shift ; doHealthChecks https ; WOV_DODEFAULTCOMMAND=0;
+  elif [ "$1" == "--health-no-tls" ]; then
+    shift ; doHealthChecks http ; WOV_DODEFAULTCOMMAND=0;
 
   elif [ "$1" == "-p" ] || [ "$1" == "--patch" ]; then
     shift
