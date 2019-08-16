@@ -37,6 +37,7 @@ The recipes for containers should:
 #  -l : list containers
   -f : force build
   -q/-v : quiet/verbose
+  --cpc X : check packed container X
 
 EOF
 }
@@ -73,13 +74,12 @@ MSRECIPEDIR="${WOV_BASEDIR}/wovtools/msrecipes"
 # ---------------------------------------------------------------------
 # Put contents together in container directory. Also builds Dockerfile.
 #  NOTE: later will decide if we need to build a container, based upon this
-# $1 - CONTAINER
-# $2 - MS
+# $1 - MS name
 # ---------------------------------------------------------------------
 function doPackContainer
 {
-  local CONTAINER="$1"
-  local MS="$2"
+  local MS=$1
+  local CONTAINER=$(echo ${MS} | tr '[:upper:]' '[:lower:]')
   # build the content in wovtools/cache/containers/$f
   mkdir -p ${DESTDIR}
   mkdir -p ${DESTDIR}/SECRET/sshkeys
@@ -87,7 +87,7 @@ function doPackContainer
   echo "" > ${DESTDIR}/SECRET/ssh-config
   echo "" > ${DESTDIR}/Dockerfile
 
-  echo "  ... pack container using recipe: '$f'"
+  l_ "  ... pack container using recipe: '$f'"
   cd ${WOV_BASEDIR} && PROJDIR=${WOV_BASEDIR} MSDIR="${WOV_BASEDIR}/${f}" DESTDIR=${DESTDIR} MS=$f CONTAINER=${CONTAINER} DOECHO=${DOECHO} "${MSRECIPEDIR}/$f"
   if [ "$?" != "0" ]; then
     printf "\n\nERROR: failed building container.\n\n"
@@ -291,27 +291,141 @@ function doDockerizeContainer
 
   echo "    ... archiving build of container '${CONTAINER}'"
   mkdir -p ${ARCHDIR}
+  set -x
   rsync -ai --delete ${DESTDIR}/ ${ARCHDIR} &> /dev/null
+  set +x
+}
+
+
+# ---------------------------------------------------------------------
+# Make sure the locally linked module is referenced by the package.json 
+# dependency entry for the container to be built properly.
+#  $1 - locally linked NodeJS module name (found in package.json)
+# ---------------------------------------------------------------------
+function doCheckNodeJSLocallyLinkedDependency()
+{
+  local retval=0
+  local Re=
+  local linkedrepo=
+  local tmp=
+  local deprepo_ver=
+  local deprepo_proto=
+  local deprepo_url=
+  local linked_ver_head=
+  local linked_ver_tagged=
+  local l="${1}"
+
+  # path to locally linked
+  localpath="${WOV_BASEDIR}/${MS}/node_modules/${l}"
+
+  # Make sure they are checked and pushed (going down node_modules path)
+  wov-git-check "${localpath}"
+  Re=$?
+  if [ $Re -ne 0 ]; then retval=1; fi
+  l_verbose "    ...*  : wov-git-check: ${Re} - ${l}"
+
+  if [ $retval -eq 0 ]; then
+    l_verbose "    ... get locally linked remote repository"
+    linkedrepo=$(git -C "${localpath}" config --get remote.origin.url)
+    Re=$?
+    if [ $Re -ne 0 ]; then retval=1; fi
+    if [ "$linkedrepo" == "" ]; then retval=1; fi
+    l_verbose "      ...*  :    linkedrepo: ${Re} -  ${linkedrepo}"
+  fi
+
+  if [ $retval -eq 0 ]; then
+    l_verbose "    ... get package.json dependency link"
+    deprepo=$(cat "${WOV_BASEDIR}/${MS}/package.json" | jq -r '.dependencies["'"${l}"'"]')
+    Re=$?
+    if [ $Re -ne 0 ]; then retval=1; fi
+    if [ "$deprepo" == "" ]; then retval=1; fi
+    l_verbose "      ...*  :       deprepo: ${Re} -  ${deprepo}"
+  fi
+
+  if [ $retval -eq 0 ]; then
+    l_verbose "    ... parse package.json url"
+    tmp=( ${deprepo//:\/\// } )
+    deprepo_proto="${tmp[0]}"
+    tmp2=( ${tmp[1]//#/ } )
+    deprepo_ver="${tmp2[1]}"
+    deprepo_url="${tmp2[0]}"
+    if [ "${deprepo_proto}" == "" ]; then retval=1; fi
+    if [ "${deprepo_url}"   == "" ]; then retval=1; fi
+    if [ "${deprepo_ver}"   == "" ]; then retval=1; fi
+    l_verbose "      ...*  : deprepo_proto: X -  '${deprepo_proto}'"
+    l_verbose "      ...*  :   deprepo_url: X -  '${deprepo_url}'"
+    l_verbose "      ...*  :   deprepo_ver: X -  '${deprepo_ver}'"
+    if [ $retval -ne 0 ]; then
+      l_error "Linked dependencies should be directly to a Git repo version since NPM versions can't be confirmed."
+      l_error "  ex. https://mygit/foo/bar#v1.2.3"
+      l_error "Currently dependency is to '${deprepo}'."
+    fi
+  fi
+
+  if [ $retval -eq 0 ]; then
+    l_verbose "    ...compare remote repositories of package.json URL and node_modules/$l Git repo"
+    if [ "${linkedrepo}" != "${deprepo_url}" ]; then
+      l_warn "package.json dependency URL '${deprepo_url}' does not point to locally linked remote repository '${linkedrepo}'."
+      # retval=1
+    fi
+  fi
+
+  if [ $retval -eq 0 ]; then
+    l_verbose "    ...getting linked repo's commit of tagged version of '${deprepo_ver}'"
+    # make sure linked is head and tagged
+    #linked_ver_tagged=`git -C "${localpath}" rev-list -n 1 ${deprepo_ver}`
+    linked_ver_tagged=( `git -C "${localpath}" show-ref --tags --dereference "${deprepo_ver}" | tail -n 1` )
+    if [ "${linked_ver_tagged}" == "" ]; then
+      l_error "For linked module ${l}, could not find tagged version '${deprepo_ver}' referenced by package.json."
+      l_error "Have you published that version? (try 'np' in ${localpath})"
+      retval=1
+    fi
+  fi
+
+  if [ $retval -eq 0 ]; then
+    l_verbose "    ...compare package.json version to that of linked, as it should be the tagged version"
+    linked_ver_head=`git -C "${localpath}" rev-list -n 1 HEAD`
+    l_verbose "      ...repo head:${linked_ver_head} = local repo:${linked_ver_tagged[0]}" ; Re=$?
+    #echo "calling git on ver ${deprepo_ver}: '${linked_ver_tagged[@]}' '${linked_ver_tagged[0]}' '${linked_ver_tagged[1]}'"
+    #echo "linked_ver_tagged : ${linked_ver_tagged[@]} ${#linked_ver_tagged[@]} : ${linked_ver_tagged[0]} ${linked_ver_tagged[1]}"
+    #echo "linked_ver_head  : ${linked_ver_head}"
+    #echo "linked_ver_tagged: ${linked_ver_tagged[0]}"
+    test "${linked_ver_head}" = "${linked_ver_tagged[0]}" ; Re=$?
+    if [ $Re -ne 0 ]; then 
+      retval=1
+      l_error "Git commits differ. Repo head:${linked_ver_head} is not local repo:${linked_ver_tagged[0]}"
+      l_error "    show head commit: 'git rev-list -n 1 HEAD'"
+      l_error "  show tagged commit: 'git show-ref --tags --dereference ${deprepo_ver}'"
+      l_error " show tagged commits: 'git show-ref --tags --dereference'"
+    fi
+  fi
+
+  return $retval
 }
 
 
 # ---------------------------------------------------------------------
 # Make sure it is ok
 # 
-# $1 - container name (sans project name)
-# $2 - microservice name
+# $1 - microservice name (no change to casing)
 # 
 # For now:
 #  - ensure package.json (if exists) is ok
 # ---------------------------------------------------------------------
 function doCheckPackedContainer
 {
+  local retval=0
+  local MS=$1
+  local CONTAINER=$(echo ${MS} | tr '[:upper:]' '[:lower:]')
+  local Re=
+  local R=
   local CHECKAS=''
-  if [[ $DOECHO -ge 1 ]]; then echo "...checking packed container : ${1}"; fi
+  local DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${MS}
+  l_ "...checking packed container : ${MS}"
 
   # Determine container type
   if [ -e "${DESTDIR}/package.json" ]; then
-    if [[ $DOECHO -ge 2 ]]; then echo "  ...found package.json : checking NodeJS container."; fi
+    l_verbose "  ...found package.json : checking NodeJS container."
     CHECKAS='nodejs'
   fi
 
@@ -320,25 +434,36 @@ function doCheckPackedContainer
     local deps=( `cat ${DESTDIR}/package.json | jq -r '.dependencies | to_entries[] |  "\(.key) \(.value)"' 2> /dev/null ` )
     # echo "deps: ${deps[@]}"
 
-    if [ -e ${WOV_BASEDIR}/$2/node_modules ]; then
-      echo "  ... checking linked npm packages are checked in and published"
+    if [ -e "${WOV_BASEDIR}/${MS}/node_modules" ]; then
+      l_ "  ... checking linked npm packages are checked in and published"
       R3=( $(cd ${WOV_BASEDIR}/$1/node_modules ; find * -type l -maxdepth 1) )
       if [ "${R3}" != "" ]; then
-        printf "\n***ERROR: You have linked node modules.\n"
-        printf "TODO: see issue #50 : https://github.com/woveon/wovtools/issues/50\n"
-        printf "\n*Linked NodeJS Modules:\n"
+#        l_error "You have linked node modules."
+#        l_error "TODO: see issue #50 : https://github.com/woveon/wovtools/issues/50"
+#        l_error "*Linked NodeJS Modules:"
         for l in ${R3[@]}; do
-          wov-git-check "${WOV_BASEDIR}/${2}/node_modules/${l}"
-          local Re=$?
-          printf "*  : ${Re} - ${l}\n"
+          l_ "    ...checking locally linked module: ${l}"
+          R=$(doCheckNodeJSLocallyLinkedDependency "${l}"); Re=$?
+          if [ $Re -ne 0 ]; then
+            echo "${R}"
+            l_error "Linked NodeJS package '${l}' is not checked in or referenced properly."
+            retval=1
+          else
+            l_verbose "  ... ${l} NodeJS package is linked, but referenced properly so ok." 
+          fi
         done
-        printf "*  ... yarn publish those, update package.json and then unlink with 'yarn unlink X'.\n\n"
-        exit 1
+        if [ $retval -ne 0 ]; then
+          l_warn "Correct your linked modules by fixing the above errors, or unlink them with 'yarn unlink X'."
+          exit 1
+        fi
       fi
     fi
+  else
+    l_warn "  ... no checking of packed container as could not identify project"
   fi
 
   l_ "  ...done checking packed container"
+  return $retval
 }
 
 # --------------------------------------------------------------------- 
@@ -368,10 +493,10 @@ function doPushContainer()
   else
 
     # Copy in and generate all files in DESTDIR
-    doPackContainer "${CONTAINER}" "${MS}"
+    doPackContainer "${MS}"
 
     # Ensure all is well
-    doCheckPackedContainer "${CONTAINER}" "${MS}"
+    doCheckPackedContainer "${MS}"
 
     # Just packed container, do we need to build it? Do diffs against archive, then compare remote container
     NEEDSBUILD=0
@@ -491,6 +616,12 @@ while [[ $1 =~ ^- ]]; do
     shift
     DOFORCE=1
     WOV_DODEFAULTCOMMAND=1
+
+  elif [ "$1" == "--cpc" ]; then
+    shift
+    doCheckPackedContainer "${1}"
+    shift
+    WOV_DODEFAULTCOMMAND=0
 
   elif [ "$1" == "--clean" ]; then
     shift

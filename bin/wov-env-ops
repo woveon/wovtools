@@ -53,13 +53,13 @@ if [ "${WOV_ENV_COMMONCMDS}" != "1" ]; then
   function l_error()
   {
     if [ "${WOV_DEBUGMODE}" == "1" ]; then echo "(`basename $0`:${BASH_LINENO})ERROR  : ${*}";
-    else echo "ERROR  ${*}"; fi
+    else echo "ERROR  : ${*}"; fi
   }
   # Warning logging
   function l_warn()
   {
     if [ "${WOV_DEBUGMODE}" == "1" ]; then echo "(`basename $0`:${BASH_LINENO})WARNING: ${*}";
-    else echo "WARNING${*}"; fi
+    else echo "WARNING: ${*}"; fi
   }
 
   # ---------------------------------------------------------------------

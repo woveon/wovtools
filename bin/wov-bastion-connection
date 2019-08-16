@@ -113,14 +113,14 @@ function doDBConfigCheck()
 # ---------------------------------------------------------------------
 function doTestPort()
 {
+  local R=
   local retval=
 
-  local R=$(nc -z localhost $1 2>&1)
-  retval=$?
+  R=$(nc -z localhost $1 2>&1); retval=$?
 
 
-  if [ "$R" != "" ]; then
-    >&2 echo "$R" 
+  if [ "${R}" != "" ]; then
+    l_error "$R" 
     retval=2
   fi
 

@@ -144,14 +144,18 @@ tr_h2 'wov-env'
 
   tr_test "Test ConfigurationMap of a Microservice : local cw" \
     'wov-env --context local:wov-aws-va-grape-test1-cw --cm test1X | grep -e "WOV_ME=" -e "WOV_test1db_port=" -e "WOV_test1db_database=" -e "WOV_www_api_url=" | sort' \
+    0 4 'WOV_ME=cw' 'WOV_test1db_database=test1cw' 'WOV_test1db_port=5432' 'WOV_www_api_url=api-cw.test1.com'
+
+  tr_test "Test ConfigurationMap of a Microservice : remote cw" \
+    'wov-env --context remote:wov-aws-va-grape-test1-cw --cm test1X | grep -e "WOV_ME=" -e "WOV_test1db_port=" -e "WOV_test1db_database=" -e "WOV_www_api_url=" | sort' \
     0 4 'WOV_ME=cw' 'WOV_test1db_database=test1cw' 'WOV_test1db_port=65432' 'WOV_www_api_url=api-cw.test1.com'
 
   tr_test "Test ConfigurationMap of a Microservice: self cw" \
     'wov-env --context wov-aws-va-grape-test1-cw --origin self --cm test1X | grep -e "WOV_ME=" -e "WOV_test1db_port=" -e "WOV_test1db_database=" -e "WOV_www_api_url=" | sort' \
     0 4 'WOV_ME=cw' 'WOV_test1db_database=test1cw' 'WOV_test1db_port=5432' 'WOV_www_api_url=api-cw.test1.com'
 
-  tr_test "Test ConfigurationMap of a Microservice: local dev" \
-    'wov-env --context wov-aws-va-grape-test1-dev --origin local --cm test1X | grep -e "WOV_ME=" -e "WOV_STAGE=" -e "WOV_test1db_port=" -e "WOV_test1db_database=" -e "WOV_www_api_url=" | sort' \
+  tr_test "Test ConfigurationMap of a Microservice: remote dev" \
+    'wov-env --context wov-aws-va-grape-test1-dev --origin remote --cm test1X | grep -e "WOV_ME=" -e "WOV_STAGE=" -e "WOV_test1db_port=" -e "WOV_test1db_database=" -e "WOV_www_api_url=" | sort' \
     0 5 'WOV_ME=cw' 'WOV_STAGE=dev' 'WOV_test1db_database=test1dev' 'WOV_test1db_port=65432' 'WOV_www_api_url=api-dev.test1.com'
 
   tr_test "Test Secrets of a Microservice : local cw" \

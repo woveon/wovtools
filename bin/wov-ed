@@ -2,17 +2,6 @@
   
 
 
-# --------------------------------------------------------------------- 
-# Import Env 
-# --------------------------------------------------------------------- 
-buildargs=( "$@" )
-set ""
-. wov-env
-#. wov-ns-check
-set -- "${buildargs[@]}"
-
-DOECHO=1
-FOLD=$(tput cols)
 HAS_SECRET=0
 HAS_BUILDENV=0
 SECRETDIFF=1
@@ -47,6 +36,7 @@ NOTE: this will test for '.wov' extension if needed.
 
 EOF
 }
+. wov-env-ops fDisplayOptions "${@}"
 
 
 # Handle Params
@@ -54,15 +44,7 @@ EOF
 while [[ $1 =~ ^- ]]; do
 #  echo "param '$1'"
 
-  if [ "$1" == "-q" ]; then
-    shift
-    DOECHO=0
-
-  elif [ "$1" == "-v" ]; then
-    shift
-    DOECHO=2
-
-  elif [ "$1" == "-n" ]; then
+  if [ "$1" == "-n" ]; then
     shift
     DONEW=1
 
@@ -80,11 +62,8 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == "-ccl" ]; then
     shift
-    EDPATH="cache/clusters/${WOV_CLUSTER}/"
-
-  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-    fDisplayOptions
-    exit 0
+    # EDPATH="cache/clusters/${WOV_CLUSTER}/"
+    EDPATH="`WOV_getClusterConfigDir ${WOV_ORIGIN} ${WOV_CONTEXT}`"
 
   else
     echo

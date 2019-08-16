@@ -10,11 +10,15 @@ usage: `basename $0` [options] {files ...}
 
 This logs a pod, using a curses UI to select.
 
-  -h                  : this help
-  -q/-v               : quiet/verbose
+  -f/F    : follow/no follow
+
+  -h    : this help
+  -q/-v : quiet/verbose
   
 EOF
 }
+
+DOFOLLOW='-f'
 
 . wov-env-ops fDisplayOptions "$@"
 
@@ -25,17 +29,13 @@ EOF
 # ---------------------------------------------------------------------
 while [[ $1 =~ ^- ]]; do
 
-  if [ "$1" == "-q" ]; then
+  if [ "$1" == "-f" ]; then
     shift
-    DOECHO=0
+    DOFOLLOW='-f'
 
-  elif [ "$1" == "-v" ]; then
+  elif [ "$1" == "-F" ]; then
     shift
-    DOECHO=2
-
-  elif [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
-    fDisplayOptions
-    exit 0
+    DOFOLLOW=''
 
   else
     echo
@@ -73,7 +73,7 @@ done
 exec 3>&1; result=$(dialog --keep-tite --title 'Log Pod' --menu 'Select a pod to log' 15 80 6 ${RL} 2>&1 1>&3); ret=$? ; exec 3>&-
 if [ "$ret" == "0" ]; then
   kubectl -n ${WOV_NS} describe pod $result
-  kubectl -n ${WOV_NS} logs -f $result
+  kubectl -n ${WOV_NS} logs ${DOFOLLOW} $result
 else
   exit $ret
 fi

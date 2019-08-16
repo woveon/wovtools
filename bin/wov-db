@@ -237,9 +237,11 @@ function doDBDataBuild()
       local finname="${fname::-4}"
       if [ ! -e "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ] ||
          [ "${WOV_BASEDIR}/wovtools/data/${1}_const.js" -nt "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ] ||
-         [ "${WOV_BASEDIR}/wovtools/data/${fname}" -nt "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ]; then
+         [ "${WOV_BASEDIR}/wovtools/data/${fname}"      -nt "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ]; then
         if [ ${DOECHO} -ge 1 ]; then echo "  ... compile ${finname}"; fi
-        WOV_BASEDIR=${WOV_BASEDIR} wov-compile -ds ${1} "${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/secrets.json" "${WOV_BASEDIR}/wovtools/data/${fname}" > "${WOV_BASEDIR}/wovtools/cache/data/${finname}"
+        WOV_BASEDIR=${WOV_BASEDIR} wov-compile -ds ${1} \
+          "`WOV_getClusterConfigDir ${WOV_ORIGIN} ${WOV_CONTEXT}`/config.json" \
+          "${WOV_BASEDIR}/wovtools/data/${fname}" > "${WOV_BASEDIR}/wovtools/cache/data/${finname}"
       fi
 
     # or copy it over
@@ -282,18 +284,20 @@ function doDBDataCommand()
 }
 
 
+# --------------------------------------------------------------------- 
 # $1 - port
 # $2 - error message
+# --------------------------------------------------------------------- 
 function showConnectionFailure()
 {
   if [ "${1}" == "" ]; then
     >&2 printf "ERROR: No port specified. Configuration error.\n";
   else
-    wov-bastion-connection -q --test-port ${1}
+    wov-bastion-connection -q --test-port "${1}"
     if [ $? -ne 0 ]; then
-      >&2 printf "ERROR: Port ${1} is not open. Is your bastion connection open?\n";
+      l_error "Port ${1} is not open. Is your bastion connection open?"
     else
-      >&2 printf "$2";
+      l_error "$2"
     fi
   fi
 }
@@ -954,49 +958,45 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
       rm ${SDF1}
 
     elif [ "${DB_OP}" == "command" ]; then
-      # Log into pod 'vh', run psql
-      #    echo "dbcommand  : \"${DB_COMMAND}\""
-      #    echo "dbcommand q: \"${DB_COMMAND[@]}\""
-      #    VARS=( "PGPASSWORD=${DB_PASSWORD}" "psql" "--tuples-only" "-h" "${DB_HOST}" "-U" "${DB_USERNAME}" "-d" "${DB_DATABASE}" "-c" "${DB_COMMAND}" )
-      #    kubectl exec -i vh -- /bin/bash -c "${VARS[@]}"
-      #    kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c ${DB_COMMAND}"
-      #    if [ "${DB_HOST}" != "localhost" ]; then
-      #      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\""
-      #    else
-      #      PGPASSWORD=${DB_PASSWORD} psql --tuples-only -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\"
-      #    fi
 
       l_verbose "PGPASSWORD=XXX psql ${DB_HEADEROPTIONS} -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c \"${DB_COMMAND[@]}\""
       R=$(PGPASSWORD="${DB_PASSWORD}" psql ${DB_HEADEROPTIONS} -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"  2>&1 ) ; Re=$?
-      #PGPASSWORD=${DB_PASSWORD} psql --tuples-only -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -c "${DB_COMMAND[*]}"
       if [ "${Re}" != "0" ]; then
-        if [ "$R" == "psql: FATAL:  database \"wovtools\" does not exist" ]; then
+        wov-bastion-connection -q --test-port ${DB_PORT}
+        if [ $? -ne 0 ]; then 
+          l_error "Port is not open. Did you give the wrong port? Is your bastion connection open?"
+        elif [ "$R" == "psql: FATAL:  database \"wovtools\" does not exist" ]; then
           printf "\n${R}\nERROR: did you init the database? 'wov-db ${WOVDBNAME} --wdb-init'\n"
           exit 1
+        else
+          l_ "${R}\n"
         fi
-        printf "${R}\n"
         showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n"
         exit 1
       else
-        echo $R
+        l_ "$R"
       fi
-
 
     elif [ "${DB_OP}" == "file" ]; then
-      # copy file; exectute it in database, delete file
-      #    if [ "${DB_HOST}" != "localhost" ]; then
-      #      kubectl cp ${DB_FILE} vh:.${WOVDBNAME}.sql.$$
-      #      kubectl exec -i vh -- /bin/bash -c "PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f .${WOVDBNAME}.sql.$$"
-      #      kubectl exec -i vh -- /bin/bash -c "rm -f .${WOVDBNAME}.sql.$$"
-      #    else
-      #      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
-      #    fi
-      PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}
-      PGPASSWORDe=$?
-      if [ "$PGPASSWORDe" != "0" ]; then
+
+      set -x
+      R=$(PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f ${DB_FILE}) ; Re=$?
+      if [ ${Re} -ne 0 ]; then
+        wov-bastion-connection -q --test-port ${DB_PORT}
+        if [ $? -ne 0 ]; then 
+          l_error "Port is not open. Did you give the wrong port? Is your bastion connection open?"
+        elif [ "$R" == "psql: FATAL:  database \"wovtools\" does not exist" ]; then
+          printf "\n${R}\nERROR: did you init the database? 'wov-db ${WOVDBNAME} --wdb-init'\n"
+          exit 1
+        else
+          l_ "${R}\n"
+        fi
         showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n"
         exit 1
+      else
+        l_ "$R"
       fi
+      set +x
 
     elif [ "${DB_OP}" == "" ]; then
       # Log into pod 'vh', run psql
@@ -1007,8 +1007,13 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
       #    else
       #      PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
       #    fi
-      PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}
-      if [ "$?" != "0" ]; then
+      PGPASSWORD="${DB_PASSWORD}" psql -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE}  ; Re=$?
+
+      #wov-bastion-connection -q --test-port ${DB_PORT}
+      #if [ $? -ne 0 ]; then 
+      #  l_error "Port is not open. Did you give the wrong port? Is your bastion connection open?"
+
+      if [ $Re -ne 0 ]; then
         showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n  : is the db inited? 'wov-db --wdb-init'\n  : is the db created? 'wov-db --wdb-create'\n"
         exit 1
       fi
@@ -1035,47 +1040,39 @@ db.getCollectionNames().forEach(function(collname) {
 EOF
 )
 
-kubectl exec -it $(wov-p ${WOVDBNAME}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE} --eval \"${DB_COMMAND}\""
-#    if [ "${DB_HOST}" != "localhost" ]; then
-#      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
-#    else
-#      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
-#    fi
+      kubectl exec -it $(wov-p ${WOVDBNAME}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE} --eval \"${DB_COMMAND}\""
 
+    elif [ "${DB_OP}" == "command" ]; then
+      kubectl exec -it $(wov-p ${WOVDBNAME}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE} --eval \"${DB_COMMAND}\""
+      #    if [ "${DB_HOST}" != "localhost" ]; then
+      #      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
+      #    else
+      #      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
+      #    fi
+    elif [ "${DB_OP}" == "file" ]; then
+      printf "\nFile: untested\n\n";
+      if [ "${DB_HOST}" != "localhost" ]; then
+        kubectl cp ${DB_FILE} vh:.${WOVDBNAME}.sql.$$
+        kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} ${WOVDBNAME}.sql.$$"
+        kubectl exec -i vh -- /bin/bash -c "rm -f .${WOVDBNAME}.sql.$$"
+      else
+        mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} ${DB_FILE}
+      fi
+    elif [ "${DB_OP}" == "" ]; then
+      if [ $DOECHO -ge 1 ]; then doDatabaseConnectMessage; fi
 
-  elif [ "${DB_OP}" == "command" ]; then
-    kubectl exec -it $(wov-p ${WOVDBNAME}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE} --eval \"${DB_COMMAND}\""
-    #    if [ "${DB_HOST}" != "localhost" ]; then
-    #      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\""
-    #    else
-    #      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} --eval \"${DB_COMMAND}\"
-    #    fi
-  elif [ "${DB_OP}" == "file" ]; then
-    printf "\nFile: untested\n\n";
-    if [ "${DB_HOST}" != "localhost" ]; then
-      kubectl cp ${DB_FILE} vh:.${WOVDBNAME}.sql.$$
-      kubectl exec -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} ${WOVDBNAME}.sql.$$"
-      kubectl exec -i vh -- /bin/bash -c "rm -f .${WOVDBNAME}.sql.$$"
-    else
-      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE} ${DB_FILE}
+      echo "entering pod ${WOVDBNAME}-${WOV_STAGE}"
+      kubectl exec -it $(wov-p ${WOVDBNAME}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE}"
+      #    if [ "${DB_HOST}" != "localhost" ]; then
+      #      kubectl exec  -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"
+      #    else
+      #      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}
+      #    fi
+
     fi
-  elif [ "${DB_OP}" == "" ]; then
-    if [ $DOECHO -ge 1 ]; then doDatabaseConnectMessage; fi
-
-    echo "entering pod ${WOVDBNAME}-${WOV_STAGE}"
-    kubectl exec -it $(wov-p ${WOVDBNAME}-${WOV_STAGE} ) -- sh -c "mongo --quiet ${DB_DATABASE}"
-    #    if [ "${DB_HOST}" != "localhost" ]; then
-    #      kubectl exec  -it vh -- /bin/bash -c "mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}"
-    #    else
-    #      mongo --quiet mongodb://${DB_HOST}/${DB_DATABASE}
-    #    fi
 
   fi
-
 else
   printf "\n\nERROR: Unknown database type of '${DB_TYPE}'. Probably need to implement it in wov-db, and ensure it is supported in vh container.\n"
   exit 1
-fi
-
-
 fi

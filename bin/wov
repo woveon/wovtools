@@ -123,7 +123,7 @@ function doDisplayStatus()
   echo "WovTools Project '${WOV_PROJECT}' - "${WOV_PROJECTTITLE}""
   echo "  Stage   : ${WOV_STAGE}"
   echo " Origin   : ${WOV_ORIGIN}"
-  echo "  Version : ${WOV_PVER}$(wov-git-check -q ; if [ $? != 0 ]; then echo "*"; fi )_${WOV_SVER}$(cd ${WOV_BASEDIR}/wovtools/secrets ; wov-git-check -q ; if [ $? != 0 ]; then echo "*"; fi )"
+  echo "  Version : ${WOV_PVER}$(wov-git-check -q > /dev/null; if [ $? != 0 ]; then echo "*"; fi )_${WOV_SVER}$(cd ${WOV_BASEDIR}/wovtools/secrets ; wov-git-check -q ; if [ $? != 0 ]; then echo "*"; fi )"
 
   if [ $SHOWPERSIST -eq 1 ]; then
     echo ""

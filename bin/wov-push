@@ -31,6 +31,7 @@ function doPushChecks()
 {
   local retval=0
 
+  l_ "...do multiple checks"
 #  l_ "  ... build cluster's environment (origin self)"
 #  wov-env-build -q -f --origin self --cluster
 #  if [ "$?" != "0" ]; then exit 1; fi

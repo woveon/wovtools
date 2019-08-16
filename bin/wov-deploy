@@ -378,6 +378,8 @@ function doDeployDev()
 {
   local retval=0
 
+  echo "WOV_ORIGIN: ${WOV_ORIGIN}"
+
   if [ ${WOV_STAGE} == 'prod' ] || [ ${WOV_STAGE} == 'dev' ]; then
     printf "\n\n\nERROR: deploying straight into stage ${WOV_STAGE} is not allowed. Do a 'wov-push' and then a 'wov-deploy --stage'.\n\n"
     exit 1
@@ -403,7 +405,8 @@ function doDeployDev()
 
 
   # Deploy to cluster, the relevant K8s "stuff"
-  local k8sdir="`WOV_getClusterConfigDir ${WOV_ORIGIN} ${WOV_CONTEXT}`"
+  # local k8sdir="`WOV_getClusterConfigDir ${WOV_ORIGIN} ${WOV_CONTEXT}`"
+  local k8sdir="`WOV_getClusterConfigDir self ${WOV_CONTEXT}`"
   doDeployConf "${k8sdir}" "null" $*
   # l_ "CONFONLY ${CONFONLY}"
   # if [ "$BUILDVH" == "1" ]; then l_warn "FIX ME. directoyr is wrong"; doDeployConf ${WOV_CACHEDIR}/clusters/vh "vh" $*; fi

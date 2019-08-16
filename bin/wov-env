@@ -17,7 +17,7 @@ This pulls config data from:
  - git
 
 And secrets/config:
- - Wovtools project compiled secrets (./wovtools/cache/local/secrets.json)
+ - Wovtools project compiled secrets (./wovtools/cache/clusters/X/config.json)
 
 
 Command Options:
@@ -217,15 +217,17 @@ function doSetContext
 # $1 - cluster name
 # $2 - append directory
 # NOTE: NOT USED
+# USE WOV_getClusterConfigDir
 # --------------------------------------------------------------------- 
-function getClusterConfigPath()
-{
-  local CLUSTER=$1
-  local APPENDPATH=$2
-  local RETVAL="${WOV_BASEDIR}/wovtools/cache/clusters/${CLUSTER}"
-  if [ "$APPENDPATH" != "" ]; then RETVAL="${RETVAL}/${APPENDPATH}"; fi
-  echo $RETVAL
-}
+#function getClusterConfigPath()
+#{
+#  local CLUSTER=$1
+#  local APPENDPATH=$2
+#  local ccd=`WOV_getClusterConfigDir ${WOV_ORIGIN} ${WOV_CONTEXT}`
+#  local RETVAL="${WOV_BASEDIR}/wovtools/cache/clusters/${CLUSTER}"
+#  if [ "$APPENDPATH" != "" ]; then RETVAL="${RETVAL}/${APPENDPATH}"; fi
+#  echo $RETVAL
+#}
 
 function doK8sBadContext()
 {
@@ -498,7 +500,9 @@ function fConfGeneration()
 # --------------------------------------------------------------------- 
 doHealthChecks() 
 {
-  local routes=( "/healthz" $(cat ${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/secrets.json | jq -r '.. | select( type=="object" ) | select(.healthpath != null) | .healthpath' 2> /dev/null) ) ; Re=$?
+  local ccd=`WOV_getClusterConfigDir ${WOV_ORIGIN} ${WOV_CONTEXT}`
+  local routes=( "/healthz" $(cat ${ccd}/config.json | jq -r '.. | select( type=="object" ) | select(.healthpath != null) | .healthpath' 2> /dev/null) ) ; Re=$?
+  # local routes=( "/healthz" $(cat ${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/secrets.json | jq -r '.. | select( type=="object" ) | select(.healthpath != null) | .healthpath' 2> /dev/null) ) ; Re=$?
 #  local routes=$(cat ${WOV_BASEDIR}/wovtools/cache/clusters/${WOV_CLUSTER}/secrets.json | jq -r ".health.routes[]" 2> /dev/null ); Re=$?
   if [ $Re != 0 ] || [ "$routes" == "" ]; then printf "ERROR: failed finding .*.healthroutes in secrets.\n"; exit 1; fi
 
@@ -702,7 +706,9 @@ while [[ $1 =~ ^- ]]; do
     ensureSetContext ${WOV_CONTEXT}
     shift
     if [ "$CLUSTER" == "" ]; then printf "\n\nERROR($(basename $0)): no cluster set. Use the '--cluster X' option.\n\n"; fi
-    command grep -h ${1} ${WOV_BASEDIR}/wovtools/cache/clusters/${CLUSTER}/[cs][me]/*.json | ${SED} -e 's/^.*[=]//' -e 's/^"//' -e 's/"$//'
+    local ccd=`WOV_getClusterConfigDir ${WOV_ORIGIN} ${WOV_CONTEXT}`
+    command grep -h ${1} ${ccd}/[cs][me]/*.json | ${SED} -e 's/^.*[=]//' -e 's/^"//' -e 's/"$//'
+    # command grep -h ${1} ${WOV_BASEDIR}/wovtools/cache/clusters/${CLUSTER}/[cs][me]/*.json | ${SED} -e 's/^.*[=]//' -e 's/^"//' -e 's/"$//'
 
   elif [ "$1" == "--exports" ]; then
 #    doLoadExports

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 RETVAL=0
+ENSUREHEAD=0
+ENSUREVERSION=
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
@@ -9,9 +11,14 @@ function fDisplayOptions()
   cat <<EOF | fold -w ${FOLD} -s
 
 
-usage: `basename $0` [options] [path ...]
+usage: `basename $0` [options] [PATH ...]
 
 Checks that the git archives on path(s) are committed and pushed to origin.
+
+PATH - path to a git repo
+
+  --ensure-nodejs-version : ensure that the PATH's version 
+  --ensure-version X : ensure that the version at path is version X and that version has a remote version tagged
 
   -h : this help
   -q : quiet, no output
@@ -22,14 +29,101 @@ EOF
 
 . wov-env-ops fDisplayOptions "$@"
 
+
+
+# ---------------------------------------------------------------------
+# Check local changes are committed (i.e. status is cool with it)
+# $1 - path
+# ---------------------------------------------------------------------
+function doCheckCommit()
+{
+  local retval=0
+  local R=
+  local Re=
+
+  if [ $retval -eq 0 ]; then
+    l_verbose "  ...check for path variable"
+    if [ "$1" == "" ]; then
+      retval=1
+      l_error "No path supplied to Git repo."
+    fi
+  fi
+
+  if [ $retval -eq 0 ]; then
+    l_verbose "  ...check path exists"
+    if [ ! -e "$1" ]; then
+      retval=2
+      l_error "Path to Git repo does not exist '${1}'."
+    fi
+  fi
+
+  if [ $retval -eq 0 ]; then
+    l_verbose "  ...check repo status"
+    R=$(git -C "${1}" status -s) ; Re=$?
+    if [ $Re -ne 0 ]; then
+      retval=3
+      l_error "Failed calling 'status' on repo at '${1}'."
+    elif [ "${R}" != "" ]; then
+      retval=4
+      l_warn "Path '${1}': failed code/env commit-check. Check in your code/env values."
+      if [ $DOECHO -ge 2 ]; then
+        l_verbose "*** git status : start ************************************************"
+        git -C "${1}" status
+        l_verbose "*** git status : end **************************************************"
+      fi
+    fi
+  fi
+
+  if [ $retval -eq 0 ]; then l_verbose "SUCCESS: '${1}': wov-git-check commit code/env"; fi
+
+  return $retval
+}
+
+# ---------------------------------------------------------------------
+# Check local changes are pushed
+# NOTE: assume doCheckCommit already called which checks path
+# $1 - path
+# ---------------------------------------------------------------------
+function doCheckPush()
+{
+  local retval=0
+  local R=
+  local Re=
+
+  l_verbose '  ...check upstream and head commits are the same.'
+  R=$(test "$(git -C "${1}" rev-parse @{u})" = "$(git -C "${1}" rev-parse HEAD)" ); Re=$?
+  if [ $Re -ne 0 ] || [ "$R" != "" ]; then
+    retval=10
+    l_warn "'${1}': failed code/env push check. Push your archive."
+    if [ $DOECHO -ge 2 ]; then
+      l_verbose "*** git status : start ************************************************ "
+      git -C "${1}" status
+      l_verbose "*** git status : end ************************************************** "
+    fi
+  else
+    l_verbose "SUCCESS: '${1}': wov-push-check push code/env."
+  fi
+
+  return $retval
+}
+
+
 # ---------------------------------------------------------------------
 # Handle Params
 # ---------------------------------------------------------------------
 while [[ $1 =~ ^- ]]; do
 
-  l_error "***ERROR: unknown option '$1'."
-  fDisplayOptions
-  exit 1
+  if [ "${1}" == "--ensure-nodejs-linked" ]; then
+    shift
+    ENSURE_NJSLINKED=1
+    shift
+
+  else
+    l_error "***ERROR: unknown option '$1'."
+    fDisplayOptions
+    exit 1
+  fi
+
 done
 
 
@@ -39,57 +133,90 @@ else
   PATHS=${@}
 fi
 
+
 for p in ${PATHS}; do
 
-  # ---------------------------------------------------------------------
-  # Check code changes and added/removed files are committed into current branch.
-  # ---------------------------------------------------------------------
+  doCheckCommit $p
+  Re=$?
+  if [ $Re -ne 0 ]; then RETVAL=1; fi
 
-  # check current repo
-  R=$(cd ${p} && git status -s)
-  RR=${?}
-  if [ "$RR" != "0" ] || [ "$R" != "" ]; then
-    if [ $DOECHO -ge 1 ]; then
-      l_warn "directory '${p}': failed code/env commit-check. Check in your code/env values to Archive."
-    fi
-    if [ $DOECHO -ge 2 ]; then 
-      l_verbose "*** git status : start ************************************************" 
-      cd ${p} && git status
-      l_verbose "*** git status : end **************************************************"
-    fi
-    # RETVAL=$((RETVAL+1))
-    RETVAL=1
-  else
-    l_verbose "SUCCESS: '${p}': wov-push-check commit code/env"
+  if [ $Re -eq 0 ]; then
+    doCheckPush $p
+    Re=$?
+    if [ $Re -ne 0 ]; then RETVAL=1; fi
   fi
 
-
-  if [ "$RETVAL" == "0" ]; then
-    # ---------------------------------------------------------------------
-    # Check local changes are pushed
-    # ---------------------------------------------------------------------
-    # check code/env
-    # R=$(cd ${p} && git push -nq)
-    R=$(cd ${p} && test "$(git rev-parse @{u})" = "$(git rev-parse HEAD)" )
-    RR=${?}
-    if [ "$RR" != "0" ] || [ "$R" != "" ]; then
-      if [ $DOECHO -ge 1 ]; then
-        l_warn "'${p}': failed code/env push check. Push your archive."
-      fi
-      if [ $DOECHO -ge 2 ]; then 
-        l_verbose "*** git status : start ************************************************ " 
-        cd ${p} && git status
-        l_verbose "*** git status : end ************************************************** " 
-      fi
-      # RETVAL=$((RETVAL+4))
-      RETVAL=2
-    else
-      l_verbose "SUCCESS: '${p}': wov-push-check push code/env."
-    fi
-  fi
+#  if [ $Re -eq 0 ] && [ ${ENSURE_NJSLINKED} -eq 1 ]; then
+#    doCheckNJSLinked $p
+#    Re=$?
+#    if [ $Re -ne 0 ]; then RETVAL=1; fi
+#  fi
 
 done
 
-if [ "${RETVAL}" != "0" ]; then
-  exit ${RETVAL}
-fi
+exit ${RETVAL}
+
+#  if [ "$RETVAL" == "0" ]; then
+#    if [ ${ENSUREHEAD} -eq 1 ]; then
+#      l_verbose "... ensure head"
+#    doEnsureHead 
+#
+#
+#    # Version must be a specificly tagged git version
+#    # NOTE: npmjs is a separate versioning system (though it looks like git tags) so can't use in 
+#    #       local comparisons since there is no assurance they are the same.
+#    # NOTE: use 'np' to git checkin, push and tag all at once
+#    elif [ "${ENSUREVERSION}" != "" ]; then
+#      l_verbose "... ensure version '${ENSUREVERSION}'"
+#      l_ "1"
+#      git rev-list -n 1 HEAD
+#      l_ "2"
+#      git ls-remote
+##      l_ "3"
+##      git rev-list -n 1 "v${ENSUREVERSION}" 
+#      # ex. v0.1.64
+#      #AA=$(cat "${WOV_BASEDIR}/alywandata/package.json" | jq -r ".version")
+#      AB=$(cat "${WOV_BASEDIR}/alywandata/package.json" | jq -r '.dependencies["woveon-service"]')
+#
+#
+#      # l_ "yarn version : ${p} ${AA} ${AB}"
+#      # yarn info woveon-service versions --json | jq -r '.data | index( "0.1.65" ) '
+#
+#      l_ "AB ${AB}"
+#      APROTOCOL=( ${AB//:\/\// } )
+#      l_ "APROTOCOL '${APROTOCOL[0]}'" 
+#      if [ ${#APROTOCOL[@]} -ne 2 ]; then l_error "No protocol (ex. https, git-sshfor depdencncy version. Must be a link to a git repo."; exit 1; fi
+#      case "${APROTOCOL[0]}" in
+#        "https" | "git+https" | "git+ssh")
+#          l_ "URL protocol '${APROTOCOL[0]}'"
+#          ;;
+#        *)
+#          l_error "Bad protocol. Requires a URL to a git repo."
+#          exit 1
+#          ;;
+#      esac
+#
+#      AV=( ${AB//#/ } )
+#      if [ ${#AV[@]} -ne 2 ]; then l_error "No specific version number specified"; exit 1; fi
+#
+#      echo "VERSION ${AV[1]}"
+#
+#      l_verbose "  ...now make sure that tagged version exists in github"
+#      rtag=$(git ls-remote --tags origin "refs/tags/${AV[1]}") ; Re=$?
+#      if [ $Re -ne 0 ]; then
+#        l_error "Failed to connect to remote server"
+#        RETVAL=1
+#      elif [ "$rtag" != "" ]; then
+#        l_verbose "  ...found remote tagged repo in git."
+#      else
+#        RETVAL=1
+#      fi
+#
+#    fi
+#  fi
+#
+#done
+#
+#if [ "${RETVAL}" != "0" ]; then
+#  exit ${RETVAL}
+#fi
