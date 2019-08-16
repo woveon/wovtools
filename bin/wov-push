@@ -30,6 +30,8 @@ SKIPDBCHECKS=0
 function doPushChecks()
 {
   local retval=0
+  local Re=
+  local R=
 
   l_ "...do multiple checks"
 #  l_ "  ... build cluster's environment (origin self)"
@@ -55,9 +57,8 @@ function doPushChecks()
 
   if [ "$SKIPDBCHECKS" != "1" ]; then
     l_ "  ... check for database changes that could block the push"
-    wov-push-db -v --any-push-blockage
-    Re=$?
-    if [ "$Re" != 0 ]; then retval=1; fi
+    wov-push-db -v --any-push-blockage ; Re=$?
+    if [ $Re -ne 0 ]; then retval=1; fi
   else
     l_warn "Skipping check for database changes that could block the push"
   fi
@@ -86,7 +87,13 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--check" ]; then
     shift
     doPushChecks
-    exit $?
+    Re=$?
+    if [ $Re -eq 0 ]; then
+      l_ "  ... check passes"
+    else
+      l_ "  ... check failed"
+    fi
+    exit $Re
     WOV_DEDEFAULTCOMMAND=0
 
   else

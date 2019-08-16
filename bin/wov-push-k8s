@@ -206,7 +206,7 @@ function doPushK8sCheck()
   if [ $? != 0 ]; then
     retval=2
   else
-    l_ "  ... success"
+    l_ "  ... success wov-push-k8s"
   fi
   return $retval
 }
