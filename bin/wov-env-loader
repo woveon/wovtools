@@ -148,8 +148,9 @@ function getWovProjectVars()
   # --------------------------------------------------------------------- 
   # Merge if out of date
   if [ ${WOV_CONFIGFILE_MAINRAW} -nt ${WOV_CONFIGFILE_MERGED} ] || [ ${WOV_CONFIGFILE_MINERAW} -nt ${WOV_CONFIGFILE_MERGED} ]; then
-    if [ $DOECHO -ge 2 ]; then echo "... merged file out of date, creating: ${WOV_CONFIGFILE_MERGED}" ; fi
-    echo "" > ${WOV_CONFIGFILE_MERGED}
+    # echo "... merged file out of date, creating: ${WOV_CONFIGFILE_MERGED}"
+    mkdir -m 700 -p ${WOV_CACHEDIR}
+    touch ${WOV_CONFIGFILE_MERGED}
     chmod 600 ${WOV_CONFIGFILE_MERGED}
     jq -s ".[0] * .[1]" ${WOV_CONFIGFILE_MAINRAW} ${WOV_CONFIGFILE_MINERAW} >> ${WOV_CONFIGFILE_MERGED} 2> /dev/null
     if [ "$?" != "0" ]; then

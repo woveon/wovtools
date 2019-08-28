@@ -383,7 +383,7 @@ function doCommitDB()
     l_error "Database not inited."
     fFailedDBConnection 1 $1
   fi
-  #printf "\nDB_ENTRY '${DB_ENTRY}'\n"
+  printf "\nDB_ENTRY '${DB_ENTRY}'\n"
 
   # should have been at least a snapshot entry
   if [ "${DB_ENTRY}" == "" ]; then

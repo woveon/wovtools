@@ -355,6 +355,7 @@ function doDeployK8s()
     if [ $FILESe != 0 ]; then echo "ERROR: failed to find files."; exit 1; fi
   fi
 
+      set -x
   l_verbose "...K8s files to deploy: ${FILES[*]}"
   for f in "${FILES[@]}"; do
     if [ ! -e ${K8SDIR}/$f.yaml ]; then
@@ -366,7 +367,15 @@ function doDeployK8s()
     else
       printf "  ..."
       kubectl -n ${WOV_NS} apply -f "${K8SDIR}/$f.yaml"
+
+      # Per type of k8s instructions
+      local k=`grep -i 'kind' "${K8SDIR}/$f.yaml" | sed 's/.*://g' | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]'`
+      if [ "$k" == "deployment" ]; then
+        # label deployments for wov command can find them
+        kubectl label --overwrite deployment alywandata wovtools.project=${WOV_PROJECT} wovtools.ms=${f}
+      fi
     fi
+      set +x
   done
 }
 
@@ -382,7 +391,7 @@ function doDeployDev()
 {
   local retval=0
 
-  echo "WOV_ORIGIN: ${WOV_ORIGIN}"
+#  echo "WOV_ORIGIN: ${WOV_ORIGIN}"
 
   if [ ${WOV_STAGE} == 'prod' ] || [ ${WOV_STAGE} == 'dev' ]; then
     printf "\n\n\nERROR: deploying straight into stage ${WOV_STAGE} is not allowed. Do a 'wov-push' and then a 'wov-deploy --stage'.\n\n"

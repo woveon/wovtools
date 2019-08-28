@@ -41,3 +41,25 @@ function doGitChecksOnFormalStages()
   return $retval
 }
 
+
+# ---------------------------------------------------------------------
+# Finds if the Microservice directory is on root or a directory in the git repo
+# $1 - microservice name
+# RET - echo "" on error, directory path on sucess
+# ---------------------------------------------------------------------
+function findMSDir()
+{
+  local retval=''
+
+  if [ -e ${WOV_BASEDIR}/${1} ]; then
+    l_verbose "  ...found '${1}' microservice directory." 1>&2
+    retval="${WOV_BASEDIR}/${1}"
+  elif [ `basename ${WOV_BASEDIR}` == "${1}" ]; then
+    l_verbose "  ... root directory is microservice directory." 1>&2
+    retval="${WOV_BASEDIR}"
+  else
+    l_error "No '${1}' microservice directory in project." 1>&2
+  fi
+  echo "$retval"
+}
+

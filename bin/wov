@@ -149,7 +149,7 @@ function doDisplayStatus()
     echo "  Deployed      : $(date -r $(echo ${DEPNS} | jq -r .metadata.labels.WOV_DEPLOYED)) (epoc $(echo ${DEPNS} | jq -r .metadata.labels.WOV_DEPLOYED))"
     echo "  Microservices :"
 
-    fGetMicroserviceRecipes
+    fGetMicroserviceDeployments
     for r in ${RECIPES[@]}; do
       #echo "r: ${r}"
       local depraw=$(kubectl -n ${WOV_NS} get deployment "${r}" -o json 2> /dev/null)

@@ -46,12 +46,28 @@ for p in "${EE[@]}"; do
 done
 
 
+CWD=`pwd`
+
 echo ""
 echo "`basename $0`"
 echo "Initializes this directory as a wovtools project. This should be non-destructive, only adding at .git and wovtools directories." | fold -w ${FOLD} -s
 echo ""
 
-WOV_PROJECT=$(basename $(pwd))
+# load defaults from any existing config.json 
+if [ -e "${CWD}/wovtools/config.json" ]; then
+  CONFIGJSON=()
+  while read f; do
+    CONFIGJSON+=( "$f" )
+  done <<<$(cat "${CWD}/wovtools/config.json" | jq -r ".project.project, .project.type, .project.title, .project.description, .archive.repository, .archive.env" )
+  WOV_PROJECT="${CONFIGJSON[0]}"
+  WOV_PROJECTTYPE="${CONFIGJSON[1]}"
+  WOV_PROJECTTITLE="${CONFIGJSON[2]}"
+  WOV_PROJECTDESCRIPTION="${CONFIGJSON[3]}"
+  WOV_ARCHIVEREPOSITORY="${CONFIGJSON[4]}"
+  WOV_ARCHIVEENV="${CONFIGJSON[5]}"
+else
+  WOV_PROJECT=$(basename $(pwd))
+fi
 while true; do
   read -r -p "One word PROJECT name (not a title!) : (\"${WOV_PROJECT}\") ... Correct? [Y/n] " A
 
@@ -72,6 +88,7 @@ while true; do
     ;;
   esac
 done
+echo "  ... WOV_PROJECT: ${WOV_PROJECT}"
 
 # Useful timeout script : https://stackoverflow.com/questions/28927783/is-it-possible-to-set-time-out-from-bash-script
 function timeout_monitor() {
@@ -87,7 +104,6 @@ function timeout_monitor() {
 WOV_PROJDIR=$(cat ${HOME}/.wovtools | jq -r ".projects[\"${WOV_PROJECT}\"].dir")
 if [ "${WOV_PROJDIR}" == "null" ]; then
   echo "  ... creating project entry in: ~/.wovtools"
-  CWD=`pwd`
   cat ~/.wovtools | jq " .projects[\"${WOV_PROJECT}\"].dir = \"${CWD}\"" > ~/.wovtools.$$ && cp ~/.wovtools.$$ ~/.wovtools
 fi
 
@@ -327,12 +343,17 @@ fi
   if [ ! -e "${SECRETSDIR}" ]; then mkdir -p "${SECRETSDIR}"; chmod 600 "${SECRETSDIR}"; fi
   if [ ! -e "${SECRETSDIR}/${WOV_PROJECT}_secrets" ]; then mkdir -p "${SECRETSDIR}/${WOV_PROJECT}_secrets"; chmod 600 "${SECRETSDIR}/${WOV_PROJECT}_secrets"; fi
 
-  # remake the softlink
-  rm -f "${WOV_BASEDIR}/wovtools/secrets" || true
-  ln -s "${SECRETSDIR}/${WOV_PROJECT}_secrets" "${WOV_BASEDIR}/wovtools/secrets"
-  if [ "$?" != "0" ]; then
-    echo "ERROR: failed linking to '${SECRETSDIR}/${WOV_PROJECT}_secrets' at '${WOV_BASEDIR}/wovtools/secrets'."
-    exit 1
+  # keep the softlink if it exists
+  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets" ]; then
+    rm -f "${WOV_BASEDIR}/wovtools/secrets" || true
+    ln -s "${SECRETSDIR}/${WOV_PROJECT}_secrets" "${WOV_BASEDIR}/wovtools/secrets"
+    if [ "$?" != "0" ]; then
+      echo "ERROR: failed linking to '${SECRETSDIR}/${WOV_PROJECT}_secrets' at '${WOV_BASEDIR}/wovtools/secrets'."
+      exit 1
+    fi
+  else
+    echo "...keeping existing wovtools/secrets softlink:"
+    ls -l "${WOV_BASEDIR}/wovtools/secrets"
   fi
 
   # make sure default secret files exist
@@ -604,19 +625,21 @@ rm ${WOV_BASEDIR}/wovtools/.config.json.*
 
 
 
-echo "... test Git remote repo configuration/existence"
+echo "... test Database Archive (wovtools/db/archive Git repo) configuration/existence"
 #  cd ${WOV_BASEDIR}/wovtools/db/archive && git remote -v
 timeout_monitor 8 "$$" "TIMEOUT ERROR: failed to connect to remote repository. You should: 1) check network connection 2) ensure repo exists 3) ensure you are using ssh, not https." &
 Timeout_monitor_pid=$!
 cd ${WOV_BASEDIR}/wovtools/db/archive && git ls-remote -q > /dev/null
 if [ "$?" != "0" ]; then
   kill "$Timeout_monitor_pid"
-  printf "\nERROR: failed to find repo. Check your configuration and ensure repo exists.\n\n"
-  exit 1
+  printf "\nWARNING: failed to find wovtools/db/archive repo. Check your configuration and ensure repo exists.\n"
+  printf " NOTE: If you have no Wov databases, then ignore this.\n\n"
 else
   kill "$Timeout_monitor_pid"
 fi
 
 
+wov-env-build -f --config
 
-printf "\n\n... success! WovTools is successfully initialized for this project.\n\n"
+printf "\n\n... success! WovTools is successfully initialized for this project.\n"
+printf "  - type 'wov-env -e' to verify and review settings.\n\n"

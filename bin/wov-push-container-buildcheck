@@ -189,6 +189,7 @@ fi
 # CONTAINER=$1
 CN=$1
 MS=$2
+MSDIR=`findMSDir "${MS}"`
 
 DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${MS}
 ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${MS}
