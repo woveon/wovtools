@@ -120,10 +120,13 @@ function doDisplayStatus()
   . wov-push-common
   echo ""
   figlet ${WOV_PROJECT}
-  echo "WovTools Project '${WOV_PROJECT}' - "${WOV_PROJECTTITLE}""
-  echo "  Stage   : ${WOV_STAGE}"
-  echo " Origin   : ${WOV_ORIGIN}"
-  echo "  Version : ${WOV_PVER}$(wov-git-check -q > /dev/null; if [ $? != 0 ]; then echo "*"; fi )_${WOV_SVER}$(cd ${WOV_BASEDIR}/wovtools/secrets ; wov-git-check -q ; if [ $? != 0 ]; then echo "*"; fi )"
+  fGetMicroserviceRecipes
+  echo "WovTools Project '${WOV_PROJECT}'"
+  echo " Local Project : ${WOV_PROJECTTITLE}"
+  echo "     Local MSs : ${RECIPES[@]}"
+  echo "         Stage : ${WOV_STAGE}"
+  echo "        Origin : ${WOV_ORIGIN}"
+  echo "       Version : ${WOV_PVER}$(wov-git-check -q > /dev/null; if [ $? != 0 ]; then echo "*"; fi )_${WOV_SVER}$(cd ${WOV_BASEDIR}/wovtools/secrets ; wov-git-check -q ; if [ $? != 0 ]; then echo "*"; fi )"
 
   if [ $SHOWPERSIST -eq 1 ]; then
     echo ""
@@ -150,7 +153,7 @@ function doDisplayStatus()
     echo "  Microservices :"
 
     fGetMicroserviceDeployments
-    for r in ${RECIPES[@]}; do
+    for r in ${MSDEPLOYMENTS[@]}; do
       #echo "r: ${r}"
       local depraw=$(kubectl -n ${WOV_NS} get deployment "${r}" -o json 2> /dev/null)
       local depimage=$(echo ${depraw} | jq -r '.spec.template.spec.containers[0].image')

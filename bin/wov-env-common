@@ -27,11 +27,11 @@ function fGetMicroserviceRecipes()
 # Gets the K8s Deployments that are running
 function fGetMicroserviceDeployments()
 {
-  RECIPES=()
+  MSDEPLOYMENTS=()
   local R=( $(kubectl get deployments --selector=wovtools.project=${WOV_PROJECT} -o name) )
   for d in ${R}; do
     local r=( ${R//\// } )
-    RECIPES+="${r[1]}"
+    MSDEPLOYMENTS+="${r[1]}"
   done
 }
 
