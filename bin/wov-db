@@ -230,26 +230,28 @@ function doDBDataBuild()
   for f in ${DATASETFILES[@]}; do
 
     local fname=`cd ${WOV_BASEDIR}/wovtools/data ; ls $1_$f.*`
-    # echo "f: '${f}'  fname: '${fname}'   last 4: '${fname: -4}'"
+    l_verbose "f: '${f}'  fname: '${fname}'   last 4: '${fname: -4}'"
 
-    # compile file if it has .wov on it
     if [ "${fname: -4}" == ".wov" ]; then
       local finname="${fname::-4}"
+      l_verbose "  ... compile '${fname}' since it has .wov on it :${finname}"
       if [ ! -e "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ] ||
          [ "${WOV_BASEDIR}/wovtools/data/${1}_const.js" -nt "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ] ||
          [ "${WOV_BASEDIR}/wovtools/data/${fname}"      -nt "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ]; then
-        if [ ${DOECHO} -ge 1 ]; then echo "  ... compile ${finname}"; fi
+        l_ "  ... compile ${finname}"
         WOV_BASEDIR=${WOV_BASEDIR} wov-compile -ds ${1} \
           "`WOV_getClusterConfigDir ${WOV_ORIGIN} ${WOV_CONTEXT}`/config.json" \
           "${WOV_BASEDIR}/wovtools/data/${fname}" > "${WOV_BASEDIR}/wovtools/cache/data/${finname}"
+      else
+        l_ "  ... no need to compile '${fname}'"
       fi
 
-    # or copy it over
     else
-      if [ ! -e "${WOV_BASEDIR}/wovtools/cache/data/${fname}" ]; then
-        if [ ${DOECHO} -ge 1 ]; then echo "  ... cp ${fname}"; fi
-        cp "${WOV_BASEDIR}/wovtools/data/${fname}" "${WOV_BASEDIR}/wovtools/cache/data/."
-      fi
+      l_verbose "  ... copy over '${fname}'"
+      #if [ ! -e "${WOV_BASEDIR}/wovtools/cache/data/${fname}" ]; then
+      #  l_ "  ... cp ${fname}"
+      cp "${WOV_BASEDIR}/wovtools/data/${fname}" "${WOV_BASEDIR}/wovtools/cache/data/."
+      #fi
     fi
 
   done

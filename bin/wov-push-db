@@ -182,7 +182,7 @@ function doPushCheck()
       echo "DB_HASH result ${Re} : '${DB_HASH}'"
       fFailedDBConnection 2 $1
     fi
-    echo "db hash: $A '${DB_HASH}'"
+    l_verbose "    ...db hash: $A '${DB_HASH}'"
     DB_PVER=$(doGetDBPVER $1)
     if [ "$?" != "0" ] || [ "$DB_PVER" == "" ]; then
       l_error "${DB_PVER}\nERROR: could not get database version.\n"
@@ -510,7 +510,7 @@ EOF
 #      printf "\n\nERROR: failed updating archive database pver number with checksum.\n"
 #      fFailedDBConnection 3 $1
 #    fi
-    l__ "doUpdateDBArchiveLog with ${WOV_PVER} ${WOV_SVER}"
+    l_ "doUpdateDBArchiveLog with ${WOV_PVER} ${WOV_SVER}"
     doUpdateDBArchiveLog "${1}" ${WOV_PVER} ${WOV_SVER} "${DB_snapshot}"
 
     # - 5. push db git repo

@@ -115,7 +115,7 @@ function doSetOrigin()
 {
   jq '.curorigin="'"${1}"'"' "${WOV_CONFIGFILE_MINERAW}" > "${WOV_CONFIGFILE_MINERAW}_.$$" 
   if [ $? == 0 ]; then
-    cp "${WOV_CONFIGFILE_MINERAW}_.$$" "${WOV_CONFIGFILE_MINERAW}"
+    mv "${WOV_CONFIGFILE_MINERAW}_.$$" "${WOV_CONFIGFILE_MINERAW}"
   else
     rm -f "${WOV_CONFIGFILE_MINERAW}_.$$" || true
   fi
@@ -422,10 +422,10 @@ function fConfGeneration()
   if [ -e "${WOV_BASEDIR}/${1}/src/${1}config.js" ]; then
     MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.js"
     if [ "$2" == "cm" ]; then 
-      R=( "$(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())")" ) 
+      R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ) 
       RR=$?
     elif [ "$2" == "se" ]; then
-      R=( "$(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())")" )
+      R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") )
       RR=$?
     fi
     if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
@@ -433,10 +433,10 @@ function fConfGeneration()
   elif [ -e "${WOV_BASEDIR}/src/${1}config.js" ]; then
     MSCFILE="${WOV_BASEDIR}/src/${1}config.js"
     if [ "$2" == "cm" ]; then
-      R=( "$(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())")" ) 
+      R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ) 
       RR=$?
     elif [ "$2" == "se" ]; then 
-      R=( "$(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())")" ) 
+      R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") ) 
       RR=$?
     fi
     if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
@@ -479,6 +479,7 @@ function fConfGeneration()
 
     exit 2
   fi
+
 
 
   for f in "${R[@]}"; do
