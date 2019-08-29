@@ -15,7 +15,7 @@ Uses Handlebars to parse the .wov files (.ck8s.wov and .sk8s.wov). This does two
       results in "A=1" if WOV_STAGE is 'dev', "A=2" if WOV_STAGE is 'prod' and "A=" otherwise.\n
 \n
   Data:\n
-    The --data-set loads the const file from from wovtools/data (ex. X_const.js file) and loads it on 'C'. So if you have X_const.js with { id : { A : 1 } }, you can use it via {{C.id.A}}.\n
+    The --data-set loads the const file from from wovtools/ds (ex. X_const.js file) and loads it on 'C'. So if you have X_const.js with { id : { A : 1 } }, you can use it via {{C.id.A}}.\n
 \n
   Helpers:\n
    - "if_eq"\n
@@ -24,7 +24,7 @@ Uses Handlebars to parse the .wov files (.ck8s.wov and .sk8s.wov). This does two
 `,
 });
 parser.addArgument(['-sf', '--secret-file'], {help : 'secrets file location (JSON format)'});
-parser.addArgument(['-ds', '--data-set'], {help : 'loads a data set constants file (wovtools/data/X_const.js)'});
+parser.addArgument(['-ds', '--data-set'], {help : 'loads a data set constants file (wovtools/ds/const/X_const.js)'});
 parser.addArgument(['-d', '--data'], {help : 'JSON to add. Overwrites secret file.'});
 
 let progargs = parser.parseArgs();
@@ -36,7 +36,7 @@ if ( progargs.secret_file ) { secret_args = JSON.parse(fs.readFileSync(progargs.
 if ( progargs.data_set) {
   let wov_basedir=process.env.WOV_BASEDIR;
   if ( wov_basedir == null ) { throw Error('No WOV_BASEDIR in wov-hbs'); }
-  dataset_args = require(`${wov_basedir}/wovtools/data/${progargs.data_set}_const.js`);
+  dataset_args = require(`${wov_basedir}/wovtools/ds/const/${progargs.data_set}_const.js`);
   // JSON.parse(fs.readFileSync(`${wov_basedir}/wovtools/data/${progargs.data_set}_const.js`).toString());
 }
 // console.log('data: ', progargs.data);

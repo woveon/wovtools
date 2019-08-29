@@ -57,7 +57,7 @@ COMMANDS:
   --wdb-log       : returns the log of commits for the database
   --wdb-edit      : edit the current wov database schema deltas file (i.e. add SQL that you use to change things)
 
- DataSets : non-production data management:
+ DataSets : non-production data management: stored in wovtools/ds with consts in wovtools/ds/const
   -lds               : list all DataSets
   --ds-schema/-ds X : with DataSet X, reloads the database schema (clearing existing data)
   --ds-clear/-dc  X : with DataSet X, clears data in the database
@@ -125,7 +125,7 @@ function doDataSetList()
 
   # find files
   for s in ${DATASETFILES[@]}; do
-    fname+=( $(cd ${WOV_BASEDIR}/wovtools/data ; ls -- *_$s.sql* 2> /dev/null ) )
+    fname+=( $(cd ${WOV_BASEDIR}/wovtools/ds; ls -- *_$s.sql* 2> /dev/null ) )
   done
 #  echo "fname: '${fname[@]}'"
 
@@ -215,42 +215,42 @@ doSetDBData()
 #DB_PORT=$(wov-bastion --bhost ${WOV_CLUSTER}-bastion --ldp ${WOVDBNAME})
 #DB_HOST=localhost   # bastion
 # --------------------------------------------------------------------- 
-# Builds the X data set for a database from the wovtools/data/X_* files
+# Builds the X data set for a database from the wovtools/ds/X_* files
 #  $1 - data set name (ex. alywan)
 # --------------------------------------------------------------------- 
-function doDBDataBuild()
+function doDBDataSetBuild()
 {
-  if [ "$1" == "" ]; then echo "ERROR: need a data set name parameter to wov-db::doDBDataBuild."; exit 1; fi
+  if [ "$1" == "" ]; then echo "ERROR: need a data set name parameter to wov-db::doDBDataSetBuild."; exit 1; fi
 
 
   # Make the target directory
-  mkdir -m 700 -p ${WOV_BASEDIR}/wovtools/cache/data
-  if [ $? -ne 0 ]; then echo "ERROR: failed to make target data directory in cache."; exit 1; fi
+  mkdir -m 700 -p ${WOV_BASEDIR}/wovtools/cache/ds
+  if [ $? -ne 0 ]; then echo "ERROR: failed to make target data set directory in cache."; exit 1; fi
 
   for f in ${DATASETFILES[@]}; do
 
-    local fname=`cd ${WOV_BASEDIR}/wovtools/data ; ls $1_$f.*`
+    local fname=`cd ${WOV_BASEDIR}/wovtools/ds; ls $1_$f.*`
     l_verbose "f: '${f}'  fname: '${fname}'   last 4: '${fname: -4}'"
 
     if [ "${fname: -4}" == ".wov" ]; then
       local finname="${fname::-4}"
       l_verbose "  ... compile '${fname}' since it has .wov on it :${finname}"
-      if [ ! -e "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ] ||
-         [ "${WOV_BASEDIR}/wovtools/data/${1}_const.js" -nt "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ] ||
-         [ "${WOV_BASEDIR}/wovtools/data/${fname}"      -nt "${WOV_BASEDIR}/wovtools/cache/data/${finname}" ]; then
+      if [ ! -e "${WOV_BASEDIR}/wovtools/cache/ds/${finname}" ] ||
+         [ "${WOV_BASEDIR}/wovtools/ds/const/${1}_const.js" -nt "${WOV_BASEDIR}/wovtools/cache/ds/${finname}" ] ||
+         [ "${WOV_BASEDIR}/wovtools/ds/${fname}"      -nt "${WOV_BASEDIR}/wovtools/cache/ds/${finname}" ]; then
         l_ "  ... compile ${finname}"
         WOV_BASEDIR=${WOV_BASEDIR} wov-compile -ds ${1} \
           "`WOV_getClusterConfigDir ${WOV_ORIGIN} ${WOV_CONTEXT}`/config.json" \
-          "${WOV_BASEDIR}/wovtools/data/${fname}" > "${WOV_BASEDIR}/wovtools/cache/data/${finname}"
+          "${WOV_BASEDIR}/wovtools/ds/${fname}" > "${WOV_BASEDIR}/wovtools/cache/ds/${finname}"
       else
         l_ "  ... no need to compile '${fname}'"
       fi
 
     else
       l_verbose "  ... copy over '${fname}'"
-      #if [ ! -e "${WOV_BASEDIR}/wovtools/cache/data/${fname}" ]; then
+      #if [ ! -e "${WOV_BASEDIR}/wovtools/cache/ds/${fname}" ]; then
       #  l_ "  ... cp ${fname}"
-      cp "${WOV_BASEDIR}/wovtools/data/${fname}" "${WOV_BASEDIR}/wovtools/cache/data/."
+      cp "${WOV_BASEDIR}/wovtools/ds/${fname}" "${WOV_BASEDIR}/wovtools/cache/ds/."
       #fi
     fi
 
@@ -263,20 +263,20 @@ function doDBDataBuild()
 # $1 - data set to use
 # #2 - data command to run: schema, clear or data which match to a file 
 # --------------------------------------------------------------------- 
-function doDBDataCommand()
+function doDBDataSetCommand()
 {
   if [ "$WOV_STAGE" == "prod" ]; then echo "ERROR: wov-db DataSets do not work on production."; exit 1; fi
-  if [ "$1" == "" ]; then echo "ERROR: need a data set name parameter to wov-db::doDBDataCommand."; exit 1; fi
+  if [ "$1" == "" ]; then echo "ERROR: need a data set name parameter to wov-db::doDBDataSetCommand."; exit 1; fi
   if [ "$2" == "schema" ] ||
      [ "$2" == "clear" ] ||
      [ "$2" == "data" ]; then
     local A=1
   else
-    echo "ERROR: Unknown command for doDBDataCommand of '${2}'. Should be one of 'schema', 'clear', or 'data'."
+    echo "ERROR: Unknown command for doDBDataSetCommand of '${2}'. Should be one of 'schema', 'clear', or 'data'."
     exit 1
   fi
 
-  R=$(PGPASSWORD=${DB_PASSWORD} psql --quiet -P "footer=off" -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f "${WOV_BASEDIR}/wovtools/cache/data/${1}_${2}.sql") ; Re=$?
+  R=$(PGPASSWORD=${DB_PASSWORD} psql --quiet -P "footer=off" -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE} -f "${WOV_BASEDIR}/wovtools/cache/ds/${1}_${2}.sql") ; Re=$?
   if [ ${DOECHO} -ge 2 ]; then echo "${R}"; fi
   if [ ${DOECHO} -ge 1 ]; then echo "  ... loaded ${1}_${2}.sql"; fi
   if [ "$Re" != "0" ]; then
@@ -773,43 +773,43 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--ds-schema" ] || [ "$1" == "-ds" ]; then
     shift
     exitIfProd
-    doDBDataBuild $1
-    doDBDataCommand $1 "schema"
+    doDBDataSetBuild $1
+    doDBDataSetCommand $1 "schema"
     exit 0
     shift
 
   elif [ "$1" == "--ds-clear" ] || [ "$1" == "-dc" ]; then
     shift
     exitIfProd
-    doDBDataBuild $1
-    doDBDataCommand $1 "clear"
+    doDBDataSetBuild $1
+    doDBDataSetCommand $1 "clear"
     exit 0
     shift
 
   elif [ "$1" == "--ds-data" ] || [ "$1" == "-dd" ]; then
     shift
     exitIfProd
-    doDBDataBuild $1
-    doDBDataCommand $1 "data"
+    doDBDataSetBuild $1
+    doDBDataSetCommand $1 "data"
     exit 0
     shift
 
   elif [ "$1" == "--ds-reload" ] || [ "$1" == "-dr" ]; then
     shift
     exitIfProd
-    doDBDataBuild $1
-    doDBDataCommand $1 'clear'
-    doDBDataCommand $1 'data'
+    doDBDataSetBuild $1
+    doDBDataSetCommand $1 'clear'
+    doDBDataSetCommand $1 'data'
     exit 0
     shift
 
   elif [ "$1" == "--ds-full" ] || [ "$1" == "-df" ]; then
     shift
     exitIfProd
-    doDBDataBuild $1
-    doDBDataCommand $1 'schema'
-    doDBDataCommand $1 'clear'
-    doDBDataCommand $1 'data'
+    doDBDataSetBuild $1
+    doDBDataSetCommand $1 'schema'
+    doDBDataSetCommand $1 'clear'
+    doDBDataSetCommand $1 'data'
     exit 0
     shift
 

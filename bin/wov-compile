@@ -45,7 +45,7 @@ fDisplayOptions()
   echo
   echo "   This is a simple handlebars running script, with some headings."
   echo ""
-  echo "  -ds/--data-set X : The --data-set loads the const file from from wovtools/data (ex. X_const.js file) and loads it on 'C'. So if you have X_const.js with   { id : { A : 1 } }, you can use it via {{C.id.A}}."
+  echo "  -ds/--data-set X : The --data-set loads the const file from from wovtools/ds (ex. X_const.js file) and loads it on 'C'. So if you have X_const.js with   { id : { A : 1 } }, you can use it via {{C.id.A}}."
   echo "  -d/--data JSON : uses this data as well"
   echo
 }

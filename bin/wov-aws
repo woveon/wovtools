@@ -149,6 +149,153 @@ function doVolumeEnsure()
   return 0
 }
 
+function doGrantUserAccessToS3()
+{
+  local AWSUser=$1
+  local PolicyName="S3-WovToolsProject-k8sarchive-${WOV_PROJECT}-${WOV_CLUSTER}"
+  local UserCode=$2
+  local f=".tmp.$$"
+
+
+  touch $f
+  chmod 600 $f
+  cat <<EOF > $f
+{
+  "Version": "2012-10-17",
+  "Statement": [
+      {
+          "Effect": "Allow",
+          "Action":   ["s3:PutObject","s3:GetObject"],
+          "Resource": "arn:aws:s3:::${WOV_ARCHIVEENV:5}/${WOV_CLUSTER}/${WOV_PROJECT}/${UserCode}/*"
+        }
+  ]
+}
+EOF
+
+  echo "Summary: "
+  cat $f
+  echo "AWS Command: aws iam put-user-policy --user-name "${AWSUser}" --policy-name "${PolicyName}" --policy-document 'file://$f'"
+  echo ""
+  read -r -p "Grant user access? [y/N]" A
+  case $A in
+    [Yy]|[Yy][Ee][Ss])
+      echo ""
+      ;;
+    *)
+      echo "  exiting. NO ACTION TAKEN."
+      rm ./.tmp.$$
+      exit 1
+      ;;
+  esac
+
+  # Run command
+  set -x
+  aws iam put-user-policy --user-name "${AWSUser}" --policy-name "${PolicyName}" --policy-document file://$f
+  if [ $? -ne 0 ]; then
+    #rm "$f"
+    echo "Failed" 
+    exit 1
+#  else
+#    rm "$f"
+  fi
+}
+
+# https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_examples_codecommit_pull.html
+# https://docs.aws.amazon.com/codecommit/latest/userguide/auth-and-access-control-iam-identity-based-access-control.html#managed-policies
+function doGrantUserAccessToCodeCommit()
+{
+  local REPO=$1
+  local Branch=$2
+  local AWSUser=$3
+  local PolicyName="CodeCommit-$4"
+  local Conditions=
+  local RESOURCE="arn:aws:codecommit:us-east-1:*:${REPO}"
+
+  if [ "${REPO}" == "" ]; then l_error "No repository name provided as param 1."; exit 1; fi
+  if [ "${Branch}" == "" ]; then l_error "No branch name provided as param 2."; exit 1; fi
+  if [ "${AWSUser}" == "" ]; then l_error "No AWSUser specified as param 3."; exit 1; fi
+  if [ "${4}" == "" ]; then l_error "No policy name provided as param 4."; exit 1; fi
+
+  if [ "${Branch}" == "full" ]; then
+    read -r -p "WARNING: Granting user '${AWSUser}' access to all branches of '${REPO}'. Correct? [y/N]" A
+    case $A in
+      [Yy]|[Yy][Ee][Ss])
+        Conditions=
+        ;;
+      *)
+        echo "  exiting. NO ACTION TAKEN."
+        exit 1
+        ;;
+    esac
+  else
+    read -r -d '' Conditions <<EOF
+        "StringEquals": {
+          "codecommit:References": [ "refs/heads/${Branch}" ]
+        }
+EOF
+  fi
+
+
+  touch ./.tmp.$$
+  chmod 600 ./.tmp.$$
+  cat <<EOF > ./.tmp.$$
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "codecommit:GitPull"
+      ],
+      "Resource": "${RESOURCE}"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "codecommit:GitPush"
+      ],
+      "Resource": "${RESOURCE}",
+      "Condition": {
+        ${Conditions}
+      }
+    }
+  ]
+}
+EOF
+
+  echo "Summary: "
+  echo "  REPO     : ${REPO}"
+  echo "  Branch   : ${Branch}"
+  echo "  RESOURCE : ${RESOURCE}"
+  echo "  Policy   : ${PolicyName}"
+  echo "  AWSUser  : ${AWSUser}"
+  cat ./.tmp.$$
+  echo ""
+  read -r -p "Grant user access? [y/N]" A
+  case $A in
+    [Yy]|[Yy][Ee][Ss])
+      # echo "aws iam put-user-policy --user-name ${AWSUser} --policy-name ${PolicyName} --policy-document file://.tmp.$$"
+      echo ""
+      ;;
+    *)
+      echo "  exiting. NO ACTION TAKEN."
+      rm ./.tmp.$$
+      exit 1
+      ;;
+  esac
+
+  # Run command
+  aws iam put-user-policy --user-name "${AWSUser}" --policy-name "${PolicyName}" --policy-document file://.tmp.$$
+  if [ $? -ne 0 ]; then
+    rm ./.tmp.$$
+    echo "Failed" 
+    exit 1
+  else
+    rm ./.tmp.$$
+  fi
+
+}
+
 
 
 # ---------------------------------------------------------------------
@@ -200,6 +347,12 @@ elif [ "${COMMAND}" == "cluster" ]; then
 #  doCluster
 #  EXIT=1
   exit 1
+
+elif [ "${COMMAND}" == "repoaccess" ]; then
+  doGrantUserAccessToCodeCommit"${@}"
+
+elif [ "${COMMAND}" == "k8saccess" ]; then
+  doGrantUserAccessToS3 "${@}"
 
 else
   printf "ERROR: unknown command \"${COMMAND}\".\n" 1>&2

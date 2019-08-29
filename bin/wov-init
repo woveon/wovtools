@@ -184,7 +184,7 @@ function InitProject()
   # ---------------------------------------------------------------------
   # Create conf, k8s and containers directories
   mkdir -p ${WOV_BASEDIR}/wovtools/cache
-  mkdir -p ${WOV_BASEDIR}/wovtools/data
+  mkdir -p ${WOV_BASEDIR}/wovtools/ds/const
   mkdir -p ${WOV_BASEDIR}/wovtools/msrecipes
   mkdir -p ${WOV_BASEDIR}/wovtools/cmds
   mkdir -p ${WOV_BASEDIR}/wovtools/services

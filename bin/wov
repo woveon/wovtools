@@ -144,7 +144,7 @@ function doDisplayStatus()
 
   if [ $SHOWSYSTEM -eq 1 ]; then
     echo ""
-    echo " System:"
+    echo " System: '${WOV_NS}'"
     echo " ---"
     echo "  Cluster       : ${WOV_CLUSTER} - ${WOV_cluster_dns_domain}"
     DEPNS=$(kubectl -n ${WOV_NS} get namespaces ${WOV_PROJECT}-${WOV_STAGE}  -o json)
