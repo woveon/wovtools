@@ -1,7 +1,7 @@
 
 
-BINS-INIT=wov-init wov-init-ms wov-init-dba
-BINS-ENV=wov-env-loader wov-env-ops wov-env-common wov-env-build wov-env wov-cluster wov-kops wov-cluster-createdb wov-cluster-configdbnet wov-env-val
+BINS-INIT=wov-init wov-init-ms wov-init-dba wov
+BINS-ENV=wov-env-loader wov-env-ops wov-env-common wov-env-build wov-env wov-cluster wov-kops wov-cluster-createdb wov-cluster-configdbnet wov-env-val wov_stage-select
 BINS-PROVIDER=provider-wov-env-aws
 BINS-CLI=wov-aws wov-cd wov-bastion wov-bastion-connection wov-cmd wov-ed wov-ls wov-ns wov-db-common wov-db wov-db-cloud wov-p wov-plog \
 	       wov-hash wov-enc wov-dec wov-log wov-context
@@ -38,13 +38,13 @@ install : preinstall /usr/local/etc/bash_completion.d/wovtools
 		echo "    ... install $$b"; \
 		ln -f -s $(CURDIR)/bin/$$b /usr/local/bin/$$b; \
 		done
-	@echo "  ... install applescript to Terminal script directory, via ln"
-	@for b in $(APPLESCRIPT); do \
-		echo "    ... install $$b"; \
-		if [ ! -e $(CURDIR)/bin/$$b ]; then echo "ERROR: can not find $$b... did you compile it as an app? Script Editor > Export > Application, Show startup screen, Run-only "; fi; \
-		rm -Rf $(HOME)/Library/Scripts/Applications/Terminal/$$b; \
-		cp -r $(CURDIR)/bin/$$b $(HOME)/Library/Scripts/Applications/Terminal/$$b; \
-	done
+#	@echo "  ... install applescript to Terminal script directory, via ln"
+#	@for b in $(APPLESCRIPT); do \
+#		echo "    ... install $$b"; \
+#		if [ ! -e $(CURDIR)/bin/$$b ]; then echo "ERROR: can not find $$b... did you compile it as an app? Script Editor > Export > Application, Show startup screen, Run-only "; fi; \
+#		rm -Rf $(HOME)/Library/Scripts/Applications/Terminal/$$b; \
+#		cp -r $(CURDIR)/bin/$$b $(HOME)/Library/Scripts/Applications/Terminal/$$b; \
+#	done
 	@echo "  ... install node modules."
 	@yarn add argparse handlebars ssh-config dotenv minimist bcryptjs crypto-js
 	@echo
