@@ -9,10 +9,17 @@ WOV_BASEDIR=`pwd`
 ISWOVPROJECT="0"
 . wov-env-loader
 
+
+
+function CreateWovToolsGlobalFile()
+{
+}
+
 # --------------------------------------------------------------------- 
 # Work with ~/.wovtools file
 # --------------------------------------------------------------------- 
 if [ ! -e "${HOME}/.wovtools" ]; then
+  CreateWovToolsGlobalFile
   echo ""
   echo "ERROR: no ~/.wovtools file. Need '.me' entry in that file."
   exit 1
