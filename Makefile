@@ -15,6 +15,11 @@ BINS=${BINS-INIT} ${BINS-ENV} ${BINS-PROVIDER} ${BINS-CLI} ${BINS-VH} ${BINS-PUS
 
 APPLESCRIPT=wov-context.app wov-gui-cluster.app wov-gui-namespace.app wov-gui-project.app
 
+BASHMINVER=5
+ifeq "$(shell expr `bash -c 'echo $${BASH_VERSION}' | cut -f1 -d.` \>= ${BASHMINVER})" "0"
+$(error ERROR: Need bash version ${BASHMINVER} or more. On mac, use 'brew install bash')
+endif
+
 all:
 	@echo ""
 	@echo "  test    - "
