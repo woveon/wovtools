@@ -187,7 +187,12 @@ function getWovProjectVars()
   # vars from Kubernetes
   # --------------------------------------------------------------------- 
   if [ "${WOV_CONTEXT}" == "" ]; then 
-    export WOV_CONTEXT="$(kubectl config current-context)"
+    WOV_CONTEXT="$(kubectl config current-context 2> /dev/null )" ; Re=$?
+    if [ $Re -ne 0 ]; then
+      echo "ERROR: Kubernetes not configured. No kubectl context. Set up a current context and run again. Or, use --context or set env WOV_CONTEXT." 1>&2
+      exit 1
+    fi
+    export WOV_CONTEXT
   fi
   array=( ${WOV_CONTEXT//-/ } )
   if [ "${#array[@]}" != "6" ]; then
