@@ -11,9 +11,6 @@ if [ "${WOV_ENV_COMMONCMDS}" != "1" ]; then
   WOV_DEBUGMODE=${WOV_DEBUGMODE}
     # --- spew file/line numbers in debug mode
 
-  DOECHO=1
-    # --- output spew levels: 0 - quiet, 1 - normal, 2 - verbose
-
   FOLD=`tput cols`
     # --- width of terminal for output spew
 
@@ -30,37 +27,7 @@ if [ "${WOV_ENV_COMMONCMDS}" != "1" ]; then
 
   newparams=()
 
-  # Typical logging
-  function l_()
-  {
-    if [ ${DOECHO} -ge 1 ]; then 
-      if [ "${WOV_DEBUGMODE}" == "1" ]; then
-        echo "(`basename $0`:${BASH_LINENO}): ${*}"
-      else
-        echo "${*}"
-      fi
-    fi
-  }
-  # Verbose logging
-  function l_verbose()
-  {
-    if [ ${DOECHO} -ge 2 ]; then 
-      if [ "${WOV_DEBUGMODE}" == "1" ]; then echo "(`basename $0`:${BASH_LINENO}): ${*}";
-      else echo "${*}"; fi
-    fi
-  }
-  # Error logging
-  function l_error()
-  {
-    if [ "${WOV_DEBUGMODE}" == "1" ]; then echo "(`basename $0`:${BASH_LINENO})ERROR  : ${*}";
-    else echo "ERROR  : ${*}"; fi
-  }
-  # Warning logging
-  function l_warn()
-  {
-    if [ "${WOV_DEBUGMODE}" == "1" ]; then echo "(`basename $0`:${BASH_LINENO})WARNING: ${*}";
-    else echo "WARNING: ${*}"; fi
-  }
+  . wov-env-logging
 
   # ---------------------------------------------------------------------
   # Read through params, placing unused on newparams, which will be

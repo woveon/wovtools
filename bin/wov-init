@@ -8,21 +8,86 @@ FOLD=$(tput cols)
 WOV_BASEDIR=`pwd`
 ISWOVPROJECT="0"
 . wov-env-loader
+. wov-env-logging
+
+echo ""
+figlet "`basename $0`"
+echo "Initializes this directory as a wovtools project. This should be non-destructive, only adding at .git and wovtools directories." | fold -w ${FOLD} -s
+echo ""
 
 
-
+# --------------------------------------------------------------------- 
+# Called when ~/.wovtools does not exist
+# --------------------------------------------------------------------- 
 function CreateWovToolsGlobalFile()
 {
+  local A=
+  local SECRETSDIR=~/.wovtools_secrets
+
+  # take first 2 letters of username
+  local WOV_ME=`whoami`
+  WOV_ME=${WOV_ME::2}
+
+  printf "\nCreate user's global Wovtools config: ~/.wovtools\n"
+
+  while true; do
+    read -r -p "Default location for WovTools project secret files:  (\"${SECRETSDIR}\") ... Correct? [Y/n] " A
+    case $A in
+      ""|[Yy][Ee][Ss]|[Yy])
+        break
+        ;;
+      [Nn][Oo]|[Nn])
+        printf "ok, enter new location: "
+        read SECRETSDIR
+        ;;
+      *)
+        echo "Invalid input... (${A})"
+        ;;
+    esac
+  done
+  echo "  ... SECRETSDIR : ${SECRETSDIR}"
+
+  while true; do
+    read -r -p "Enter your WovTools Usercode (ex. your initials) : (\"${WOV_ME}\") ... Correct? [Y/n] " A
+    case $A in
+      ""|[Yy][Ee][Ss]|[Yy])
+        break
+        ;;
+      [Nn][Oo]|[Nn])
+        read -r -p "ok, enter new WovTools Usercode: " WOV_ME
+        ;;
+      *)
+        echo "Invalid input... (${A})"
+        ;;
+    esac
+  done
+  echo "  ... WOV_ME: ${WOV_ME}"
+
+  cat <<EOF > ~/.wovtools
+{
+  "me"       : "${WOV_ME}",
+  "archive"  : {
+  },
+  "projects" : {
+  },
+  "wovtools" : {
+    "secrets" : {
+      "dir" : "${SECRETSDIR}"
+    }
+  }
+}
+EOF
+
+  # Make directory
+  mkdir -p -m 700 "${SECRETSDIR}"
 }
 
 # --------------------------------------------------------------------- 
 # Work with ~/.wovtools file
 # --------------------------------------------------------------------- 
 if [ ! -e "${HOME}/.wovtools" ]; then
+  echo "WARNING: no ~/.wovtools file."
   CreateWovToolsGlobalFile
-  echo ""
-  echo "ERROR: no ~/.wovtools file. Need '.me' entry in that file."
-  exit 1
 fi
 WOV_ME=$(cat ${HOME}/.wovtools | jq -r '.me')
 
@@ -42,7 +107,7 @@ done
 if [ $Re -ne 0 ]; then exit 1; fi
 
 # Check for eventually needed entries in .wovtools file
-EE=( ".wovtools.secrets" ".archive.env" ".archive.repository" )
+EE=( ".wovtools.secrets.dir" ".archive.env" ".archive.repository" )
 for p in "${EE[@]}"; do
   R=$(cat ${HOME}/.wovtools | jq -r "${p}")
   if [ "${R}" == "" ]; then
@@ -54,11 +119,6 @@ done
 
 
 CWD=`pwd`
-
-echo ""
-echo "`basename $0`"
-echo "Initializes this directory as a wovtools project. This should be non-destructive, only adding at .git and wovtools directories." | fold -w ${FOLD} -s
-echo ""
 
 # load defaults from any existing config.json 
 if [ -e "${CWD}/wovtools/config.json" ]; then
