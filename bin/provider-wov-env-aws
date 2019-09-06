@@ -12,22 +12,7 @@ if [ "${WOV_cluster_dns_domain}" == "" ]; then
 fi
 
 
-# ---------------------------------------------------------------------
-# Turns region codes into AWS regions.
-# ---------------------------------------------------------------------
-function fConvertRegionCodeAWS()
-{
-  local retcode=1
-  local retval=
-  case $1 in
-    va)  retval='us-east-1'; retcode=0 ;;
-    iad) retval='us-east-1'; retcode=0 ;;
-    *)   >&2 printf "WARNING: unknown AWS region code of '$1'.\n"
-  esac
-  echo "$retval"
-  return $retcode
-}
-
+. wov-env-provider-common
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------

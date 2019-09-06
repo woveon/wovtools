@@ -26,11 +26,27 @@ EOF
 
 . wov-env-ops fDisplayOptions "$@"
 
+
+# ---------------------------------------------------------------------
+# Pre import of env
+# ---------------------------------------------------------------------
+COMMAND=$1
+shift
+
+. wov-env-provider-common
+if     [ "${COMMAND}" == "convertrc" ]; then
+  fConvertRegionCodeAWS $*
+  exit $?
+fi
+
+
+
+
 # ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
-. <(wov-env --envs --provider)
 . provider-wov-env-aws
+. <(wov-env --envs --provider)
 #wovawsvargs=( "$@" )
 #set ""
 #. <(wov-env --provider)
@@ -322,10 +338,7 @@ EOF
 COMMAND=$1
 shift
 
-if     [ "${COMMAND}" == "convertrc" ]; then
-  fConvertRegionCodeAWS $*
-  EXIT=$?
-elif   [ "${COMMAND}" == "volume-id" ]; then
+if   [ "${COMMAND}" == "volume-id" ]; then
   doVolumeID       $*
   EXIT=$?
 elif [ "${COMMAND}" == "volume-describe" ]; then
