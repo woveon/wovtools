@@ -264,7 +264,7 @@ EOF
     if [[ $DOECHO -ge 1 ]]; then echo "  ... using originmods  : ${WOV_CLUSTER}"; fi
 
     local rts=( $(jq -r '.originmods.'"${WOV_ORIGIN}"' | .routes[] | "\(.[0]) \(.[1])"' ${WOV_CONFIGFILE_MERGED} 2> /dev/null ) )
-    #l_verbose "rts: ${#rts[@]} ${rts[@]}"
+    # l_verbose "rts: ${#rts[@]} ${rts[@]}"
 
     # NOTE: doing this in order of entries
     while [[ "${#rts[@]}" != "0" ]]; do
@@ -279,7 +279,8 @@ EOF
       # rewrite routes in WOV_SECRETFILE, remove original graft, then move back to SECREFILE for next mod
       echo "" > ${WOV_SECRETFILE}.5
       chmod 600 ${WOV_SECRETFILE}.5
-      jq '.'"${rtto}"' += .'"${rtfrom}"'' ${WOV_SECRETFILE}_ >> ${WOV_SECRETFILE}.5
+      # NOTE: the double quote after dot, ensures it can read hyphenated names
+      jq '."'"${rtto}"'" += ."'"${rtfrom}"'"' ${WOV_SECRETFILE}_ >> ${WOV_SECRETFILE}.5
       # TODO: remove original graft
 
       # mv file
