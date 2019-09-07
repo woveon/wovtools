@@ -118,6 +118,16 @@ function doDisplayStatus()
   . wov-env-loader
   . <(wov-env --exports)
   . wov-push-common
+  local pvergit=$(wov-git-check -q 2>&1 2> /dev/null;                                if [ $? != 0 ]; then echo "*"; fi )
+  local svergit=$(wov-git-check -q ${WOV_BASEDIR}/wovtools/secrets 2>&1 > /dev/null; if [ $? != 0 ]; then echo "*"; fi )
+  local DEPNS=$(kubectl -n ${WOV_NS} get namespaces ${WOV_PROJECT}-${WOV_STAGE}  -o json)
+  local pverconf=$(echo ${DEPNS} | jq -r .metadata.labels.WOV_PVER)
+  local sverconf=$(echo ${DEPNS} | jq -r .metadata.labels.WOV_SVER)
+  if [ "${pverconf}" == "null" ]; then pverconf='-'; fi
+  if [ "${sverconf}" == "null" ]; then sverconf='-'; fi
+  local deployedat=$(echo ${DEPNS} | jq -r .metadata.labels.WOV_DEPLOYED)
+
+
   echo ""
   figlet ${WOV_PROJECT}
   fGetMicroserviceRecipes
@@ -126,7 +136,7 @@ function doDisplayStatus()
   echo "     Local MSs : ${RECIPES[@]}"
   echo "         Stage : ${WOV_STAGE}"
   echo "        Origin : ${WOV_ORIGIN}"
-  echo "       Version : ${WOV_PVER}$(wov-git-check -q > /dev/null; if [ $? != 0 ]; then echo "*"; fi )_${WOV_SVER}$(cd ${WOV_BASEDIR}/wovtools/secrets ; wov-git-check -q ; if [ $? != 0 ]; then echo "*"; fi )"
+  echo "       Version : ${WOV_PVER}${pvergit}_${WOV_SVER}${svergit}"
 
   if [ $SHOWPERSIST -eq 1 ]; then
     echo ""
@@ -147,9 +157,12 @@ function doDisplayStatus()
     echo " System: '${WOV_NS}'"
     echo " ---"
     echo "  Cluster       : ${WOV_CLUSTER} - ${WOV_cluster_dns_domain}"
-    DEPNS=$(kubectl -n ${WOV_NS} get namespaces ${WOV_PROJECT}-${WOV_STAGE}  -o json)
-    echo "  Configured    : v$(echo ${DEPNS} | jq -r .metadata.labels.WOV_PVER)_$(echo ${DEPNS} | jq -r .metadata.labels.WOV_SVER)"
-    echo "  Deployed      : $(date -r $(echo ${DEPNS} | jq -r .metadata.labels.WOV_DEPLOYED)) (epoc $(echo ${DEPNS} | jq -r .metadata.labels.WOV_DEPLOYED))"
+    echo "  Configured    : v${pverconf}_${sverconf}"
+    if [ "${deployedat}" != "null" ]; then
+      echo "  Deployed      : $(date -r ${deployedat}) (epoc ${deployedat})"
+    else
+      echo "  Deployed      : undeployed"
+    fi
     echo "  Microservices :"
 
     fGetMicroserviceDeployments
