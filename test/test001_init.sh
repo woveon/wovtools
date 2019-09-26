@@ -2,6 +2,8 @@
 . /usr/local/bin/wtrunner
 
 
+WOV_DEBUGMODE=1
+DOECHO=2
 TEST=test1
 tr_h1 "Make Test Repo"
 TESTDIR=`pwd`
@@ -16,7 +18,8 @@ PROJDIR="${TESTDIR}/${TEST}"
   rm -Rf "${TESTDIR}/${TEST}"
   rm -Rf "${TESTREPO}/${TEST}.git"
   rm -Rf "${TESTREPO}/${TEST}_secrets.git"
-  rm -Rf "${TESTREPO}/${TEST}_db.git"
+  rm -Rf "${TESTREPO}/${TEST}_dba.git"
+  rm -Rf "${TESTREPO}/${TEST}_dsa.git"
 
   tr_section '/clean-proj'
 }
@@ -29,23 +32,45 @@ PROJDIR="${TESTDIR}/${TEST}"
   mkdir -p "${TESTDIR}/${TEST}"
   mkdir -p "${TESTREPO}/${TEST}.git"
   mkdir -p "${TESTREPO}/${TEST}_secrets.git"
-  mkdir -p "${TESTREPO}/${TEST}_db.git"
+  mkdir -p "${TESTREPO}/${TEST}_dba.git"
+  mkdir -p "${TESTREPO}/${TEST}_dsa.git"
 
-  # init git
+  # init "remote" git repositories
   git -C "${TESTREPO}/${TEST}.git" init --bare
-  git -C "${TESTREPO}/${TEST}_db.git" init --bare
+  git -C "${TESTREPO}/${TEST}_secrets.git" init --bare
+  git -C "${TESTREPO}/${TEST}_dba.git" init --bare
+  git -C "${TESTREPO}/${TEST}_dbs.git" init --bare
 
   # add to wovtools/myconfig.json
   tr_dir "${TESTDIR}/${TEST}"
-#  wov-init 
-#  exit 1
+wov-init  -v
+exit 1
   tr_comment '...starting wov-init'
+  wov-init <<EOF
+
+
+
+
+
+
+
+n
+/Users/cwingrav/code/woveon/src/wovtools/test/testrepo/test1
+Y
+
+
+y
+Y
+EOF
+ exit 1
+
+
   wov-init <<STDIN
 Y
 ${TESTREPO}/${TEST}.git
 john doe
 jd@example.com
-${TESTREPO}/${TEST}_db.git
+${TESTREPO}/${TEST}_dba.git
 Test 1
 
 A description.

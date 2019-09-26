@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 . /usr/local/bin/wtrunner
+FOLD=`tput cols`
+
 
 export PATH=$PATH:/usr/local/bin/wovlib
 . wov-env-logging
@@ -70,13 +72,13 @@ EOF
   tr_comment "iGlobalConfig_ReadIn" 
   iGlobalConfig_ReadIn
   tr_test "read in variables from global config" "iGlobalConfig_ReadIn && echo 1" 0 1 '1' 
-  tr_test "WOV_ME"                  'echo "${WOV_ME}"' 0 1 'uc' 
-  tr_test "WOV_ARCHIVESK8S"         'echo "${WOV_ARCHIVESK8S}"' 0 1 'K8S'
-  tr_test "WOV_ARCHIVESCONTAINER"         'echo "${WOV_ARCHIVESCONTAINER}"' 0 1 'CA'
-  tr_test "WOV_ARCHIVESCODEREPO"         'echo "${WOV_ARCHIVESCODEREPO}"' 0 1 'CR'
-  tr_test "WOV_SEADIR"         'echo "${WOV_SEADIR}"' 0 1 '/tmp/.wovtools_sea'
-  tr_test "WOV_DBADIR"         'echo "${WOV_DBADIR}"' 0 1 '/tmp/.wovtools_dba'
-  tr_test "WOV_DSADIR"         'echo "${WOV_DSADIR}"' 0 1 '/tmp/.wovtools_dsa'
+  tr_test "WOV_ME"               'echo "${WOV_ME}"' 0 1 'uc' 
+  tr_test "WOV_K8SARCHIVE"       'echo "${WOV_K8SARCHIVE}"' 0 1 'K8S'
+  tr_test "WOV_CONTAINERARCHIVE" 'echo "${WOV_CONTAINERARCHIVE}"' 0 1 'CA'
+  tr_test "WOV_CODEREPOARCHIVE"  'echo "${WOV_CODEREPOARCHIVE}"' 0 1 'CR'
+  tr_test "WOV_SEADIR"           'echo "${WOV_SEADIR}"' 0 1 '/tmp/.wovtools_sea'
+  tr_test "WOV_DBADIR"           'echo "${WOV_DBADIR}"' 0 1 '/tmp/.wovtools_dba'
+  tr_test "WOV_DSADIR"           'echo "${WOV_DSADIR}"' 0 1 '/tmp/.wovtools_dsa'
 
 
 

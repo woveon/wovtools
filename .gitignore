@@ -8,3 +8,6 @@ tests/WovTools_test_tp1
 node_modules
 test/testrepo
 test/test1
+test/dummyproject
+test/dummyprojectrepo
+test/dummyprojectlocalarchives

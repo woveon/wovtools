@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
 . wov-env-logging
 
 WOV_cluster_dns_domain=$1

@@ -19,25 +19,25 @@ function l_()
     fi
 
     # optimization here
-    if [ $((headl+textl)) -le $((FOLD-headl)) ]; then printf "${head}${text}\n"
-    else printf "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"; fi
+    if [ $((headl+textl)) -le $((FOLD-headl)) ]; then printf -- "${head}${text}\n"
+    else printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"; fi
   fi
 }
 # Verbose logging
 function l_verbose()
 {
-  local head=""
-  local headl=0
+  local head="V:"
+  local headl=
   local text=
   local testl=
   if [ ${DOECHO} -ge 2 ]; then
     text="${*}"
     textl=${#text}
     if [ "${WOV_DEBUGMODE}" == "1" ]; then
-      head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO}): "
-      headl=${#head}
+      head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})V: "
     fi
-    printf "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
+    headl=${#head}
+    printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
   fi
 }
 # Error logging
@@ -47,7 +47,7 @@ function l_error()
   local testl=${#text}
   local head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})ERROR  : "
   local headl=${#head}
-  printf "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat
+  printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat
 }
 # Warning logging
 function l_warn()
@@ -56,5 +56,5 @@ function l_warn()
   local testl=${#text}
   local head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})WARNING: "
   local headl=${#head}
-  printf "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat
+  printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat
 }

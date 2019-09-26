@@ -14,7 +14,6 @@ ISWOVPROJECT="0"
 . wov-env-common
 . wov-init-common
 
-
 # ---------------------------------------------------------------------
 # Precommands
 while [[ $1 =~ ^- ]]; do
@@ -44,7 +43,7 @@ echo ""
 
 
 # --------------------------------------------------------------------- 
-# Work with Global Woveon file : ~/.wovtools
+l_verbose "Work with Global Woveon file : ~/.wovtools"
 # --------------------------------------------------------------------- 
 iGlobalConfig_CreateIfNotExists || exit 1
 iGlobalConfig_Validate || exit 1
@@ -52,11 +51,11 @@ iGlobalConfig_ReadIn
 
 
 # --------------------------------------------------------------------- 
-# Set WOV_BASEDIR
+l_verbose "Set WOV_BASEDIR"
 # --------------------------------------------------------------------- 
 WOV_BASEDIR=`pwd`
-while read f; do
-  read -p -r "Select project base directory (Root of git repository) (\"${WOV_BASEDIR}\") ... Correct? [Y/n] " A
+while true; do
+  read -r -p "Select project base directory (Root of git repository) (\"${WOV_BASEDIR}\") ... Correct? [Y/n] " A
   case $A in
     ""|[Yy][Ee][Ss]|[Yy])
       break
@@ -75,7 +74,7 @@ echo "  ... WOV_BASEDIR : ${WOV_BASEDIR}"
 
 
 # ---------------------------------------------------------------------
-# Project Config file : wovtools/config.json
+l_verbose "Project Config file : wovtools/config.json"
 # ---------------------------------------------------------------------
 l_verbose "Create the wovtools/config.json file"
 iProjConfig_CreateIfNotExists || exit 1
@@ -83,451 +82,527 @@ iProjConfig_CreateIfNotExists || exit 1
 
 
 # ---------------------------------------------------------------------
-# Project MyConfig file : wovtools/myconfig.json
+l_verbose "Project MyConfig file : wovtools/myconfig.json"
 # ---------------------------------------------------------------------
 l_verbose "Create the wovtools/myconfig.json file"
 doCreateMyConfigJSON "${WOV_BASEDIR}/wovtools/myconfig.json" "${WOV_ME}" "${WOV_MASTERPROJECT}"
 
 
 # --------------------------------------------------------------------- 
-# Figure out project and repository naming (for git)
+l_verbose "Figure out project and repository naming (for git)"
 # --------------------------------------------------------------------- 
-iProjRepo_InteractiveNaming "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "`basename ${WOV_BASEDIR}`" "`basename ${WOV_BASEDIR}/..`"
+iProjRepo_InteractiveNaming "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "`basename ${WOV_BASEDIR}`" "`basename $(realpath ${WOV_BASEDIR}/..)`"
 
 
 # ---------------------------------------------------------------------
 # Ensure git is configured properly
 # ---------------------------------------------------------------------
-iProjGit_InteractiveUpdate 
+iProjGit_InteractiveUpdate "${WOV_CODEREPOARCHIVE}" "${wov_REPO_EXT}" "${WOV_ME}" || exit 1
 
-test this
-
-here, pull out remaining from InitProject
 
 # ---------------------------------------------------------------------
-#  Creates the WovTools project in this directory
+# Ensure wovtools directory is setup
 # ---------------------------------------------------------------------
-function InitProject()
-{
-  ISNEWGIT=0
-  ISNEWSGIT=0
-
-  echo "  ... init project"
-
-  # ---------------------------------------------------------------------
-  # Create git repo
-  if [ ! -e ".git" ]; then
-    echo "... creating git repository here"
-    ISNEWGIT=1
-    git init -q
-  fi
-
-  # ---------------------------------------------------------------------
-  # Set remote origin
-  RR=$(git config --get remote.origin.url 2> /dev/null)
-  if [ "$?" != "0" ]; then
-    echo
-    printf "Git repository has no remote repository to push code to. Set that up now, and enter URL below.\n"
-    printf "  Remote git repository :  "
-    read A
-    if [ "${A}" == "" ]; then echo "ERROR: must provide a repository."; exit 1; fi
-    git remote add origin $A
-    if [ "$?" != "0" ]; then echo "ERROR: setting git remote origin failed."; exit 1; fi
-    git remote -v
-    if [ "$?" != "0" ]; then echo "ERROR: testing of remote git repo failed."; exit 1; fi
-    WOV_ARCHIVEREPOSITORY="${A}"
-  fi
-
-  # ---------------------------------------------------------------------
-  # Select user name
-  if [ "${WOV_USERNAME}" == "" ]; then WOV_USERNAME=$(git config user.name); fi
-  echo ""
-  printf "Enter your name (from git's config: \"${WOV_USERNAME}\"): "
-  read A
-  if [ "${A}" != "" ]; then WOV_USERNAME="${A}"; fi
-
-  # ---------------------------------------------------------------------
-  # Select user email
-  if [ "${WOV_USEREMAIL}" == "" ]; then WOV_USEREMAIL=$(git config user.email); fi
-  echo ""
-  printf "Enter your email (from git's config: \"${WOV_USEREMAIL}\"): "
-  read A
-  if [ "${A}" != "" ]; then WOV_USEREMAIL="${A}"; fi
-
-  # pull this out now
-  COMPANYDOMAIN=( ${WOV_USEREMAIL//@/ } )
-  COMPANYDOMAIN=${COMPANYDOMAIN[1]}
-
-  # Select Cluster DNS Domain
-  # echo ""
-  # read -r -p "Enter DNS Domain Name (ex. example.com, sub-domain not needed): " WOV_cluster_dns_domain
-
-#  # ---------------------------------------------------------------------
-#  # Select user code
-#  if [ "${WOV_ME}" == "" ]; then WOV_ME=$(cat ~/.wovtools | jq -r ".me"); fi
-#  printf "Enter your developer code (\"${WOV_ME}\"): "
-#  read A
-#  if [ "${A}" != "" ]; then WOV_ME="${A}"; fi
+iProjDir_Init "${WOV_BASEDIR}" || exit 1
 
 
-  # Ensure data is updated
-  git config user.name  "${WOV_USERNAME}"
-  git config user.email "${WOV_USEREMAIL}"
+# ---------------------------------------------------------------------
+# Link wovtools directory to Local Archives (create as needed)
+# ---------------------------------------------------------------------
+iLocalArchives_LinkLocalArchives "." "${WOV_MASTERPROJECT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" ; Re=$?
 
-  # Ensure lines in .gitignore
-  echo "... creating .gitignore"
-  LINES=( '*.swp' ".DS_Store" "wovtools/secrets" "wovtools/cache" "wovtools/db/*.deltas" "wovtools/db/archive" "${WOV_CONFIGFILE_MINE}" '*.old' '*.orig' ".mochawesome-report" '*.log')
-  touch .gitignore
-  for f in "${LINES[@]}"; do
-    echo "  ... adding to .gitignore: $f"
-    if ! grep -qF "${f}" .gitignore ; then echo "${f}" >> .gitignore ; fi
+# ---------------------------------------------------------------------
+l_verbose "Set Remote Repos for Project Local Archives"
+# ---------------------------------------------------------------------
+iLocalArchives_InteractiveSetRemoteRepos "${WOV_BASEDIR}"
+
+# ---------------------------------------------------------------------
+l_verbose "Load project vars now... since we know we have the links at least... new projects will be empty here"
+# ---------------------------------------------------------------------
+. wov-env-loader
+
+# ---------------------------------------------------------------------
+l_verbose "Select Cluster DNS Domain (needed for Secrets)"
+# ---------------------------------------------------------------------
+WOV_cluster_dns_domain=$(wov-env --var WOV_cluster_dns_domain)
+#if [ $? -ne 0 ]; then echo "failed to load in"; exit 1; fi
+if [ "${WOV_cluster_dns_domain}" == "" ]; then
+  while true; do
+    read -r -p "Enter DNS Domain Name (ex. example.com, sub-domain not needed): (\"${WOV_cluster_dns_domain}\") ... Correct? [Y/n]" A
+    case $A in 
+      ""|[Yy][Ee][Ss]|[Yy])
+        break;
+        ;;
+      ""|[Nn][Oo]|[Nn])
+        read -r -p "Ok, domain name: " WOV_cluster_dns_domain
+        ;;
+      *)
+        echo "Invalid input... (${A})"
+        ;;
+    esac
   done
+fi
 
-  WOV_BASEDIR=$(git rev-parse --show-toplevel)
+# ---------------------------------------------------------------------
+l_verbose "Generate Project Secrets if needed"
+# ---------------------------------------------------------------------
+iLocalArchives_SEFiles "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_ME}" "${WOV_cluster_dns_domain}"
 
-  echo "... create wovtools directory structure"
-  # ---------------------------------------------------------------------
-  # Create conf, k8s and containers directories
-  mkdir -p ${WOV_BASEDIR}/wovtools/cache
-  mkdir -p ${WOV_BASEDIR}/wovtools/ds/const
-  mkdir -p ${WOV_BASEDIR}/wovtools/msrecipes
-  mkdir -p ${WOV_BASEDIR}/wovtools/cmds
-  mkdir -p ${WOV_BASEDIR}/wovtools/services
-
-
-  # ---------------------------------------------------------------------
-  # Create the config.json 
-  # TODO: add in nodeploy and secrets and originmods
-  echo " ... check to create '${WOV_CONFIGFILE_MAIN}'"
-  if [ ! -e "${WOV_CONFIGFILE_MAINRAW}" ]; then 
-    echo "   ... try to create '${WOV_CONFIGFILE_MAIN}'"
-    cat <<EOF > "${WOV_CONFIGFILE_MAINRAW}"
-{
-  "ver" : "initing",
-  "project" : {
-    "type" : "",
-    "project" : "${WOV_PROJECT}",
-    "title" : "",
-    "description" : ""
-  },
-  "archive" : {
-    "env" : "",
-    "repository" : ""
-  },
-  "nodeploy" : [],
-  "secrets" : {
-    "dev" : [ 
-      "cluster_mymanaged.json",
-      "repositories.json",
-      "${WOV_PROJECT}.json",
-      "${WOV_PROJECT}db.json",
-      "${WOV_PROJECT}_${WOV_ME}.json",
-      "${WOV_PROJECT}db_${WOV_ME}.json"
-    ],
-    "prod" : [
-      "cluster_mymanaged.json",
-      "repositories.json",
-      "${WOV_PROJECT}.json",
-      "${WOV_PROJECT}db.json",
-      "${WOV_PROJECT}_prod.json",
-      "${WOV_PROJECT}db_prod.json"
-    ]
-  },
-  "originmods": {
-    "local" : {
-      "description" : "For deverlopers to develop locally.",
-      "routes": [
-        [ "${WOV_PROJECT}db.ORIGINlocal",      "${WOV_PROJECT}db"     ]
-      ]
-    },
-    "vh" : {
-      "description" : "Used to setup a development pod 'vh'.",
-      "routes": [
-        [ "appcore.CLUSTERvh", "appcore"   ]
-      ]
-    }
-  }
-}
-EOF
-  fi
-  echo "   ... exit to create ${WOV_CONFIGFILE_MAIN}"
+read -r -p "Do you want to configure secrets for a project database? [Y/n] " A
+while true; do
+  case $A in
+    ""|[Yy][Ee][Ss]|[Yy])
+      iLocalArchives_SEDBFiles "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_ME}"
+      break;
+      ;;
+    ""|[Nn][Oo]|[Nn])
+      l_ "  ... skipping db configuration. run wov-init-db in future"
+      break
+      ;;
+    *)
+      echo "Invalid input... (${A})"
+      ;;
+  esac
+done
 
 
-  # ---------------------------------------------------------------------
-  # Create my config file
-  doCreateMyConfigJSON "${WOV_CONFIGFILE_MINE}" "${WOV_ME}" "${WOV_PROJECT}"
-#  echo " ... check to create '${WOV_CONFIGFILE_MINE}'"
-#  if [ ! -e "${WOV_CONFIGFILE_MINERAW}" ]; then 
-#    echo "   ... try to create '${WOV_CONFIGFILE_MINE}'"
-#    cat <<EOF > "${WOV_CONFIGFILE_MINERAW}"
+
+wov-init-cluster ${WOV_cluster_dns_domain}
+if [ $? -ne 0 ]; then exit 1; fi
+
+wov-init-coderepoaccess
+if [ $? -ne 0 ]; then exit 1; fi
+
+echo "exiting now"
+exit 0
+
+
+
+
+## ---------------------------------------------------------------------
+##  Creates the WovTools project in this directory
+## ---------------------------------------------------------------------
+#function InitProject()
 #{
-#  "ver-local" : 2,
-#  "curorigin" : "local",
+#  ISNEWGIT=0
+#  ISNEWSGIT=0
+#
+#  echo "  ... init project"
+#
+#  # ---------------------------------------------------------------------
+#  # Create git repo
+#  if [ ! -e ".git" ]; then
+#    echo "... creating git repository here"
+#    ISNEWGIT=1
+#    git init -q
+#  fi
+#
+#  # ---------------------------------------------------------------------
+#  # Set remote origin
+#  RR=$(git config --get remote.origin.url 2> /dev/null)
+#  if [ "$?" != "0" ]; then
+#    echo
+#    printf "Git repository has no remote repository to push code to. Set that up now, and enter URL below.\n"
+#    printf "  Remote git repository :  "
+#    read A
+#    if [ "${A}" == "" ]; then echo "ERROR: must provide a repository."; exit 1; fi
+#    git remote add origin $A
+#    if [ "$?" != "0" ]; then echo "ERROR: setting git remote origin failed."; exit 1; fi
+#    git remote -v
+#    if [ "$?" != "0" ]; then echo "ERROR: testing of remote git repo failed."; exit 1; fi
+#    WOV_ARCHIVEREPOSITORY="${A}"
+#  fi
+#
+#  # ---------------------------------------------------------------------
+#  # Select user name
+#  if [ "${WOV_USERNAME}" == "" ]; then WOV_USERNAME=$(git config user.name); fi
+#  echo ""
+#  printf "Enter your name (from git's config: \"${WOV_USERNAME}\"): "
+#  read A
+#  if [ "${A}" != "" ]; then WOV_USERNAME="${A}"; fi
+#
+#  # ---------------------------------------------------------------------
+#  # Select user email
+#  if [ "${WOV_USEREMAIL}" == "" ]; then WOV_USEREMAIL=$(git config user.email); fi
+#  echo ""
+#  printf "Enter your email (from git's config: \"${WOV_USEREMAIL}\"): "
+#  read A
+#  if [ "${A}" != "" ]; then WOV_USEREMAIL="${A}"; fi
+#
+#  # pull this out now
+#  COMPANYDOMAIN=( ${WOV_USEREMAIL//@/ } )
+#  COMPANYDOMAIN=${COMPANYDOMAIN[1]}
+#
+#  # Select Cluster DNS Domain
+#  # echo ""
+#  # read -r -p "Enter DNS Domain Name (ex. example.com, sub-domain not needed): " WOV_cluster_dns_domain
+#
+##  # ---------------------------------------------------------------------
+##  # Select user code
+##  if [ "${WOV_ME}" == "" ]; then WOV_ME=$(cat ~/.wovtools | jq -r ".me"); fi
+##  printf "Enter your developer code (\"${WOV_ME}\"): "
+##  read A
+##  if [ "${A}" != "" ]; then WOV_ME="${A}"; fi
+#
+#
+#  # Ensure data is updated
+#  git config user.name  "${WOV_USERNAME}"
+#  git config user.email "${WOV_USEREMAIL}"
+#
+#  # Ensure lines in .gitignore
+#  echo "... creating .gitignore"
+#  LINES=( '*.swp' ".DS_Store" "wovtools/secrets" "wovtools/cache" "wovtools/db/*.deltas" "wovtools/db/archive" "${WOV_CONFIGFILE_MINE}" '*.old' '*.orig' ".mochawesome-report" '*.log')
+#  touch .gitignore
+#  for f in "${LINES[@]}"; do
+#    echo "  ... adding to .gitignore: $f"
+#    if ! grep -qF "${f}" .gitignore ; then echo "${f}" >> .gitignore ; fi
+#  done
+#
+#  WOV_BASEDIR=$(git rev-parse --show-toplevel)
+#
+#  echo "... create wovtools directory structure"
+#  # ---------------------------------------------------------------------
+#  # Create conf, k8s and containers directories
+#  mkdir -p ${WOV_BASEDIR}/wovtools/cache
+#  mkdir -p ${WOV_BASEDIR}/wovtools/ds/const
+#  mkdir -p ${WOV_BASEDIR}/wovtools/msrecipes
+#  mkdir -p ${WOV_BASEDIR}/wovtools/cmds
+#  mkdir -p ${WOV_BASEDIR}/wovtools/services
+#
+#
+#  # ---------------------------------------------------------------------
+#  # Create the config.json 
+#  # TODO: add in nodeploy and secrets and originmods
+#  echo " ... check to create '${WOV_CONFIGFILE_MAIN}'"
+#  if [ ! -e "${WOV_CONFIGFILE_MAINRAW}" ]; then 
+#    echo "   ... try to create '${WOV_CONFIGFILE_MAIN}'"
+#    cat <<EOF > "${WOV_CONFIGFILE_MAINRAW}"
+#{
+#  "ver" : "initing",
+#  "project" : {
+#    "type" : "",
+#    "project" : "${WOV_PROJECT}",
+#    "title" : "",
+#    "description" : ""
+#  },
+#  "archive" : {
+#    "env" : "",
+#    "repository" : ""
+#  },
+#  "nodeploy" : [],
 #  "secrets" : {
-#    "${WOV_ME}" : [
+#    "dev" : [ 
 #      "cluster_mymanaged.json",
 #      "repositories.json",
 #      "${WOV_PROJECT}.json",
 #      "${WOV_PROJECT}db.json",
 #      "${WOV_PROJECT}_${WOV_ME}.json",
 #      "${WOV_PROJECT}db_${WOV_ME}.json"
+#    ],
+#    "prod" : [
+#      "cluster_mymanaged.json",
+#      "repositories.json",
+#      "${WOV_PROJECT}.json",
+#      "${WOV_PROJECT}db.json",
+#      "${WOV_PROJECT}_prod.json",
+#      "${WOV_PROJECT}db_prod.json"
 #    ]
 #  },
-#  "originmods" : {
+#  "originmods": {
+#    "local" : {
+#      "description" : "For deverlopers to develop locally.",
+#      "routes": [
+#        [ "${WOV_PROJECT}db.ORIGINlocal",      "${WOV_PROJECT}db"     ]
+#      ]
+#    },
+#    "vh" : {
+#      "description" : "Used to setup a development pod 'vh'.",
+#      "routes": [
+#        [ "appcore.CLUSTERvh", "appcore"   ]
+#      ]
+#    }
 #  }
 #}
 #EOF
-#fi
-#  echo "   ... created '${WOV_CONFIGFILE_MINE}'"
-
-
-  # now commit so we can build branches
-  # Build a git revision and all branches
-  if [ "$ISNEWGIT" == "1" ]; then
-    git add .gitignore "${WOV_CONFIGFILE_MAIN}"
-    git commit -a -m "initial commit"
-  fi
-
-
-  # ---------------------------------------------------------------------
-  # Create branches
-
-#  echo
-#  echo "NOTE: Are the next commands for (push --set-upstream origin X) going to blow up? Do I have to set remote first before calling this?"
-#  echo "      git remote add origin [URL]"
-#  echo
-
-  RR=$(git rev-parse --verify prod 2> /dev/null)
-  if [ "$?" != "0" ]; then 
-    echo "  ... creating branch 'prod', pushing to origin"; 
-    git checkout -b prod || exit 1
-    git push --set-upstream origin prod || exit 1
-  fi
-  RR=$(git rev-parse --verify dev 2> /dev/null)
-  if [ "$?" != "0" ]; then 
-    echo "  ... creating branch 'dev', pushing to origin"; 
-    git checkout -b dev || exit 1
-    git push --set-upstream origin dev || exit 1
-  fi
-  if [ "$(git rev-parse --verify master 2> /dev/null ; echo $?)" != "0" ]; then
-    echo "  ... deleting branch 'master' (prod will be default)"
-    GBRESULT=$(git branch -d master 2>&1)
-      # --- note: error or success does not matter since it does not always exist
-  fi
-
-#    git push -f origin prod
-#  echo "TODO: set branch remote and make sure prod is the default"
-#  echo " git push -u <remote_name> <local_branch_name>"
-#  git push --set-upstream origin prod
-  touch .gitignore
-
-  # Select user branch/stage
-#  echo
-#  printf "Select a user stage to use (i.e. this will be the git branch and the stage portion of the Kubernetes namespace.\n"
-#  printf "  - User stage (i.e. your initials or username) (${WOV_ME}) : "
-#  read A
-#  [[ ${A} =~ ^[A-Za-z][A-Za-z_0-9]+$ ]] || ( echo "ERROR: bad user stage name (i.e. [A-Za-z][A-Za-z_0-9]*)" ; exit 1)
-#  if [ "${A}" != "" ]; then WOV_ME=${A}; fi
-#  if [ "${WOV_ME}" == "" ]; then echo "ERROR: must provide a stage name."; exit 1; fi
-
-  # ---------------------------------------------------------------------
-  # Select user branch/stage
-  RR=$(git rev-parse --verify ${WOV_ME} 2> /dev/null)
-  if [ "$?" != "0" ]; then 
-    echo "  ... creating branch '${WOV_ME}', pushing to origin"
-    git checkout -b ${WOV_ME} || exit 1
-    git push --set-upstream origin ${WOV_ME} || exit 1
-  fi
-
-
-
-  # ---------------------------------------------------------------------
-  # Create secrets repo
-  # ---------------------------------------------------------------------
-
-  SECRETSDIR -> SEADIR
-  # pull location from global file, make sure directory exists, is chmodded and make our project secrets directory there
-  SECRETSDIR="`wov-cd -e secrets`"
-  if [ "${SECRETSDIR}" == "" ]; then echo "ERROR: Unknown secrets dir. Add an entry to ~/.wovtools, for : dirs.secrets.dir."; exit 1; fi
-  if [ ! -e "${SECRETSDIR}" ]; then mkdir -p "${SECRETSDIR}"; chmod 700 "${SECRETSDIR}"; fi
-  if [ ! -e "${SECRETSDIR}/${WOV_PROJECT}_secrets" ]; then mkdir -p "${SECRETSDIR}/${WOV_PROJECT}_secrets"; chmod 700 "${SECRETSDIR}/${WOV_PROJECT}_secrets"; fi
-
-  # make sure local project secrets dir is a git repo and init if not
-  [ -d "${SECRETSDIR}/${WOV_PROJECT}_secrets/.git" ] || \
-    git -C "${SECRETSDIR}/${WOV_PROJECT}_secrets" rev-parse --git-dir > /dev/null 2>&1
-  if [ $? -ne 0 ]; then
-    printf "WARNING: project secrets dir is not a git repo. Initing and making first commit.\n"
-    git -C "${SECRETSDIR}/${WOV_PROJECT}_secrets" init
-    git -C "${SECRETSDIR}/${WOV_PROJECT}_secrets" config user.name "${WOV_USERNAME}"
-    git -C "${SECRETSDIR}/${WOV_PROJECT}_secrets" config user.email "${WOV_USEREMAIL}"
-    echo "# Secrets for project" > "${SECRETSDIR}/${WOV_PROJECT}_secrets/readme.md"
-    git -C "${SECRETSDIR}/${WOV_PROJECT}_secrets" add readme.md
-
-    git -C "${SECRETSDIR}/${WOV_PROJECT}_secrets" commit -m "first commit"
-  fi
-  echo "  ... git success"
-
-  echo "... wovtools/secrets"
-  # keep the softlink if it exists
-  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets" ]; then
-    rm -f "${WOV_BASEDIR}/wovtools/secrets" || true
-    ln -s "${SECRETSDIR}/${WOV_PROJECT}_secrets" "${WOV_BASEDIR}/wovtools/secrets"
-    if [ "$?" != "0" ]; then
-      echo "ERROR: failed linking to '${SECRETSDIR}/${WOV_PROJECT}_secrets' at '${WOV_BASEDIR}/wovtools/secrets'."
-      exit 1
-    fi
-  else
-    echo "  ...keeping existing wovtools/secrets softlink:"
-    # ls -l "${WOV_BASEDIR}/wovtools/secrets"
-  fi
-
-  # make sure default secret files exist
-  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}.json" ]; then 
-    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}.json"
-{
-  "www" : {
-    "STAGEdev" : {
-      "api"   : {"urlscheme" : "https", "url" : "api-dev.${COMPANYDOMAIN}"},
-      "app"   : {"urlscheme" : "https", "url" : "app-dev.${COMPANYDOMAIN}"}
-    },
-    "STAGEprod" : {
-      "api"   : {"urlscheme" : "https", "url" : "api.${COMPANYDOMAIN}"},
-      "app"   : {"urlscheme" : "https", "url" : "app.${COMPANYDOMAIN}"}
-    }
-  }
-}
-EOF
-  fi
-
-  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}db.json" ]; then 
-    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}db.json"
-{
-  "${WOV_PROJECT}db" : {
-    "//subhost" : "combined with WOV_CLUSTER to create host name. if localhost, only localhost",
-    "subhost"      : "${WOV_PROJECT}dev",
-    "username"     : "postgres",
-    "endpoint"     : "unknown.rds.amazonaws.com",
-    "database"     : "${WOV_PROJECT}dev",
-    "port"         : 5432,
-    "type"         : "postgres",
-    "version"      : "9.6.11-R1",
-    "password"     : "$(openssl rand -hex 20)",
-    "instanceAvailabilityZone"    : "c",
-    "instanceAvailabilityZoneAlt" : "d",
-    "instance" : {
-      "class"   : "db.t2.small",
-      "storage" : 20
-    },
-    "ORIGINlocal" : {
-      "//desc"   : "This is for connecting to a locally running system.",
-      "subhost"  : "localhost",
-      "endpoint" : "localhost",
-      "//port"   : "This is the direct port the local POSTGRES db is listening to.",
-      "port"     : 5432
-    },
-    "ORIGINremote" : {
-      "//desc"   : "This is for connecting to a remotely running system.",
-      "subhost"  : "localhost",
-      "endpoint" : "localhost",
-      "//port"   : "This is the ssh tunnel port opened through bastion.",
-      "port"     : 65432
-    }
-  }
-}
-EOF
-  fi
-
-  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}_${WOV_ME}.json" ]; then 
-    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}_${WOV_ME}.json"
-{
-  "www" : {
-    "STAGE${WOV_ME}" : {
-      "api"   : {"urlscheme" : "https", "url" : "api-${WOV_ME}.${COMPANYDOMAIN}"},
-      "app"   : {"urlscheme" : "https", "url" : "app-${WOV_ME}.${COMPANYDOMAIN}"}
-    },
-    "ORIGINlocal" : {
-      "api" : {"urlscheme" : "http", "url" : "localhost"},
-      "app" : {"urlscheme" : "http", "url" : "localhost"}
-    }
-  }
-}
-EOF
-  fi
-
-
-  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}db_${WOV_ME}.json" ]; then 
-    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}db_${WOV_ME}.json"
-{
-  "${WOV_PROJECT}db" : { "STAGE${WOV_ME}" : { "//" : "Separate database, should use separate user/pass", "database" : "${WOV_PROJECT}${WOV_ME}" } }
-}
-EOF
-  fi
-
-
-
-  # Guess at secrets remote (current repo plus _secrets)
-  WOV_SECRETSARCHIVE=`git config --get remote.origin.url`
-  WOV_SECRETSARCHIVE="${WOV_SECRETSARCHIVE%.git}_secrets.git"
-
-  # ---------------------------------------------------------------------
-  # Set secrets remote origin if not set
-  RR=$(git -C "${WOV_BASEDIR}/wovtools/secrets" config --get remote.origin.url 2> /dev/null)
-  if [ "$?" != "0" ]; then
-    echo ""
-    l_ "  ...Git SECRETS repository has no remote repository to push code to. Set that up now, and enter URL below."
-
-
-    if   [ "${A}" == "Y" ] || [ "${A}" == "y" ]; then WOV_SECRETSARCHIVE=${WOV_SECRETSARCHIVE}; 
-    elif [ "${A}" != "" ]; then WOV_SECRETSARCHIVE="${A}"; fi
-
-
-    while true; do
-      echo ""
-      read -r -p "SECRETS ARCHIVE> Secrets Remote Git repository (${WOV_SECRETSARCHIVE}) [Y/n]:  " A
-      case $A in
-        ""|[Yy][Ee][Ss]|[Yy])
-          break
-          ;;
-        [Nn][Oo]|[Nn])
-          read -r -p "  ok, enter git location: " WOV_SECRETSARCHIVE
-          ;;
-        *)
-          echo "Invalid input... (${A})"
-          ;;
-      esac
-    done
-    echo "  ...remote WOV_SECRETSARCHIVE location: ${WOV_SECRETSARCHIVE}"
-
-
-
-    # set remote origin
-    git -C "${WOV_BASEDIR}/wovtools/secrets" remote add origin ${WOV_SECRETSARCHIVE}
-    if [ "$?" != "0" ]; then l_error "SECRETS ARCHIVE> Setting git remote origin failed."; exit 1; fi
-
-    # test newly set remote origin
-    RR=$(git -C "${WOV_BASEDIR}/wovtools/secrets" remote -v) ; Re=$?
-    if   [ $Re -ne 0 ]; then l_error "SECRETS ARCHIVE> Testing of remote git repo failed."; exit 1; 
-    elif [ "${RR}" == "" ]; then l_error "SECRETS ARCHIVE> Remote git repo was not set correctly."; exit 1; fi
-
-    # set upstream
-    git -C "${WOV_BASEDIR}/wovtools/secrets" push --set-upstream origin master
-    if [ "$?" != "0" ]; then l_error "SECRETS ARCHIVE> Pushing upstream failed."; exit 1; fi
-  fi
-
-  # TODO ? push newly created? not needed I guess since it will change
-
-  # /end secrets
-  echo "  ... done with secrets"
-
-
-
-  # Move back to basedir
-  cd ${WOV_BASEDIR}
-
-
-
-  # set project version from initing to a value
-}
+#  fi
+#  echo "   ... exit to create ${WOV_CONFIGFILE_MAIN}"
+#
+#
+#  # ---------------------------------------------------------------------
+#  # Create my config file
+#  doCreateMyConfigJSON "${WOV_CONFIGFILE_MINE}" "${WOV_ME}" "${WOV_PROJECT}"
+##  echo " ... check to create '${WOV_CONFIGFILE_MINE}'"
+##  if [ ! -e "${WOV_CONFIGFILE_MINERAW}" ]; then 
+##    echo "   ... try to create '${WOV_CONFIGFILE_MINE}'"
+##    cat <<EOF > "${WOV_CONFIGFILE_MINERAW}"
+##{
+##  "ver-local" : 2,
+##  "curorigin" : "local",
+##  "secrets" : {
+##    "${WOV_ME}" : [
+##      "cluster_mymanaged.json",
+##      "repositories.json",
+##      "${WOV_PROJECT}.json",
+##      "${WOV_PROJECT}db.json",
+##      "${WOV_PROJECT}_${WOV_ME}.json",
+##      "${WOV_PROJECT}db_${WOV_ME}.json"
+##    ]
+##  },
+##  "originmods" : {
+##  }
+##}
+##EOF
+##fi
+##  echo "   ... created '${WOV_CONFIGFILE_MINE}'"
+#
+#
+#  # now commit so we can build branches
+#  # Build a git revision and all branches
+#  if [ "$ISNEWGIT" == "1" ]; then
+#    git add .gitignore "${WOV_CONFIGFILE_MAIN}"
+#    git commit -a -m "initial commit"
+#  fi
+#
+#
+#  # ---------------------------------------------------------------------
+#  # Create branches
+#
+##  echo
+##  echo "NOTE: Are the next commands for (push --set-upstream origin X) going to blow up? Do I have to set remote first before calling this?"
+##  echo "      git remote add origin [URL]"
+##  echo
+#
+#  RR=$(git rev-parse --verify prod 2> /dev/null)
+#  if [ "$?" != "0" ]; then 
+#    echo "  ... creating branch 'prod', pushing to origin"; 
+#    git checkout -b prod || exit 1
+#    git push --set-upstream origin prod || exit 1
+#  fi
+#  RR=$(git rev-parse --verify dev 2> /dev/null)
+#  if [ "$?" != "0" ]; then 
+#    echo "  ... creating branch 'dev', pushing to origin"; 
+#    git checkout -b dev || exit 1
+#    git push --set-upstream origin dev || exit 1
+#  fi
+#  if [ "$(git rev-parse --verify master 2> /dev/null ; echo $?)" != "0" ]; then
+#    echo "  ... deleting branch 'master' (prod will be default)"
+#    GBRESULT=$(git branch -d master 2>&1)
+#      # --- note: error or success does not matter since it does not always exist
+#  fi
+#
+##    git push -f origin prod
+##  echo "TODO: set branch remote and make sure prod is the default"
+##  echo " git push -u <remote_name> <local_branch_name>"
+##  git push --set-upstream origin prod
+#  touch .gitignore
+#
+#  # Select user branch/stage
+##  echo
+##  printf "Select a user stage to use (i.e. this will be the git branch and the stage portion of the Kubernetes namespace.\n"
+##  printf "  - User stage (i.e. your initials or username) (${WOV_ME}) : "
+##  read A
+##  [[ ${A} =~ ^[A-Za-z][A-Za-z_0-9]+$ ]] || ( echo "ERROR: bad user stage name (i.e. [A-Za-z][A-Za-z_0-9]*)" ; exit 1)
+##  if [ "${A}" != "" ]; then WOV_ME=${A}; fi
+##  if [ "${WOV_ME}" == "" ]; then echo "ERROR: must provide a stage name."; exit 1; fi
+#
+#  # ---------------------------------------------------------------------
+#  # Select user branch/stage
+#  RR=$(git rev-parse --verify ${WOV_ME} 2> /dev/null)
+#  if [ "$?" != "0" ]; then 
+#    echo "  ... creating branch '${WOV_ME}', pushing to origin"
+#    git checkout -b ${WOV_ME} || exit 1
+#    git push --set-upstream origin ${WOV_ME} || exit 1
+#  fi
+#
+#
+#
+#  # ---------------------------------------------------------------------
+#  # Create secrets repo
+#  # ---------------------------------------------------------------------
+#
+#  SECRETSDIR -> SEADIR
+#  # pull location from global file, make sure directory exists, is chmodded and make our project secrets directory there
+#  SECRETSDIR="`wov-cd -e secrets`"
+#  if [ "${SECRETSDIR}" == "" ]; then echo "ERROR: Unknown secrets dir. Add an entry to ~/.wovtools, for : dirs.secrets.dir."; exit 1; fi
+#  if [ ! -e "${SECRETSDIR}" ]; then mkdir -p "${SECRETSDIR}"; chmod 700 "${SECRETSDIR}"; fi
+#  if [ ! -e "${SECRETSDIR}/${WOV_PROJECT}_secrets" ]; then mkdir -p "${SECRETSDIR}/${WOV_PROJECT}_secrets"; chmod 700 "${SECRETSDIR}/${WOV_PROJECT}_secrets"; fi
+#
+#  # make sure local project secrets dir is a git repo and init if not
+#  [ -d "${SECRETSDIR}/${WOV_PROJECT}_secrets/.git" ] || \
+#    git -C "${SECRETSDIR}/${WOV_PROJECT}_secrets" rev-parse --git-dir > /dev/null 2>&1
+#  if [ $? -ne 0 ]; then
+#    printf "WARNING: project secrets dir is not a git repo. Initing and making first commit.\n"
+#    git -C "${SECRETSDIR}/${WOV_PROJECT}_secrets" init
+#    git -C "${SECRETSDIR}/${WOV_PROJECT}_secrets" config user.name "${WOV_USERNAME}"
+#    git -C "${SECRETSDIR}/${WOV_PROJECT}_secrets" config user.email "${WOV_USEREMAIL}"
+#    echo "# Secrets for project" > "${SECRETSDIR}/${WOV_PROJECT}_secrets/readme.md"
+#    git -C "${SECRETSDIR}/${WOV_PROJECT}_secrets" add readme.md
+#
+#    git -C "${SECRETSDIR}/${WOV_PROJECT}_secrets" commit -m "first commit"
+#  fi
+#  echo "  ... git success"
+#
+#  echo "... wovtools/secrets"
+#  # keep the softlink if it exists
+#  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets" ]; then
+#    rm -f "${WOV_BASEDIR}/wovtools/secrets" || true
+#    ln -s "${SECRETSDIR}/${WOV_PROJECT}_secrets" "${WOV_BASEDIR}/wovtools/secrets"
+#    if [ "$?" != "0" ]; then
+#      echo "ERROR: failed linking to '${SECRETSDIR}/${WOV_PROJECT}_secrets' at '${WOV_BASEDIR}/wovtools/secrets'."
+#      exit 1
+#    fi
+#  else
+#    echo "  ...keeping existing wovtools/secrets softlink:"
+#    # ls -l "${WOV_BASEDIR}/wovtools/secrets"
+#  fi
+#
+#  # make sure default secret files exist
+#  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}.json" ]; then 
+#    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}.json"
+#{
+#  "www" : {
+#    "STAGEdev" : {
+#      "api"   : {"urlscheme" : "https", "url" : "api-dev.${COMPANYDOMAIN}"},
+#      "app"   : {"urlscheme" : "https", "url" : "app-dev.${COMPANYDOMAIN}"}
+#    },
+#    "STAGEprod" : {
+#      "api"   : {"urlscheme" : "https", "url" : "api.${COMPANYDOMAIN}"},
+#      "app"   : {"urlscheme" : "https", "url" : "app.${COMPANYDOMAIN}"}
+#    }
+#  }
+#}
+#EOF
+#  fi
+#
+#  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}db.json" ]; then 
+#    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}db.json"
+#{
+#  "${WOV_PROJECT}db" : {
+#    "//subhost" : "combined with WOV_CLUSTER to create host name. if localhost, only localhost",
+#    "subhost"      : "${WOV_PROJECT}dev",
+#    "username"     : "postgres",
+#    "endpoint"     : "unknown.rds.amazonaws.com",
+#    "database"     : "${WOV_PROJECT}dev",
+#    "port"         : 5432,
+#    "type"         : "postgres",
+#    "version"      : "9.6.11-R1",
+#    "password"     : "$(openssl rand -hex 20)",
+#    "instanceAvailabilityZone"    : "c",
+#    "instanceAvailabilityZoneAlt" : "d",
+#    "instance" : {
+#      "class"   : "db.t2.small",
+#      "storage" : 20
+#    },
+#    "ORIGINlocal" : {
+#      "//desc"   : "This is for connecting to a locally running system.",
+#      "subhost"  : "localhost",
+#      "endpoint" : "localhost",
+#      "//port"   : "This is the direct port the local POSTGRES db is listening to.",
+#      "port"     : 5432
+#    },
+#    "ORIGINremote" : {
+#      "//desc"   : "This is for connecting to a remotely running system.",
+#      "subhost"  : "localhost",
+#      "endpoint" : "localhost",
+#      "//port"   : "This is the ssh tunnel port opened through bastion.",
+#      "port"     : 65432
+#    }
+#  }
+#}
+#EOF
+#  fi
+#
+#  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}_${WOV_ME}.json" ]; then 
+#    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}_${WOV_ME}.json"
+#{
+#  "www" : {
+#    "STAGE${WOV_ME}" : {
+#      "api"   : {"urlscheme" : "https", "url" : "api-${WOV_ME}.${COMPANYDOMAIN}"},
+#      "app"   : {"urlscheme" : "https", "url" : "app-${WOV_ME}.${COMPANYDOMAIN}"}
+#    },
+#    "ORIGINlocal" : {
+#      "api" : {"urlscheme" : "http", "url" : "localhost"},
+#      "app" : {"urlscheme" : "http", "url" : "localhost"}
+#    }
+#  }
+#}
+#EOF
+#  fi
+#
+#
+#  if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}db_${WOV_ME}.json" ]; then 
+#    cat <<EOF > "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}db_${WOV_ME}.json"
+#{
+#  "${WOV_PROJECT}db" : { "STAGE${WOV_ME}" : { "//" : "Separate database, should use separate user/pass", "database" : "${WOV_PROJECT}${WOV_ME}" } }
+#}
+#EOF
+#  fi
+#
+#
+#
+#  # Guess at secrets remote (current repo plus _secrets)
+#  WOV_SECRETSARCHIVE=`git config --get remote.origin.url`
+#  WOV_SECRETSARCHIVE="${WOV_SECRETSARCHIVE%.git}_secrets.git"
+#
+#  # ---------------------------------------------------------------------
+#  # Set secrets remote origin if not set
+#  RR=$(git -C "${WOV_BASEDIR}/wovtools/secrets" config --get remote.origin.url 2> /dev/null)
+#  if [ "$?" != "0" ]; then
+#    echo ""
+#    l_ "  ...Git SECRETS repository has no remote repository to push code to. Set that up now, and enter URL below."
+#
+#
+#    if   [ "${A}" == "Y" ] || [ "${A}" == "y" ]; then WOV_SECRETSARCHIVE=${WOV_SECRETSARCHIVE}; 
+#    elif [ "${A}" != "" ]; then WOV_SECRETSARCHIVE="${A}"; fi
+#
+#
+#    while true; do
+#      echo ""
+#      read -r -p "SECRETS ARCHIVE> Secrets Remote Git repository (${WOV_SECRETSARCHIVE}) [Y/n]:  " A
+#      case $A in
+#        ""|[Yy][Ee][Ss]|[Yy])
+#          break
+#          ;;
+#        [Nn][Oo]|[Nn])
+#          read -r -p "  ok, enter git location: " WOV_SECRETSARCHIVE
+#          ;;
+#        *)
+#          echo "Invalid input... (${A})"
+#          ;;
+#      esac
+#    done
+#    echo "  ...remote WOV_SECRETSARCHIVE location: ${WOV_SECRETSARCHIVE}"
+#
+#
+#
+#    # set remote origin
+#    git -C "${WOV_BASEDIR}/wovtools/secrets" remote add origin ${WOV_SECRETSARCHIVE}
+#    if [ "$?" != "0" ]; then l_error "SECRETS ARCHIVE> Setting git remote origin failed."; exit 1; fi
+#
+#    # test newly set remote origin
+#    RR=$(git -C "${WOV_BASEDIR}/wovtools/secrets" remote -v) ; Re=$?
+#    if   [ $Re -ne 0 ]; then l_error "SECRETS ARCHIVE> Testing of remote git repo failed."; exit 1; 
+#    elif [ "${RR}" == "" ]; then l_error "SECRETS ARCHIVE> Remote git repo was not set correctly."; exit 1; fi
+#
+#    # set upstream
+#    git -C "${WOV_BASEDIR}/wovtools/secrets" push --set-upstream origin master
+#    if [ "$?" != "0" ]; then l_error "SECRETS ARCHIVE> Pushing upstream failed."; exit 1; fi
+#  fi
+#
+#  # TODO ? push newly created? not needed I guess since it will change
+#
+#  # /end secrets
+#  echo "  ... done with secrets"
+#
+#
+#
+#  # Move back to basedir
+#  cd ${WOV_BASEDIR}
+#
+#
+#
+#  # set project version from initing to a value
+#}
 
 
 
@@ -583,22 +658,18 @@ done
 
 
 
+## ---------------------------------------------------------------------
+#echo ""
+#echo "... ensure directory structure"
+#if [ "$(wov-env &> /dev/null ; echo $?)" == "1" ]; then
+#  echo "  ... creating new wovtools project in this directory."
+#  InitProject
+#else
+#  echo "... updating project: ${WOV_PROJECT}"
+#  WOV_BASEDIR=$(git rev-parse --show-toplevel)
+#fi
 
 
-
-
-
-
-# ---------------------------------------------------------------------
-echo ""
-echo "... ensure directory structure"
-if [ "$(wov-env &> /dev/null ; echo $?)" == "1" ]; then
-  echo "  ... creating new wovtools project in this directory."
-  InitProject
-else
-  echo "... updating project: ${WOV_PROJECT}"
-  WOV_BASEDIR=$(git rev-parse --show-toplevel)
-fi
 
 
 echo ""
