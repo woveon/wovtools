@@ -355,7 +355,6 @@ function doDeployK8s()
     if [ $FILESe != 0 ]; then echo "ERROR: failed to find files."; exit 1; fi
   fi
 
-      set -x
   l_verbose "...K8s files to deploy: ${FILES[*]}"
   for f in "${FILES[@]}"; do
     if [ ! -e ${K8SDIR}/$f.yaml ]; then
@@ -372,10 +371,9 @@ function doDeployK8s()
       local k=`grep -i 'kind' "${K8SDIR}/$f.yaml" | sed 's/.*://g' | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]'`
       if [ "$k" == "deployment" ]; then
         # label deployments for wov command can find them
-        kubectl label --overwrite deployment alywandata wovtools.project=${WOV_PROJECT} wovtools.ms=${f}
+        kubectl label --overwrite deployment ${f} wovtools.project=${WOV_PROJECT} wovtools.ms=${f}
       fi
     fi
-      set +x
   done
 }
 
@@ -626,9 +624,9 @@ doHealthChecks()
       -e 's/{WOV_STAGE}/'"${WOV_STAGE}"'/g' \
       -e 's/{WOV_ME}/'"${WOV_ME}"'/g' \
       -e 's/{WOV_PROJECT}/'"${WOV_PROJECT}"'/g'`
-    # echo " check route ${r}: ${URL}"
-    local domain="$(wov-env --var WOV_www_api_url)"
-    local schema="$(wov-env --var WOV_www_api_urlscheme)"
+    echo " check route ${r}: ${URL}"
+    local domain="$(wov-env --origin self --var WOV_www_api_url)"
+    local schema="$(wov-env --origin self --var WOV_www_api_urlscheme)"
     if [ "${1}" != "" ]; then local schema=$1; fi
     local URL="${schema}://${domain}${URL}"
 

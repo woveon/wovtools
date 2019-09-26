@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+. wov-env-logging
+
+WOV_BASEDIR=$(git rev-parse --show-toplevel)
+MYREPOSITORIESFILE="${WOV_BASEDIR}/wovtools/secrets/repositories.json"
+
+
+l_ "Creating skeleton '${MYREPOSITORIESFILE:${#WOV_BASEDIR}+1}' file..."
+
+cat <<EOF > "${MYREPOSITORIESFILE}"
+{
+  "//repositories" : "used to pull private repo code during container creation",
+  "//repositories_example" : {
+    "AWSCodeCommit" : {
+      "host" : "git-codecommit.us-east-1.amazonaws.com",
+      "//user" : "Get from IAM : user > 'Security credentials' tab > 'SSH key ID' and should be something like 'ADLDLEKKV6JFJDK3'.",
+      "user" : "MYUSER",
+      "//privkeyloc" : "keep these in an aws directory for clarity",
+      "privkeyloc" : "~/.ssh/aws/mine_rsa"
+    }
+  }
+}
+EOF
+

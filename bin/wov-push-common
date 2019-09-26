@@ -58,7 +58,7 @@ function findMSDir()
     l_verbose "  ... root directory is microservice directory." 1>&2
     retval="${WOV_BASEDIR}"
   else
-    l_error "No '${1}' microservice directory in project." 1>&2
+    l_error "No '${1}' microservice directory in project. This looked at the current directory and child directories for '${1}'." 1>&2
   fi
   echo "$retval"
 }

@@ -45,8 +45,8 @@ fi
 # ---------------------------------------------------------------------
 # Import Env
 # ---------------------------------------------------------------------
-. provider-wov-env-aws
 . <(wov-env --envs --provider)
+. provider-wov-env-aws
 #wovawsvargs=( "$@" )
 #set ""
 #. <(wov-env --provider)
@@ -218,6 +218,8 @@ EOF
 
 # https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_examples_codecommit_pull.html
 # https://docs.aws.amazon.com/codecommit/latest/userguide/auth-and-access-control-iam-identity-based-access-control.html#managed-policies
+#
+# ex wov-aws repoaccess alywan-alywansocket uggi Ugur.Kaya alywan-alywansocket
 function doGrantUserAccessToCodeCommit()
 {
   local REPO=$1
@@ -244,8 +246,14 @@ function doGrantUserAccessToCodeCommit()
         ;;
     esac
   else
-    read -r -d '' Conditions <<EOF
-        "StringEquals": {
+    # see https://stackoverflow.com/questions/50767386/aws-iam-policy-to-limit-access-to-codecommit-branches-with-wildcards-in-their-na
+    read -r -d '' ConditionsPull <<EOF
+        "StringLikeIfExists" : {
+          "codecommit:References": [ "refs/heads/${Branch}", "refs/heads/dev" ]
+        }
+EOF
+    read -r -d '' ConditionsPush <<EOF
+        "StringLikeIfExists" : {
           "codecommit:References": [ "refs/heads/${Branch}" ]
         }
 EOF
@@ -263,7 +271,10 @@ EOF
       "Action": [
         "codecommit:GitPull"
       ],
-      "Resource": "${RESOURCE}"
+      "Resource": "${RESOURCE}",
+      "Condition": {
+        ${ConditionsPull}
+      }
     },
     {
       "Effect": "Allow",
@@ -272,7 +283,7 @@ EOF
       ],
       "Resource": "${RESOURCE}",
       "Condition": {
-        ${Conditions}
+        ${ConditionsPush}
       }
     }
   ]
@@ -335,8 +346,10 @@ EOF
 #  fi
 #done
 
-COMMAND=$1
-shift
+#  set -x
+#COMMAND=$1
+#shift
+#set +x
 
 if   [ "${COMMAND}" == "volume-id" ]; then
   doVolumeID       $*
@@ -362,7 +375,7 @@ elif [ "${COMMAND}" == "cluster" ]; then
   exit 1
 
 elif [ "${COMMAND}" == "repoaccess" ]; then
-  doGrantUserAccessToCodeCommit"${@}"
+  doGrantUserAccessToCodeCommit "${@}"
 
 elif [ "${COMMAND}" == "k8saccess" ]; then
   doGrantUserAccessToS3 "${@}"

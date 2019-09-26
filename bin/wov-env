@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+export PATH=$PATH:/usr/local/bin/wovlib
+
 
 function fWovEnvDisplayOptions()
 {
@@ -81,7 +83,7 @@ CONTEXTSET=0
 
 # Default variables to echo
 ECHOVARS=( 'WOV_PROJECTTITLE' 'WOV_VERSION' 'WOV_ME' 'WOV_PVER' 'WOV_SVER' \
-           'WOV_ORIGIN' 'WOV_WORKINGCONTEXT' \
+           'WOV_ORIGIN' 'WOV_WORKINGCONTEXT' 'WOV_MASTERPROJECT' \
            'WOV_CONTEXT' 'WOV_CLUSTER' 'WOV_NS' 'WOV_CLTYPE' 'WOV_PROVIDER' 'WOV_REGION' 'WOV_FLAVOR' 'WOV_PROJECT' 'WOV_STAGE' \
            'WOV_KPROJECT' 'WOV_WPROJECT' 'WOV_KSTAGE' 'WOV_GSTAGE' \
            'WOV_PROJECTTYPE' 'WOV_PROJECTDESCRIPTION' \
@@ -95,10 +97,44 @@ ECHOVARS=( 'WOV_PROJECTTITLE' 'WOV_VERSION' 'WOV_ME' 'WOV_PVER' 'WOV_SVER' \
 # --------------------------------------------------------------------- 
 function fBuildClusterSecrets
 { 
-  if [ ! -f "${WOV_SECRETFILE}" ] || [ "$1" == "force" ]; then 
-    # echo "call wov-env-build --context ${WOV_CONTEXT} -q --secrets ${CLUSTER} "
+#  if [ ! -f "${WOV_SECRETFILE}" ] || [ "$1" == "force" ]; then 
+#    # echo "call wov-env-build --context ${WOV_CONTEXT} -q --secrets ${CLUSTER} "
+#    wov-env-build --context ${WOV_CONTEXT} -q --config
+#    if [ "$?" != "0" ]; then exit 1; fi
+#  fi
+
+  # echo "fBuildClusterSecrets hit"
+
+  # ---------------------------------------------------------------------
+  # Ensure the SECRET_CACHE_DIR exists and is protected and then merge
+  # files config.json and myconfig.json together in SECRETSMERGED_RAW
+  # if they have changed.
+  # ---------------------------------------------------------------------
+  mkdir -m 700 -p ${WOV_CACHEDIR}
+  mkdir -m 700 -p ${WOV_CLUSTERDIR}
+
+  # check files that could impact WOV_SECRETFILE generation
+  #  - changes to kube config
+  #  - newly merged wovtools/config.json|myconfig.json
+  #  - wovtools/secrets directory has changes
+  #  - git commits that chagne PVER/SVER
+  if [ ! -f "${WOV_SECRETFILE}" ] ||
+     [ "$1" == "force" ] ||
+     [ "${HOME}/.kube/config"                 -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_CONFIGFILE_MERGED}"             -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_BASEDIR}/wovtools/secrets"      -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_CONFIGFILE_MAIN}"               -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_CONFIGFILE_MINE}"               -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_BASEDIR}/wovtools/secrets/.git" -nt "${WOV_SECRETFILE}" ] ||
+     [ "${WOV_BASEDIR}/.git"                  -nt "${WOV_SECRETFILE}" ]; then
+
+  #  echo "fBuildClusterSecrets building"
     wov-env-build --context ${WOV_CONTEXT} -q --config
     if [ "$?" != "0" ]; then exit 1; fi
+    touch "${WOV_SECRETFILE}"
+    # . wov-env-loader -g ${WOV_CLUSTER}-${WOV_NS}"
+  # else
+  #  echo "fBuildClusterSecrets not building"
   fi
 }
 
@@ -137,37 +173,45 @@ function doSetOrigin()
 # --------------------------------------------------------------------- 
 function doSetContext
 {
-  # Load up new context for calls below
-  . wov-env-loader --context ${1}
+  if [ "${WOV_CONTEXT}" != "$1" ]; then
+    # echo "...forcing context change"
 
-  # ---------------------------------------------------------------------
-  # Ensure the SECRET_CACHE_DIR exists and is protected and then merge
-  # files config.json and myconfig.json together in SECRETSMERGED_RAW
-  # if they have changed.
-  # ---------------------------------------------------------------------
-  mkdir -m 700 -p ${WOV_CACHEDIR}
-  mkdir -m 700 -p ${WOV_CLUSTERDIR}
-
-  # check files that could impact WOV_SECRETFILE generation
-  #  - changes to kube config
-  #  - newly merged wovtools/config.json|myconfig.json
-  #  - wovtools/secrets directory has changes
-  #  - git commits that chagne PVER/SVER
-  if [ ! -f "${WOV_SECRETFILE}" ] || 
-     [ "$2" == 'true' ] ||
-     [ "${HOME}/.kube/config"                 -nt "${WOV_SECRETFILE}" ] ||
-     [ "${WOV_CONFIGFILE_MERGED}"             -nt "${WOV_SECRETFILE}" ] || 
-     [ "${WOV_BASEDIR}/wovtools/secrets"      -nt "${WOV_SECRETFILE}" ] ||
-     [ "${WOV_CONFIGFILE_MAIN}"               -nt "${WOV_SECRETFILE}" ] ||
-     [ "${WOV_CONFIGFILE_MINE}"               -nt "${WOV_SECRETFILE}" ] ||
-     [ "${WOV_BASEDIR}/wovtools/secrets/.git" -nt "${WOV_SECRETFILE}" ] ||
-     [ "${WOV_BASEDIR}/.git"                  -nt "${WOV_SECRETFILE}" ]; then
-    
-    # Builds files but does not import
+    # Load up new context for calls below
+    . wov-env-loader --context ${1}
     fBuildClusterSecrets force 
-    touch "${WOV_SECRETFILE}"
-    # . wov-env-loader -g ${WOV_CLUSTER}-${WOV_NS}"
+  else
+    # echo "...rebuild if needed"
+    fBuildClusterSecrets
   fi
+
+#  # ---------------------------------------------------------------------
+#  # Ensure the SECRET_CACHE_DIR exists and is protected and then merge
+#  # files config.json and myconfig.json together in SECRETSMERGED_RAW
+#  # if they have changed.
+#  # ---------------------------------------------------------------------
+#  mkdir -m 700 -p ${WOV_CACHEDIR}
+#  mkdir -m 700 -p ${WOV_CLUSTERDIR}
+#
+#  # check files that could impact WOV_SECRETFILE generation
+#  #  - changes to kube config
+#  #  - newly merged wovtools/config.json|myconfig.json
+#  #  - wovtools/secrets directory has changes
+#  #  - git commits that chagne PVER/SVER
+#  if [ ! -f "${WOV_SECRETFILE}" ] || 
+#     [ "$2" == 'true' ] ||
+#     [ "${HOME}/.kube/config"                 -nt "${WOV_SECRETFILE}" ] ||
+#     [ "${WOV_CONFIGFILE_MERGED}"             -nt "${WOV_SECRETFILE}" ] || 
+#     [ "${WOV_BASEDIR}/wovtools/secrets"      -nt "${WOV_SECRETFILE}" ] ||
+#     [ "${WOV_CONFIGFILE_MAIN}"               -nt "${WOV_SECRETFILE}" ] ||
+#     [ "${WOV_CONFIGFILE_MINE}"               -nt "${WOV_SECRETFILE}" ] ||
+#     [ "${WOV_BASEDIR}/wovtools/secrets/.git" -nt "${WOV_SECRETFILE}" ] ||
+#     [ "${WOV_BASEDIR}/.git"                  -nt "${WOV_SECRETFILE}" ]; then
+#    
+#    # Builds files but does not import
+#    fBuildClusterSecrets force 
+#    touch "${WOV_SECRETFILE}"
+#    # . wov-env-loader -g ${WOV_CLUSTER}-${WOV_NS}"
+#  fi
 
   CONTEXTSET=1
 }
@@ -362,7 +406,7 @@ function doPrintVarX()
   if [ "$R" == "" ]; then
     R=${!1}
   fi
-  echo $R
+  echo "$R"
 }
 
 
@@ -620,6 +664,7 @@ function doResVerify()
     exit 1
   fi
 
+  # ??? Should this be retunr, not echo?
   echo $retval
 }
 

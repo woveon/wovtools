@@ -43,8 +43,30 @@ function isDatabaseArchive()
 # --------------------------------------------------------------------
 function doInteractiveBuildDatabaseArchive()
 {
-  read -r -p "ARCHIVE> Database Archive Git location: (\"${WOV_DBARCHIVE}\") ... Correct? [Y/n] " A
-  if [ "${A}" != "" ]; then WOV_DBARCHIVE="${A}"; fi
+  # Guess at dba remote (current repo plus _dba)
+  WOV_DBARCHIVE=`git config --get remote.origin.url`
+  WOV_DBARCHIVE="${WOV_DBARCHIVE%.git}_dba.git"
+
+  echo 
+  while true; do
+    read -r -p "Database ARCHIVE> remote Git location: (\"${WOV_DBARCHIVE}\") ... Correct? [Y/n/ignore] " A
+    case $A in
+      ""|[Yy][Ee][Ss]|[Yy])
+        break
+        ;;
+      [Nn][Oo]|[Nn])
+        read -r -p "  ok, enter git location: " WOV_DBARCHIVE
+        ;;
+      "ignore")
+        echo "...skipping DB Archive"
+        exit 0
+        ;;
+      *)
+        echo "Invalid input... (${A})"
+        ;;
+    esac
+  done
+  echo "  ...remote WOV_DBARCHIVE location: ${WOV_DBARCHIVE}"
 
   doBuildDatabaseArchive
 }
@@ -70,18 +92,23 @@ function doBuildDatabaseArchive()
 EOF
   fi
 
-  WOV_DBARCHIVE=`git config --get remote.origin.url`
-  WOV_DBARCHIVE="${WOV_DBARCHIVE%.git}_db.git"
-  if [ "$?" != "0" ]; then
-    printf "\nERROR: remote origin is not set for this repository.\n"
-    printf "  Use 'git remote add origin X' to set your remote repository.\n\n"
-    exit 1
+  # if called directly, need to get WOV_DBARCHIVE from repo
+  if [ "${WOV_DBARCHIVE}" == "" ]; then
+    WOV_DBARCHIVE=`git config --get remote.origin.url`
+    WOV_DBARCHIVE="${WOV_DBARCHIVE%.git}_db.git"
+    if [ "$?" != "0" ]; then
+      printf "\nERROR: remote origin is not set for this repository.\n"
+      printf "  Use 'git remote add origin X' to set your remote repository.\n\n"
+      exit 1
+    fi
   fi
   #  WOV_DBARCHIVE="${WOV_DBARCHIVE::-4}_archive.git"
 
 
   # make git repository
-  cd ${WOV_BASEDIR}/wovtools/db/archive && git init -q
+  # cd ${WOV_BASEDIR}/wovtools/db/archive && git init -q
+  git -C "${WOV_BASEDIR}/wovtools/db/archive" init -q
+
 
   # configure it
   cat <<EOF > ${WOV_BASEDIR}/wovtools/db/archive/.git/config
@@ -152,5 +179,6 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
     WOV_DBARCHIVE=${REPO}
     doBuildDatabaseArchive
   fi
+
 fi
 

@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+
+. wov-env-logging
+
+WOV_cluster_dns_domain=$1
+if [ "${WOV_cluster_dns_domain}" == "" ]; then
+  l_error "$(basename $0) requires param 1 to be the domain name (ex. domain.com)."
+  exit 1
+fi
+
+WOV_BASEDIR=$(git rev-parse --show-toplevel)
+MYMANAGED="${WOV_BASEDIR}/wovtools/secrets/cluster_mymanaged.json"
+
+echo ""
+echo "Init WovTools project cluster configuration"
+
+function doBuildClusterManaged()
+{
+  local Re=
+
+  echo ""
+  l_ "This generates a configuration for a SIMPLE cluster."
+  l_ " - You can create more complex clusters later"
+  l_ " - You can created it (if it does not yet exist) via thie 'wov-cluster' command"
+  echo ""
+
+  echo "WovTools cluster names follows a VERY specific convention, for good reason."
+  echo "   Take a look here: https://sourceforge.net/p/wovtools/wiki/Naming%20Conventions"
+
+  while true; do 
+    echo ""
+    read -r -p "  System Name (the name/acronymn encompassing all) (ex. 'wov', 'xyz', or 'a12') : " WOV_SYS
+    if [[ "${WOV_SYS}" =~ ^[a-z][a-z0-9]+$ ]]; then break;
+    else l_warn "Bad input. Use only lowercase and no special characters. Numbers can not start. (reg expr /^[a-z][a-z0-9]+$/)."; fi
+  done
+
+  while true; do 
+    echo ""
+    read -r -p "  Provider Name (the name/acronymn encompassing all) (ex. 'aws', 'azure', or 'gcp') (aws only so far) : " WOV_PROVIDER
+    if [[ "${WOV_PROVIDER}" =~ ^aws+$ ]]; then break;
+    else l_warn "Bad input. Only 'aws' so far. Will add more in time. Volunteer to help out! :) "; fi
+  done
+
+  while true; do 
+    echo ""
+    read -r -p "  Region Code of cluster - use airport codes to be provider agnostic (ex. 'iad') : " WOV_REGION
+    if [[ "${WOV_REGION}" =~ ^[a-z]+$ ]]; then 
+      WOV_cluster_region=$(wov-aws convertrc ${WOV_REGION}) ; Re=$?
+      if [ ${Re} -eq 0 ]; then break; else echo l_warn "aws region code not regognized. Use a known region code or update WovTools file 'provider-wov-env-aws'."; fi
+    else l_warn "Bad input. Use only lowercase and no special characters or numbers."; fi
+  done
+
+  while true; do 
+    echo ""
+    read -r -p "  Flavor of cluster - just something that differentiates them, a 'given name'. ex. 'red', 'apple', 'dog') : " WOV_FLAVOR
+    if [[ "${WOV_FLAVOR}" =~ ^[a-z][a-z0-9]+$ ]]; then break;
+    else l_warn "Bad input. Use only lowercase and no special characters. Numbers can not start. (reg expr /^[a-z][a-z0-9]+$/)."; fi
+  done
+
+  WOV_CLUSTER="${WOV_SYS}-${WOV_PROVIDER}-${WOV_REGION}-${WOV_FLAVOR}"
+  echo ""
+  echo "  ...Cluster name: ${WOV_CLUSTER}"
+
+
+#  echo ""
+#  read -r -p "  Cluster DNS Domain (ex. foo.example.com): " WOV_cluster_dns_domain
+
+  echo ""
+  read -r -p "  Cluster DNS hosted Zone (from AWS Route53 (ex. 'Z2MA73UG4TBPWV'): " WOV_cluster_dns_hostedZone
+
+  WOV_cluster_master_count=1
+  WOV_cluster_master_zones="c d"
+  WOV_cluster_master_size="m4.medium"
+  WOV_cluster_node_count=2
+  WOV_cluster_node_zones="c d"
+  WOV_cluster_node_size="m4.medium"
+
+  echo ""
+  echo "Using a small cluster setup, with one zone. You can manually change these on your own."
+  echo "  WOV_cluster_master_count : '${WOV_cluster_master_count}'"
+  echo "  WOV_cluster_master_zones : '${WOV_cluster_master_zones}'"
+  echo "  WOV_cluster_master_size  : '${WOV_cluster_master_size}'"
+  echo "  WOV_cluster_node_count   : '${WOV_cluster_node_count}'"
+  echo "  WOV_cluster_node_zones   : '${WOV_cluster_node_zones}'"
+  echo "  WOV_cluster_node_size    : '${WOV_cluster_node_size}'"
+  echo ""
+
+  cat <<EOF > "${MYMANAGED}"
+{
+  "//" : "This file is loaded for cluster creation so that project has all the information",
+  "cluster" : {
+    "CLUSTER${WOV_CLUSTER}" : {
+      "dns" : {
+        "domain" : "${WOV_cluster_dns_domain}",
+        "hostedZone" : "${WOV_cluster_dns_hostedZone}"
+      },
+      "rds" : {
+        "subnet1" : "172.31.196.32/28",
+        "subnet2" : "172.31.196.48/28"
+      },
+      "region" : "${WOV_cluster_region}",
+      "zone" : {
+        "primary"   : "${WOV_cluster_node_zones[0]}",
+        "secondary" : "${WOV_cluster_node_zones[1]}"
+      },
+      "master" : {
+        "count" : ${WOV_cluster_master_count},
+        "zones" : "${WOV_cluster_region}${WOV_cluster_node_zones[0]}",
+        "size"  : "${WOV_cluster_master_size}"
+      },
+      "node" : {
+        "description": "single zone",
+        "count" : ${WOV_cluster_node_count},
+        "zones" : "${WOV_cluster_region}${WOV_cluster_node_zones[0]}",
+        "size"  : "${WOV_cluster_node_size}"
+      }
+    }
+  }
+}
+EOF
+
+  l_ "  ... done. This created the '${MYMANAGED:${#WOV_BASEDIR}+1}' file."
+  l_ "      Remember to create the cluster with 'wov-cluster' if it does not exist."
+}
+
+l_verbose "...Make sure wovtools/secrets directory exists."
+if [ ! -e "${WOV_BASEDIR}/wovtools" ] || [ ! -e "${WOV_BASEDIR}/wovtools/secrets" ]; then
+  l_error "No directory '${WOV_BASEDIR}/wovtools/secrets'."
+  exit 1
+fi
+
+l_verbose "...Make sure '${MYMANAGED:${#WOV_BASEDIR}+1}' exists."
+if [ ! -e "${MYMANAGED}" ]; then
+
+
+  while true; do
+    echo ""
+    l_warn "No '${MYMANAGED:${#WOV_BASEDIR}+1}' file. Needed to define clusters you are using."
+    read -r -p "You can copy in a file now, or we can build one together. [copy/build] : " A
+    case $A in
+      [Cc]|[Cc][Oo][Pp][Yy])
+        read -r -p "ok, copy in the file now as: '${MYMANAGED:${#WOV_BASEDIR}+1}'. (press Enter to continue)" A
+        if [ -e "${MYMANAGED}" ]; then break;
+        else l_warn "Invalid.. did not find the file yet."; fi
+        ;;
+      [Bb]|[Bb][Uu][Ii][Ll][Dd])
+        doBuildClusterManaged
+        break
+        ;;
+      *)
+        echo "Invalid input... (${A})"
+        ;;
+    esac
+  done
+fi
+

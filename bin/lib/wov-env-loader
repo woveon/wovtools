@@ -12,7 +12,7 @@
 # --------------------------------------------------------------------- 
 # Versions
 # --------------------------------------------------------------------- 
-export WOV_VERSION=2
+export WOV_VERSION=3
 export WOV_VH_VERSION=0.1
 
 
@@ -170,18 +170,26 @@ function getWovProjectVars()
   MERGEDVARS=()
   while read f; do
     MERGEDVARS+=( "$f" )
-  done <<<$(cat ${WOV_CONFIGFILE_MERGED} | jq -r ". | ( .ver, .project.project, .project.type, .project.title, .project.description, .archive.repository, .archive.env  )" )
+  done <<<$(cat ${WOV_CONFIGFILE_MERGED} | jq -r ". | ( .ver, .project.masterproject, .project.name, .project.type, .project.title, .project.description, .archives.k8s, .archives.container, .archives.coderepo )" )
   WOV_PVERSION=${MERGEDVARS[0]}
   if [ "${WOV_PVERSION}" != "${WOV_VERSION}" ] && [ "${WOV_PVERSION}" != "initing" ] ; then
-    printf "\n\nERROR: Your project version '${WOV_PVERSION}', does not match to the WovTools version '${WOV_VERSION}'.\n\n"
+    printf "\n\nERROR: Your project version '${WOV_PVERSION}', does not match to the WovTools version '${WOV_VERSION}'.\n"
+    printf "       Edit your wovtools/config.json's .ver entry\n\n"
+
+    # Remove this so it will build and not just error out
+    rm ${WOV_CONFIGFILE_MERGED}
     exit 1
   fi
-  export WOV_WPROJECT="${MERGEDVARS[1]}"
-  export WOV_PROJECTTYPE="${MERGEDVARS[2]}"
-  export WOV_PROJECTTITLE="${MERGEDVARS[3]}"
-  export WOV_PROJECTDESCRIPTION="${MERGEDVARS[4]}"
-  export WOV_ARCHIVEREPOSITORY="${MERGEDVARS[5]}"
-  export WOV_ARCHIVEENV="${MERGEDVARS[6]}"
+  export WOV_MASTERPROJECT="${MERGEDVARS[1]}"
+  export WOV_WPROJECT="${MERGEDVARS[2]}"
+  export WOV_PROJECTTYPE="${MERGEDVARS[3]}"
+  export WOV_PROJECTTITLE="${MERGEDVARS[4]}"
+  export WOV_PROJECTDESCRIPTION="${MERGEDVARS[5]}"
+
+  # mimic from ~/.wovtools
+  export WOV_ARCHIVESK8S="${MERGEDVARS[6]}"
+  export WOV_ARCHIVESCONTAINER="${MERGEDVARS[7]}"
+  export WOV_ARCHIVESCODEREPO="${MERGEDVARS[8]}"
 
 
   # vars from Kubernetes

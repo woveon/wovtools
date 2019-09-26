@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+  # --- output spew levels: 0 - quiet, 1 - normal, 2 - verbose
+
+# Typical logging
+function l_()
+{
+  local head=""
+  local headl=0
+  local text=
+  local testl=
+  if [ ${DOECHO} -ge 1 ]; then
+    text="${*}"
+    textl=${#text}
+    if [ "${WOV_DEBUGMODE}" == "1" ]; then
+      head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO}): "
+      headl=${#head}
+    fi
+
+    # optimization here
+    if [ $((headl+textl)) -le $((FOLD-headl)) ]; then printf "${head}${text}\n"
+    else printf "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"; fi
+  fi
+}
+# Verbose logging
+function l_verbose()
+{
+  local head=""
+  local headl=0
+  local text=
+  local testl=
+  if [ ${DOECHO} -ge 2 ]; then
+    text="${*}"
+    textl=${#text}
+    if [ "${WOV_DEBUGMODE}" == "1" ]; then
+      head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO}): "
+      headl=${#head}
+    fi
+    printf "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
+  fi
+}
+# Error logging
+function l_error()
+{
+  local text="${*}"
+  local testl=${#text}
+  local head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})ERROR  : "
+  local headl=${#head}
+  printf "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat
+}
+# Warning logging
+function l_warn()
+{
+  local text="${*}"
+  local testl=${#text}
+  local head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})WARNING: "
+  local headl=${#head}
+  printf "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat
+}

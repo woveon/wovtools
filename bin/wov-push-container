@@ -98,10 +98,10 @@ function doPackContainer
   fi
 
   # put ssh keys and config options 
-  PRIVATEREPOS=( $(cat ${WOV_SECRETFILE} |  jq -r '.repositories | to_entries[] | .key' 2> /dev/null) )
-  if [ "$?" != "0" ]; then
-    printf "\nERROR: no 'repositories' entry in secrets. If you have no private repos, create a blank entry.\n"
-    exit 1
+  if [ "$(cat ${WOV_SECRETFILE} |  jq -r '.repositories')" != "null" ]; then
+    PRIVATEREPOS=( $(cat ${WOV_SECRETFILE} |  jq -r '.repositories | to_entries[] | .key' 2> /dev/null) )
+  else
+    PRIVATEREPOS=()
   fi
   if [ $DOECHO -ge 2 ]; then echo "    ... adding ssh keys for private repos "; fi
   for repo in "${PRIVATEREPOS[@]}"; do

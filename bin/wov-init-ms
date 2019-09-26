@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+COMMAND=MS
 
 function fDisplayOptions()
 {
@@ -9,6 +10,16 @@ function fDisplayOptions()
 usage: `basename $0` [options] [microservice]
 
 Creates a microservice boilerplate inside a project.
+
+  --ms X     : fully build microservice X
+  --recipe X : build microservice recipe for X
+
+ Kubernetes files...
+  --k8s X  : build all Kubernetes boilerplate for microservice X
+  --ing X  : build Kubernetes Ingress boilerplate for microservice X
+  --dep X  : build Kubernetes Deployment boilerplate for microservice X
+  --serv X : build Kubernetes Service boilerplate for microservice X
+
 
 EOF
 }
@@ -61,8 +72,8 @@ module.exports = class TConfig extends require('woveon-service').Config {
       'WOV_${msname}_ver',
       'WOV_${msname}_port',
 
-      'WOV_www_api_urlscheme',
-      'WOV_www_api_url',
+      'WOV_www_${WOV_PROJECT}_urlscheme',
+      'WOV_www_${WOV_PROJECT}_url',
     ],
     ['WOV_${WOV_PROJECT}db_password']);  // random: try 'openssl rand -hex 40'
   };
@@ -70,60 +81,7 @@ module.exports = class TConfig extends require('woveon-service').Config {
 EOFF
   fi
 
-  l_ "  ...Make microservice recipe"
-  f="${WOV_BASEDIR}/wovtools/msrecipes/${msname}"
-  if [ ! -e "${f}" ]; then
-    cat <<EOFFF > "${f}"
-#!/usr/bin/env bash
-
-if [ \$DOECHO -ge 2 ]; then echo "  ... add src"; fi
-# ---------------------------------------------------------------------
-rsync -ai \\
-    --exclude etc --exclude doc --exclude Makefile --exclude README.md \\
-    --exclude ".*.swp" --exclude ".*.mk" --exclude ".DS_Store" \\
-    --delete --delete-excluded \\
-    \${MSDIR}/src/* \${DESTDIR}/src/
-
-#if [ \$DOECHO -ge 2 ]; then echo "  ... add node_modules"; fi
-# ---------------------------------------------------------------------
-#rsync -ai \\
-#    --exclude etc --exclude doc --exclude Makefile --exclude README.md \\
-#    --exclude ".*.swp" --exclude ".*.mk" --exclude ".DS_Store" \\
-#    --delete --delete-excluded \\
-#    \${MSDIR}/node_modules/*  \${DESTDIR}/node_modules
-
-if [ \$DOECHO -ge 2 ]; then echo "  ... add individual files"; fi
-# ---------------------------------------------------------------------
-echo "  ... add index.js, package.json, package-lock.json"
-cp \${MSDIR}/index.js \${DESTDIR}/.
-cp \${MSDIR}/package.json \${DESTDIR}/.
-
-# If you need to install private repos, you can add your ssh key to the container here
-# if [ \$DOECHO -ge 2 ]; then echo "    ... add ssh key (NOTE: IT IS REMOVED FROM THE CONTAINER FOR YOU!!!)"; fi
-# ---------------------------------------------------------------------
-# cp \${HOME}/.ssh/id_rsa \${DESTDIR}/id_rsa
-
-# NOTE: WORKDIR is /usr/src/app for all stages
-
-if [ \$DOECHO -ge 2 ]; then echo "  ... Docker commands for build"; fi
-# ---------------------------------------------------------------------
-cat <<EOF > \${DESTDIR}/SECRET/build.docker
-RUN npm install
-EOF
-
-if [ \$DOECHO -ge 2 ]; then echo "  ... Docker commands for run"; fi
-# ---------------------------------------------------------------------
-cat <<EOF > \${DESTDIR}/SECRET/run.docker
-
-# Define default port
-ENV APP_PORT_INT 80
-
-# Run command
-CMD  [ "npm", "run", "start" ]
-EOF
-EOFFF
-    chmod 700 "${f}"
-  fi
+  doCreateMSRecipe $1
 
   l_ '  ...make a nodejs package and set license to UNLICENSED'
   f="${WOV_BASEDIR}/${msname}/package.json"
@@ -178,8 +136,94 @@ EOF
   fi
   
 
+  doCreateK8s $1
+}
+
+
+# $1 - ms name
+function doCreateMSRecipe()
+{
+  local msname="$1"
+  local msname_l="$(echo ${msname} | tr '[:upper:]' '[:lower:]')"
+
+  l_ "  ...Make microservice recipe"
+  f="${WOV_BASEDIR}/wovtools/msrecipes/${msname}"
+  if [ ! -e "${f}" ]; then
+    cat <<EOFFF > "${f}"
+#!/usr/bin/env bash
+
+if [ \$DOECHO -ge 2 ]; then echo "  ... add src"; fi
+# ---------------------------------------------------------------------
+rsync -ai \\
+    --exclude etc --exclude doc --exclude Makefile --exclude README.md \\
+    --exclude ".*.swp" --exclude ".*.mk" --exclude ".DS_Store" \\
+    --delete --delete-excluded \\
+    \${MSDIR}/src/* \${DESTDIR}/src/
+
+#if [ \$DOECHO -ge 2 ]; then echo "  ... add node_modules"; fi
+# ---------------------------------------------------------------------
+#rsync -ai \\
+#    --exclude etc --exclude doc --exclude Makefile --exclude README.md \\
+#    --exclude ".*.swp" --exclude ".*.mk" --exclude ".DS_Store" \\
+#    --delete --delete-excluded \\
+#    \${MSDIR}/node_modules/*  \${DESTDIR}/node_modules
+
+if [ \$DOECHO -ge 2 ]; then echo "  ... add individual files"; fi
+# ---------------------------------------------------------------------
+echo "  ... add index.js, package.json, package-lock.json"
+if [ -e "\${MSDIR}/index.js" ]; then cp \${MSDIR}/index.js \${DESTDIR}/. ; fi
+if [ -e "\${MSDIR}/package.json" ]; then cp \${MSDIR}/package.json \${DESTDIR}/. ; fi
+
+# If you need to install private repos, you can add your ssh key to the container here
+# if [ \$DOECHO -ge 2 ]; then echo "    ... add ssh key (NOTE: IT IS REMOVED FROM THE CONTAINER FOR YOU!!!)"; fi
+# ---------------------------------------------------------------------
+# cp \${HOME}/.ssh/id_rsa \${DESTDIR}/id_rsa
+
+# NOTE: WORKDIR is /usr/src/app for all stages
+
+if [ \$DOECHO -ge 2 ]; then echo "  ... Docker commands for pre-build"; fi
+# ---------------------------------------------------------------------
+cat <<EOF > \${DESTDIR}/SECRET/pre-build.docker
+EOF
+
+if [ \$DOECHO -ge 2 ]; then echo "  ... Docker commands for build"; fi
+# ---------------------------------------------------------------------
+cat <<EOF > \${DESTDIR}/SECRET/build.docker
+RUN npm install
+EOF
+
+if [ \$DOECHO -ge 2 ]; then echo "  ... Docker commands for run"; fi
+# ---------------------------------------------------------------------
+cat <<EOF > \${DESTDIR}/SECRET/run.docker
+
+# Define default port
+ENV APP_PORT_INT 80
+
+# Run command
+CMD  [ "npm", "run", "start" ]
+EOF
+EOFFF
+    chmod 700 "${f}"
+  fi
+}
+
+# $1 - ms name
+function doCreateK8s()
+{
+
   l_ "  ...k8s directory"
   mkdir -p "${WOV_BASEDIR}/wovtools/k8s"
+
+  doCreateK8sService $1
+  doCreateK8sDeployment $1
+  doCreateK8sIngress $1
+}
+
+# $1 - ms name
+function doCreateK8sIngress()
+{
+  local msname="$1"
+  local msname_l="$(echo ${msname} | tr '[:upper:]' '[:lower:]')"
 
   f="${WOV_BASEDIR}/wovtools/k8s/${WOV_PROJECT}-ingress.yaml.wov"
   if [ -e "${f}" ]; then
@@ -195,7 +239,7 @@ metadata:
   namespace: {{lc PROJECT}}-{{lc STAGE}}
   annotations:
     kubernetes.io/ingress.class: nginx
-    nginx.org/websocket-services: "apisocket"
+    nginx.org/websocket-services: "{{lc PROJECT}}socket"
 spec:
   rules:
   - host: api-{{lc STAGE}}.{{cluster.dns.domain}}
@@ -238,7 +282,14 @@ EOF
           servicePort: 80
 EOF
   fi
+}
 
+
+# $1 - ms name
+function doCreateK8sService()
+{
+  local msname="$1"
+  local msname_l="$(echo ${msname} | tr '[:upper:]' '[:lower:]')"
  
   f="${WOV_BASEDIR}/wovtools/k8s/${msname}-service.yaml.wov"
   if [ -e "${f}" ]; then
@@ -263,7 +314,14 @@ spec:
     targetPort: \{{{{MS}}.port}}
 EOF
   fi
+}
 
+
+# $1 - ms name
+function doCreateK8sDeployment()
+{
+  local msname="$1"
+  local msname_l="$(echo ${msname} | tr '[:upper:]' '[:lower:]')"
 
   f="${WOV_BASEDIR}/wovtools/k8s/${msname}.yaml.wov"
   if [ -e "${f}" ]; then
@@ -312,6 +370,20 @@ EOF
 while [[ $1 =~ ^- ]]; do
   if [ "$1" == '-e' ]; then
     ECHOMODE=1
+
+  elif [ "$1" == '--ms' ]; then
+    COMMAND=MS
+  elif [ "$1" == '--recipe' ]; then
+    COMMAND=RECIPE
+  elif [ "$1" == '--k8s' ]; then
+    COMMAND=K8S
+  elif [ "$1" == '--ing' ]; then
+    COMMAND=INGRESS
+  elif [ "$1" == '--dep' ]; then
+    COMMAND=DEPLOYMENT
+  elif [ "$1" == '--serv' ]; then
+    COMMAND=SERVICE
+
   else
     echo
     echo "***ERROR (`basename $0`): unknown option '$1'."
@@ -326,5 +398,21 @@ if [ "${1}" == "" ]; then
   exit 1
 fi
 
-doBuildMicroservice $1
+if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
+  if [ "${COMMAND}" == "MS" ]; then
+    doBuildMicroservice $1
+  elif [ "${COMMAND}" == "RECIPE" ]; then
+    doCreateMSRecipe $1
+  elif [ "${COMMAND}" == "K8S" ]; then
+    doCreateK8s $1
+  elif [ "${COMMAND}" == "DEPLOYMENT" ]; then
+    doCreateK8sDeployment $1
+  elif [ "${COMMAND}" == "SERVICE" ]; then
+    doCreateK8sService $1
+  elif [ "${COMMAND}" == "INGRESS" ]; then
+    doCreateK8sIngress $1
+  else
+    l_error "Unknow command '${COMMAND}'."
+  fi
+fi
 
