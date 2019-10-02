@@ -1,14 +1,28 @@
 #!/usr/bin/env bash
 
-. wov-env-logging
+DOECHO=1
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
 
-WOV_BASEDIR=$(git rev-parse --show-toplevel)
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+usage: `basename $0` {options} [DOMAIN]
+
+Defines secrets for private code repositories.
+
+EOF
+}
+. wov-env-ops fDisplayOptions "$@"
+
 MYREPOSITORIESFILE="${WOV_BASEDIR}/wovtools/secrets/repositories.json"
 
 
 l_ "Creating skeleton '${MYREPOSITORIESFILE:${#WOV_BASEDIR}+1}' file..."
 
-cat <<EOF > "${MYREPOSITORIESFILE}"
+if [ ! -e "${MYREPOSITORIESFILE}" ]; then
+  cat <<EOF > "${MYREPOSITORIESFILE}"
 {
   "//repositories" : "used to pull private repo code during container creation",
   "//repositories_example" : {
@@ -22,4 +36,11 @@ cat <<EOF > "${MYREPOSITORIESFILE}"
   }
 }
 EOF
+
+# TODO : permissions for a repo : see doGrantUserAccessToCodeCommit in wov-aws
+
+else
+  l_warn "${MYREPOSITORIESFILE:${#WOV_BASEDIR}-1} exists. Not overwriting."
+  exit 1
+fi
 

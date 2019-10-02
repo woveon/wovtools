@@ -1,24 +1,51 @@
 #!/usr/bin/env bash
 
-COMMAND=MS
+
+DOECHO=1
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
+
+REPO_PROVIDER=
+CMD_MS=0
+MSTYPE=
+CMD_REPO=0
+CMD_RECIPE=0
+CMD_K8S=0
+CMD_INGRESS=0
+CMD_DEPLOYMENT=0
+CMD_SERVICE=0
+MSDIR=
+SINGLEPROJ=0
+
 
 function fDisplayOptions()
 {
   cat <<EOF | fold -w ${FOLD} -s
 
 
-usage: `basename $0` [options] [microservice]
+usage: `basename $0` (options) [microservicecode]
 
 Creates a microservice boilerplate inside a project.
 
-  --ms X     : fully build microservice X
-  --recipe X : build microservice recipe for X
+  --repo-entry PROVIDER
+               : build the remote ArchiveRepository entry (i.e. a Git repo)
+               : 'aws' is only provider so far
+
+  --ms         : fully build microservice X. Includes Recipe and K8s (but not repo).
+   --ms-type X : Specific type of microservice:
+           'woveonservice' - A WoveonService based microservice, in nodejs.
+           'nodejs'        - A nodejs microservice.
+
+  --recipe     : build microservice recipe for X
+               : A recipe is the commands to build the content for and the actual Docker container.
+
+  --single-project : This project has one microservice.
 
  Kubernetes files...
-  --k8s X  : build all Kubernetes boilerplate for microservice X
-  --ing X  : build Kubernetes Ingress boilerplate for microservice X
-  --dep X  : build Kubernetes Deployment boilerplate for microservice X
-  --serv X : build Kubernetes Service boilerplate for microservice X
+  --k8s    : build all Kubernetes boilerplate for microservice X
+    --ing  : build Kubernetes Ingress boilerplate for microservice X
+    --dep  : build Kubernetes Deployment boilerplate for microservice X
+    --serv : build Kubernetes Service boilerplate for microservice X
 
 
 EOF
@@ -27,32 +54,138 @@ EOF
 . wov-env-ops fDisplayOptions "$@"
 
 
+# ---------------------------------------------------------------------
+# $1 - project
+# $2 - provider
+# TODO - move this to an AWS specific file that gets called
+# ---------------------------------------------------------------------
+function doRepoMicroservice()
+{
+  local MSC=$1
+  local provider=$2
+  l_debug "  ...checking if container repo is an AWS ECR '${1}' '${2}'"
+
+  if [ "${provider}" == "aws" ]; then
+    if [[ "${WOV_CONTAINERARCHIVE}" == *.dkr.ecr.*.amazonaws.com ]]; then
+      l_verbose "  ... ensuring an AWS ECR repository: ${WOV_PROJECT}/${WOV_PROJECT}${MSC}"
+      aws ecr create-repository --repository-name "${WOV_PROJECT}/${WOV_PROJECT}${MSC}"
+      if [ $? -ne 0 ]; then
+        l_error "Could not create AWS CodeCommit repository of '${WOV_PROJECT}/${WOV_PROJECT}/${MSC}' for microservice '${WOV_PROJECT}${MSC}'."
+        exit 1
+      fi
+    fi
+  else
+    l_error "Unknown providers '${provider}'. WOV_CONTAINERARCHIVE is '${WOV_CONTAINERARCHIVE}'."
+    exit 1
+  fi
+}
+
+
+function doBuildMicroservice_pre()
+{
+  l_debug "doBuildMicroservice_pre '${1}' '${2}'"
+  local mscode="$1"
+  local makeconfig="$2"
+
+  if [ ! -e "${MSDIR}/src" ]; then
+    l_ "  ...make MS directory and src: '${MSDIR}'"
+    mkdir -p "${MSDIR}/src"
+  fi
+
+  if [ "$makeconfig" == "true" ]; then
+    echo "  ...creating: src/${WOV_PROJECT}${mscode}config.sh"
+
+    # Init the file for config incorporation into microservices
+    if [ ! -e "${MSDIR}/src/${WOV_PROJECT}${mscode}config.sh" ]; then
+      touch "${MSDIR}/src/${WOV_PROJECT}${mscode}config.sh"
+      chmod 700 "${MSDIR}/src/${WOV_PROJECT}${mscode}config.sh"
+      cat <<EOF > "${MSDIR}/src/${WOV_PROJECT}${mscode}config.sh"
+#!/usr/bin/env bash
+
+# This file lists the SPECIFIC ENV variables used by your microservice. Both the
+# basic (i.e. Kubernetes ConfigMaps) and secrets (i.e. Kubernetes
+# Secrets).
+#
+# List ALL the env vars: (as compiled by merging your secrets files in wovtools/secrets/*)
+#   wov-env --envs
+#
+# List the ConfigMap env vars:
+#   wov-env --cm ${WOV_PROJECT}${mscode}
+#
+# List the Secrets env vars:
+#   wov-env --se ${WOV_PROJECT}${mscode}
+#
+# NOTE: WOV_${WOV_PROJECT}_port below will be empty until a json entry
+#       is created in a file like: wovtools/secrets/${WOV_PROJECT}.json.
+#
+# NOTE: The woveon-service NodeJS package is designed to integrate
+#       config information without this .sh file. See it for more
+#       information if you are using NodeJS.
+
+if [ "\$1" == "cm" ]; then
+  echo "WOV_${WOV_PROJECT}${mscode}_port=\${WOV_${WOV_PROJECT}${mscode}_port}"
+#elif [ "\$1" == "se" ]; then
+fi
+EOF
+    fi
+  fi
+}
 
 
 # ---------------------------------------------------------------------
 # $1 - name of ms
 # ---------------------------------------------------------------------
-function doBuildMicroservice()
+function doBuildMicroservice_NodeJS()
 {
-  local msname="$1"
-  local msname_l="$(echo ${msname} | tr '[:upper:]' '[:lower:]')"
+  l_debug "doBuildMicroservice_NodeJS '$1'"
+  local mscode="$1"
   local f=
-  local jqrule=
 
-
-  l_ "  ...make MS directory and src"
-  mkdir -p "${WOV_BASEDIR}/${msname}/src"
+  doBuildMicroservice_pre $mscode "true"
 
   l_ "  ...make a nodejs file"
-  f="${WOV_BASEDIR}/${msname}/src/index.js"
+  f="${MSDIR}/src/index.js"
   if [ ! -e "${f}" ]; then
     cat <<EOFF > "${f}"
-console.log('${msname}');
+console.log('${WOV_PROJECT}${mscode}');
 EOFF
   fi
 
-  l_ "  ...make MSNAMEconfig.js file"
-  f="${WOV_BASEDIR}/${msname}/src/${msname}config.js"
+  l_verbose '  ...make a nodejs package and set license to UNLICENSED'
+  f="${MSDIR}/package.json"
+  if [ ! -e "${f}" ]; then
+    cd ${MSDIR} ; yarn init --yes
+    jqrule=".license=\"UNLICENSED\" | .version=\"0.0.1\" | .main=\"src/index.js\" | .scripts.start=\"node src\" "
+    jq -r "${jqrule}" "${MSDIR}/package.json" > "${MSDIR}/package.json_" ; \
+      mv "${MSDIR}/package.json_" "${MSDIR}/package.json"
+  fi
+
+  doBuildMicroservice_base $mscode
+}
+
+
+# ---------------------------------------------------------------------
+# $1 - name of ms
+# ---------------------------------------------------------------------
+function doBuildMicroservice_WoveonService()
+{
+  l_debug "doBuildMicroservice_WoveonService '$1'"
+  local mscode="$1"
+#  local msname_l="$(echo ${msname} | tr '[:upper:]' '[:lower:]')"
+
+  doBuildMicroservice_pre $mscode "false"
+
+  l_ "  ...make a nodejs file"
+  f="${MSDIR}/src/index.js"
+  if [ ! -e "${f}" ]; then
+    cat <<EOFF > "${f}"
+console.log('${WOV_PROJECT}${mscode}');
+EOFF
+  fi
+
+
+  f="${MSDIR}/src/${WOV_PROJECT}${mscode}config.js"
+  l_debug "  ...make config file : ${f}"
   if [ ! -e "${f}" ]; then
     cat <<EOFF > "${f}"
 module.exports = class TConfig extends require('woveon-service').Config {
@@ -69,8 +202,8 @@ module.exports = class TConfig extends require('woveon-service').Config {
       'WOV_${WOV_PROJECT}db_type',         // postgres, mongo, etc.
 
       // microservice calls to it
-      'WOV_${msname}_ver',
-      'WOV_${msname}_port',
+      'WOV_${WOV_PROJECT}${mscode}_ver',
+      'WOV_${WOV_PROJECT}${mscode}_port',
 
       'WOV_www_${WOV_PROJECT}_urlscheme',
       'WOV_www_${WOV_PROJECT}_url',
@@ -81,73 +214,114 @@ module.exports = class TConfig extends require('woveon-service').Config {
 EOFF
   fi
 
-  doCreateMSRecipe $1
-
-  l_ '  ...make a nodejs package and set license to UNLICENSED'
-  f="${WOV_BASEDIR}/${msname}/package.json"
+  l_verbose '  ...make a nodejs package and set license to UNLICENSED'
+  f="${MSDIR}/package.json"
   if [ ! -e "${f}" ]; then
-    cd ${WOV_BASEDIR}/${msname} ; yarn init --yes
+    cd ${MSDIR} ; yarn init --yes
     jqrule=".license=\"UNLICENSED\" | .version=\"0.0.1\" | .main=\"src/index.js\" | .scripts.start=\"node src\" "
-    jq -r "${jqrule}" "${WOV_BASEDIR}/${msname}/package.json" > "${WOV_BASEDIR}/${msname}/package.json_" ; \
-      mv "${WOV_BASEDIR}/${msname}/package.json_" "${WOV_BASEDIR}/${msname}/package.json"
+    jq -r "${jqrule}" "${MSDIR}/package.json" > "${MSDIR}/package.json_" ; \
+      mv "${MSDIR}/package.json_" "${MSDIR}/package.json"
   fi
+
+  doBuildMicroservice_base $mscode
+}
+
+
+# ---------------------------------------------------------------------
+# $1 - name of ms
+# ---------------------------------------------------------------------
+function doBuildMicroservice()
+{
+  local mscode=$1
+
+  doBuildMicroservice_pre $mscode "true"
+
+  doBuildMicroservice_base $mscode
+
+}
+
+
+# ---------------------------------------------------------------------
+# $1 - name of ms
+# ---------------------------------------------------------------------
+function doBuildMicroservice_base()
+{
+  local mscode=$1
+  local mscode_l="$(echo ${mscode} | tr '[:upper:]' '[:lower:]')"
+  local jqrule=
+  local msentry=
+
+  doCreateMSRecipe $mscode
 
   # l_ '  ...check into git'
-#  git add "${WOV_BASEDIR}/${msname}/src/index.js" "${WOV_BASEDIR}/${msname}/package.json" \
-#          "${WOV_BASEDIR}/${msname}/src/${msname}config.js" "${WOV_BASEDIR}/wovtools/msrecipes/${msname}"
+#  git add "${MSDIR}/src/index.js" "${MSDIR}/package.json" \
+#          "${MSDIR}/src/${msname}config.js" "${MSDIR}/wovtools/msrecipes/${msname}"
 
   l_ '  ...make secret for MS'
-  f="${WOV_BASEDIR}/wovtools/secrets/${msname}.json"
-  if [ ! -e "${f}" ]; then
-    cat <<EOF > "${f}"
+  f="${WOV_BASEDIR}/wovtools/secrets/${WOV_MASTERPROJECT}.json"
+
+  msentry=$(cat <<EOF
 {
-  "${msname}" : {
-    "containerfrom" : "node:12.6-alpine",
-    "ver"           : "v1",
-    "port"          : 80,
-    "healthpath"    : "/${msname}/v1/pub/health",
-    "healthprobetime" : 90,
-    "ORIGINlocal"  : {"port" : 75643}
-  }
+  "containerfrom" : "node:12.6-alpine",
+  "ver"           : "v1",
+  "port"          : 80,
+  "healthpath"    : "/${WOV_PROJECT}${mscode}/v1/pub/health",
+  "healthprobetime" : 90,
+  "ORIGINlocal"  : {"port" : 75643, "//port" : "make sure you have no conflicts"}
 }
 EOF
-  fi
+)
 
-  l_ "  ...add MS json file to myconfig if not in it"
-  jq -r ".secrets.${WOV_ME}[]" ${WOV_CONFIGFILE_MINERAW} | grep "${msname}.json" > /dev/null
-  if [ $? -eq 1 ]; then
-    jqrule=".secrets.${WOV_ME}[ .secrets.${WOV_ME} | length ] |= . + \"${msname}.json\" "
-    jq -r "${jqrule}" "${WOV_CONFIGFILE_MINERAW}" > "${WOV_CONFIGFILE_MINERAW}_" ; \
-      mv "${WOV_CONFIGFILE_MINERAW}_" "${WOV_CONFIGFILE_MINERAW}"
+  # create the file in secrets or append to it
+  l_debug 'create the file in secrets'
+  l_debug " msentry : ${msentry}"
+    set -x
+  if [ ! -e "${f}" ]; then
+    echo $msentry > "${f}"
+  else # [ "$(jq -r \".${WOV_PROJECT}${mscode}\" ${f})" == "null" ]; then
+    jq -r ".${WOV_PROJECT}${mscode} |= ${msentry}" "${f}"  > "${f}.1"
+    if [ $? -eq 0 ]; then mv "${f}.1" "${f}"; 
+    else l_error "Failed adding to '${WOV_MASTERPROJECT}.json' file in secrets."; exit 1; fi
   fi
+    set +x
 
-  l_ "  ...add MS json file to config dev and prod if not in it"
-  jq -r ".secrets.dev[]" ${WOV_CONFIGFILE_MAINRAW} | grep "${msname}.json" > /dev/null
-  if [ $? -eq 1 ]; then
-    jqrule=".secrets.dev[ .secrets.dev | length ] |= . + \"${msname}.json\" "
-    jq -r "${jqrule}" "${WOV_CONFIGFILE_MAINRAW}" > "${WOV_CONFIGFILE_MAINRAW}_" ; \
-      mv "${WOV_CONFIGFILE_MAINRAW}_" "${WOV_CONFIGFILE_MAINRAW}"
-  fi
-  jq -r ".secrets.prod[]" ${WOV_CONFIGFILE_MAINRAW} | grep "${msname}.json" > /dev/null
-  if [ $? -eq 1 ]; then
-    jqrule=".secrets.prod[ .secrets.prod | length ] |= . + \"${msname}.json\" "
-    jq -r "${jqrule}" "${WOV_CONFIGFILE_MAINRAW}" > "${WOV_CONFIGFILE_MAINRAW}_" ; \
-      mv "${WOV_CONFIGFILE_MAINRAW}_" "${WOV_CONFIGFILE_MAINRAW}"
-  fi
+#  # TODO - when append to exising msname.json file, these lines are not needed
+#  l_ "  ...add MS json file to myconfig if not in it"
+#  jq -r ".secrets.${WOV_ME}[]" ${WOV_CONFIGFILE_MINERAW} | grep "${msname}.json" > /dev/null
+#  if [ $? -eq 1 ]; then
+#    jqrule=".secrets.${WOV_ME}[ .secrets.${WOV_ME} | length ] |= . + \"${msname}.json\" "
+#    jq -r "${jqrule}" "${WOV_CONFIGFILE_MINERAW}" > "${WOV_CONFIGFILE_MINERAW}_" ; \
+#      mv "${WOV_CONFIGFILE_MINERAW}_" "${WOV_CONFIGFILE_MINERAW}"
+#  fi
+#
+#  l_ "  ...add MS json file to config dev and prod if not in it"
+#  jq -r ".secrets.dev[]" ${WOV_CONFIGFILE_MAINRAW} | grep "${msname}.json" > /dev/null
+#  if [ $? -eq 1 ]; then
+#    jqrule=".secrets.dev[ .secrets.dev | length ] |= . + \"${msname}.json\" "
+#    jq -r "${jqrule}" "${WOV_CONFIGFILE_MAINRAW}" > "${WOV_CONFIGFILE_MAINRAW}_" ; \
+#      mv "${WOV_CONFIGFILE_MAINRAW}_" "${WOV_CONFIGFILE_MAINRAW}"
+#  fi
+#  jq -r ".secrets.prod[]" ${WOV_CONFIGFILE_MAINRAW} | grep "${msname}.json" > /dev/null
+#  if [ $? -eq 1 ]; then
+#    jqrule=".secrets.prod[ .secrets.prod | length ] |= . + \"${msname}.json\" "
+#    jq -r "${jqrule}" "${WOV_CONFIGFILE_MAINRAW}" > "${WOV_CONFIGFILE_MAINRAW}_" ; \
+#      mv "${WOV_CONFIGFILE_MAINRAW}_" "${WOV_CONFIGFILE_MAINRAW}"
+#  fi
+#  # /TODO
   
 
-  doCreateK8s $1
+  doCreateK8s $msname
 }
 
 
 # $1 - ms name
 function doCreateMSRecipe()
 {
-  local msname="$1"
-  local msname_l="$(echo ${msname} | tr '[:upper:]' '[:lower:]')"
+  local mscode="$1"
+  local mscode_l="$(echo ${mscode} | tr '[:upper:]' '[:lower:]')"
 
   l_ "  ...Make microservice recipe"
-  f="${WOV_BASEDIR}/wovtools/msrecipes/${msname}"
+  f="${WOV_BASEDIR}/wovtools/msrecipes/${mscode}"
   if [ ! -e "${f}" ]; then
     cat <<EOFFF > "${f}"
 #!/usr/bin/env bash
@@ -219,10 +393,14 @@ function doCreateK8s()
   doCreateK8sIngress $1
 }
 
+
 # $1 - ms name
+# Let's keep ingress at the project level... so multiple ingress entries will exist, managed by each project
 function doCreateK8sIngress()
 {
-  local msname="$1"
+  local mscode="$1"
+  local mscode_l="$(echo ${mscode} | tr '[:upper:]' '[:lower:]')"
+  local msname="${WOV_PROJECT}${mscode}"
   local msname_l="$(echo ${msname} | tr '[:upper:]' '[:lower:]')"
 
   f="${WOV_BASEDIR}/wovtools/k8s/${WOV_PROJECT}-ingress.yaml.wov"
@@ -235,7 +413,7 @@ function doCreateK8sIngress()
 apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
-  name: {{lc PROJECT}}-ingress
+  name: {{lc MASTERPROJECT}}-{{lc PROJECT}}-ingress
   namespace: {{lc PROJECT}}-{{lc STAGE}}
   annotations:
     kubernetes.io/ingress.class: nginx
@@ -256,27 +434,27 @@ EOF
     cat <<EOF >> ${f}
 
       # ---------------------------------------------------------------------
-      # ${msname}
+      # ${msname_l}
       # ---------------------------------------------------------------------
 \{{#if_eq {{STAGE}} "prod"}}
 \{{else}}
       # open up private only if not in production
       # ---------------------------------------------------------------------
-      - path: /${msname}/{{${msname}.ver}}/priv
+      - path: /${msname_l}/{{${msname}.ver}}/priv
         backend:
           serviceName: ${msname_l}
           servicePort: 80
 
       # open up doc only if not in production
       # ---------------------------------------------------------------------
-      - path: /${msname}/{{${msname}.ver}}/doc
+      - path: /${msname_l}/{{${msname}.ver}}/doc
         backend:
           serviceName: ${msname_l}
           servicePort: 80
 \{{/if_eq}}
       # pub
       # ---------------------------------------------------------------------
-      - path: /${msname}/{{${msname}.ver}}/pub
+      - path: /${msname_l}/{{${msname}.ver}}/pub
         backend:
           serviceName: ${msname_l}
           servicePort: 80
@@ -288,10 +466,11 @@ EOF
 # $1 - ms name
 function doCreateK8sService()
 {
-  local msname="$1"
-  local msname_l="$(echo ${msname} | tr '[:upper:]' '[:lower:]')"
+  local mscode="$1"
+  local mscode_l="$(echo ${mscode} | tr '[:upper:]' '[:lower:]')"
+  local msname_l="$(echo "${WOV_PROJECT}${mscode}" | tr '[:upper:]' '[:lower:]')"
  
-  f="${WOV_BASEDIR}/wovtools/k8s/${msname}-service.yaml.wov"
+  f="${WOV_BASEDIR}/wovtools/k8s/${msname_l}-service.yaml.wov"
   if [ -e "${f}" ]; then
     l_ "  ...skipping service k8s"
   else
@@ -320,10 +499,9 @@ EOF
 # $1 - ms name
 function doCreateK8sDeployment()
 {
-  local msname="$1"
-  local msname_l="$(echo ${msname} | tr '[:upper:]' '[:lower:]')"
+  local mscode="$1"
 
-  f="${WOV_BASEDIR}/wovtools/k8s/${msname}.yaml.wov"
+  f="${WOV_BASEDIR}/wovtools/k8s/${WOV_PROJECT}${mscode}.yaml.wov"
   if [ -e "${f}" ]; then
     l_ "  ...skipping deployment k8s"
   else
@@ -342,7 +520,7 @@ spec:
         app: {{lc MS}}
     spec:
       containers:
-        - image: {{ARCHIVEREPOSITORY}}/{{PROJECT}}/{{lc MS}}:{{lc STAGE}}_{{PVER}}
+        - image: {{CONTAINERARCHIVE}}/{{PROJECT}}/{{lc MS}}:{{lc STAGE}}_{{PVER}}
           name: {{lc MS}}
           imagePullPolicy: Always
           ports:
@@ -371,21 +549,32 @@ while [[ $1 =~ ^- ]]; do
   if [ "$1" == '-e' ]; then
     ECHOMODE=1
 
+  elif [ "$1" == '--repo-entry' ]; then
+    CMD_REPO=1
+    shift
+    REPO_PROVIDER=$1
   elif [ "$1" == '--ms' ]; then
-    COMMAND=MS
+    CMD_MS=1
+  elif [ "$1" == '--ms-type' ]; then
+    shift
+    MSTYPE=$1
   elif [ "$1" == '--recipe' ]; then
-    COMMAND=RECIPE
+    CMD_RECIPE=1
   elif [ "$1" == '--k8s' ]; then
-    COMMAND=K8S
+    CMD_K8S=1
   elif [ "$1" == '--ing' ]; then
-    COMMAND=INGRESS
+    CMD_INGRESS=1
   elif [ "$1" == '--dep' ]; then
-    COMMAND=DEPLOYMENT
+    CMD_DEPLOYMENT=1
   elif [ "$1" == '--serv' ]; then
-    COMMAND=SERVICE
+    CMD_SERVICE=1
+
+  elif [ "$1" == "--single-project" ]; then
+    SINGLEPROJ=1
 
   else
     echo
+    fDisplayOptions
     echo "***ERROR (`basename $0`): unknown option '$1'."
     echo
     exit 1
@@ -393,26 +582,62 @@ while [[ $1 =~ ^- ]]; do
   shift
 done
 
-if [ "${1}" == "" ]; then
-  echo "ERROR: need a name for this new microservice."
-  exit 1
-fi
 
 if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
-  if [ "${COMMAND}" == "MS" ]; then
-    doBuildMicroservice $1
-  elif [ "${COMMAND}" == "RECIPE" ]; then
-    doCreateMSRecipe $1
-  elif [ "${COMMAND}" == "K8S" ]; then
-    doCreateK8s $1
-  elif [ "${COMMAND}" == "DEPLOYMENT" ]; then
-    doCreateK8sDeployment $1
-  elif [ "${COMMAND}" == "SERVICE" ]; then
-    doCreateK8sService $1
-  elif [ "${COMMAND}" == "INGRESS" ]; then
-    doCreateK8sIngress $1
+
+  if [ "${1}" == "" ]; then
+    fDisplayOptions
+    l_error "ERROR: need a name for this new microservice."
+    exit 1
+  else MSCODE=$1; fi
+
+  l_verbose "CMD_REPO       ${CMD_REPO}"
+  l_verbose "CMD_RECIPE     ${CMD_RECIPE}"
+  l_verbose "CMD_K8S        ${CMD_K8S}"
+  l_verbose "CMD_INGRESS    ${CMD_INGRESS}"
+  l_verbose "CMD_DEPLOYMENT ${CMD_DEPLOYMENT}"
+  l_verbose "CMD_SERVICE    ${CMD_SERVICE}"
+
+  # Set the microservice directory
+  if [ ${SINGLEPROJ} -eq 1 ]; then MSDIR="${WOV_BASEDIR}"; 
+  else MSDIR="${WOV_BASEDIR}/${WOV_PROJECT}${MSCODE}"; fi
+
+  # create repo if set
+  if [ ${CMD_REPO} -eq 1 ]; then doRepoMicroservice ${MSCODE} ${REPO_PROVIDER}; fi
+
+  # ms does all
+  if [ ${CMD_MS} -eq 1 ]; then
+    case ${MSTYPE} in 
+      "woveonservice")
+        doBuildMicroservice_WoveonService ${MSCODE}
+        ;;
+      "nodejs")
+        doBuildMicroservice_NodeJS ${MSCODE}
+        ;;
+      "")
+        doBuildMicroservice ${MSCODE};
+        ;;
+      *)
+        fDisplayOptions
+        l_error "Unknown microservice type of '${MSTYPE}'."
+        exit 1;
+    esac
   else
-    l_error "Unknow command '${COMMAND}'."
+
+    # k8s does the following 3
+    if [ ${CMD_K8S} -eq 1 ]; then
+      doCreateK8s ${MSCODE}
+    else
+
+      # check each individually
+      if [ ${CMD_DEPLOYMENT} -eq 1 ]; then doCreateK8sDeployment ${MSCODE}; fi
+      if [ ${CMD_SERVICE} -eq 1 ]; then doCreateK8sService ${MSCODE}; fi
+      if [ ${CMD_INGRESS} -eq 1 ]; then doCreateK8sIngress ${MSCODE}; fi
+    fi
   fi
+
+  # MS Container recipe
+  if [ "${CMD_RECIPE}" -eq 1 ]; then doCreateMSRecipe ${MSCODE}; fi
+
 fi
 

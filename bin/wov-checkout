@@ -220,9 +220,7 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
 
   l_verbose "... check for existing repo"
   if [ -e "${WOV_BASEDIR}" ]; then
-    set -x
     THEREPOREMOTE=$(git -C "${WOV_BASEDIR}" config --get remote.origin.url)
-    set +x
     if [ "${THEREPOREMOTE}" == "${TARGETREPO}" ]; then
       l_ "... existing repo already checked out... continuing."
     else

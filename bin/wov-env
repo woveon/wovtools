@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+FOLD=$(tput cols)
 export PATH=$PATH:/usr/local/bin/wovlib
 
 
@@ -35,6 +36,8 @@ Command Options:
   -E             : echo the output on one line (bash executable)
   -p/--provider  : run cluster config as well (queries cloud provider via wov-env-PROVIDER)
   --set-origin X : sets the origin in wovtools/myconfig.json
+  -lmsc          : lists the microservice codes
+  -lms           : lists the microservices
 
   Resource Names:
   --res SN RES ZONE  : subnet name
@@ -88,7 +91,7 @@ ECHOVARS=( 'WOV_PROJECTTITLE' 'WOV_VERSION' 'WOV_ME' 'WOV_PVER' 'WOV_SVER' \
            'WOV_KPROJECT' 'WOV_WPROJECT' 'WOV_KSTAGE' 'WOV_GSTAGE' \
            'WOV_PROJECTTYPE' 'WOV_PROJECTDESCRIPTION' \
            'WOV_USERNAME' 'WOV_USEREMAIL' \
-           'WOV_BASEDIR' 'WOV_ARCHIVEREPOSITORY' 'WOV_ARCHIVEENV')
+           'WOV_BASEDIR' 'WOV_CONTAINERARCHIVE' 'WOV_K8SARCHIVE' 'WOV_CODEREPOARCHIVE' )
 
 # --------------------------------------------------------------------- 
 # Calls wov-env-build to build the secretfile if it does not exist.
@@ -129,8 +132,8 @@ function fBuildClusterSecrets
      [ "${WOV_BASEDIR}/.git"                  -nt "${WOV_SECRETFILE}" ]; then
 
   #  echo "fBuildClusterSecrets building"
-    wov-env-build --context ${WOV_CONTEXT} -q --config
-    if [ "$?" != "0" ]; then exit 1; fi
+    wov-env-build --context ${WOV_CONTEXT} -q --config ; Re=$?
+    if [ $Re -ne 0 ]; then exit $Re; fi
     touch "${WOV_SECRETFILE}"
     # . wov-env-loader -g ${WOV_CLUSTER}-${WOV_NS}"
   # else
@@ -684,10 +687,22 @@ function doClearClusterCache()
 
 
 # ---------------------------------------------------------------------
-function doListMicroservices()
+function doListMicroserviceCodes()
 {
   fGetMicroserviceRecipes
   if [ ${#RECIPES[@]} -eq 0 ]; then echo 'No microservices'; else echo "${RECIPES[@]}"; fi
+}
+
+# ---------------------------------------------------------------------
+function doListMicroservices()
+{
+  fGetMicroserviceRecipes
+  if [ ${#RECIPES[@]} -eq 0 ]; then echo 'No microservices';
+  else
+    for r in ${RECIPES[@]}; do
+      echo "${WOV_PROJECT}${RECIPES[@]}"
+    done
+  fi
 }
 
 # --------------------------------------------------------------------- 
@@ -833,9 +848,13 @@ while [[ $1 =~ ^- ]]; do
     set - blank "$@"
       # -- pushes 'blank' onto arguments, so next shift can get rid of it
 
-  elif [ "$1" == '--lms' ]; then
+  elif [ "$1" == '-lms' ]; then
     shift
     doListMicroservices
+
+  elif [ "$1" == '-lmsc' ]; then
+    shift
+    doListMicroserviceCodes
 
 
   elif [ "$1" == '--vres' ]; then

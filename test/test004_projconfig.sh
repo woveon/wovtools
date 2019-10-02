@@ -15,10 +15,12 @@ FOLD=`tput cols`
 #tr_tests_off
 
 tr_h1 "Project Tests : wovtools/config.json"
+tr_protectfile "${HOME}/.wovtools" "del"
 
 {
-  tr_section "create clean dummy project"
+  tr_section "create dummy project"
 
+  pwd
   rm -Rf ./${DPN} || exit 1
   mkdir ${DPN} || exit 1
   tr_dir ./${DPN}
@@ -31,27 +33,32 @@ tr_h1 "Project Tests : wovtools/config.json"
 if [ `tr_istesting ; echo $?` -eq 1 ]; then
   tr_section "ProjectConfigInit"
 
+#  unset WOV_K8SARCHIVE
+#  unset WOV_CONTAINERARCHIVE
+#  unset WOV_CODEREPOARCHIVE
   iProjConfig_CreateIfNotExists <<EOF
-
-
-
-
-
-
-
+Y
+Y
+Y
+Y
+Y
+Y
+Y
 EOF
 
   tr_test "should exist" "[ -e ./wovtools/config.json ] && echo 'true'" 0 1 'true'
   tr_test "should be valid json" "iProjConfig_Validate && echo 'true'" 0 1 'true'
-  tr_test "test .ver ${WOV_VERSION}"      "[ `jq -r .ver wovtools/config.json` == '${WOV_VERSION}' ] && echo 1" 0 1 '1'
-  tr_test "test .project.masterproject"   "[ \"`jq -r .project.masterproject wovtools/config.json`\" == 'dummyproject' ] && echo 1" 0 1 '1'
-  tr_test "test .project.name"   "[ \"`jq -r .project.name wovtools/config.json`\" == 'dummyproject' ] && echo 1" 0 1 '1'
-  tr_test "test .project.type"   "[ \"`jq -r .project.type wovtools/config.json`\" == '' ] && echo 1" 0 1 '1'
-  tr_test "test .project.title"   "[ \"`jq -r .project.title wovtools/config.json`\" == 'Dummyproject' ] && echo 1" 0 1 '1'
-  tr_test "test .project.description"   "[ \"`jq -r .project.description wovtools/config.json`\" == 'A project Dummyproject.' ] && echo 1" 0 1 '1'
-  tr_test "test .archives.k8s"   "[ \"`jq -r .archives.k8s wovtools/config.json`\" == '' ] && echo 1" 0 1 '1'
-  tr_test "test .archives.container"   "[ \"`jq -r .archives.container wovtools/config.json`\" == '' ] && echo 1" 0 1 '1'
-  tr_test "test .archives.coderepo"   "[ \"`jq -r .archives.coderepo wovtools/config.json`\" == '' ] && echo 1" 0 1 '1'
+  tr_test "test .ver ${WOV_VERSION}"    "[ `jq -r .ver wovtools/config.json` == '${WOV_VERSION}' ] && echo 1" 0 1 '1'
+  tr_test "test .project.masterproject" "[ \"`jq -r .project.masterproject wovtools/config.json`\" == 'test' ] && echo 1" 0 1 '1'
+  tr_test "test .project.name"          "[ \"`jq -r .project.name wovtools/config.json`\" == 'dummyproject' ] && echo 1" 0 1 '1'
+  tr_test "test .project.type"          "[ \"`jq -r .project.type wovtools/config.json`\" == '' ] && echo 1" 0 1 '1'
+  tr_test "test .project.title"         "[ \"`jq -r .project.title wovtools/config.json`\" == 'Dummyproject' ] && echo 1" 0 1 '1'
+  tr_test "test .project.description"   \
+    "[ \"`jq -r .project.description wovtools/config.json`\" == 'A project Dummyproject.' ] && echo 1" 0 1 '1'
+  cat wovtools/config.json
+  tr_test "test .archives.k8s"          "[ \"`jq -r .archives.k8s wovtools/config.json`\" == '' ] && echo 1" 0 1 '1'
+  tr_test "test .archives.container"    "[ \"`jq -r .archives.container wovtools/config.json`\" == '' ] && echo 1" 0 1 '1'
+  tr_test "test .archives.coderepo"     "[ \"`jq -r .archives.coderepo wovtools/config.json`\" == '' ] && echo 1" 0 1 '1'
 
   tr_run "cleanup" "_iProjConfig_Clear"
 
@@ -106,9 +113,9 @@ EOF
   tr_test "test .project.type"   "[ \"`jq -r .project.type wovtools/config.json`\" == '' ] && echo 1" 0 1 '1'
   tr_test "test .project.title"   "[ \"`jq -r .project.title wovtools/config.json`\" == 'project title' ] && echo 1" 0 1 '1'
   tr_test "test .project.description"   "[ \"`jq -r .project.description wovtools/config.json`\" == 'project description' ] && echo 1" 0 1 '1'
-  tr_test "test .archives.k8s"   "[ \"`jq -r .archives.k8s wovtools/config.json`\" == 'K8s' ] && echo 1" 0 1 '1'
-  tr_test "test .archives.container"   "[ \"`jq -r .archives.container wovtools/config.json`\" == 'container' ] && echo 1" 0 1 '1'
-  tr_test "test .archives.coderepo"   "[ \"`jq -r .archives.coderepo wovtools/config.json`\" == 'coderepo' ] && echo 1" 0 1 '1'
+  tr_test "test .archives.k8s"   "[ \"`jq -r .archives.k8s wovtools/config.json`\" == '`realpath K8s`' ] && echo 1" 0 1 '1'
+  tr_test "test .archives.container"   "[ \"`jq -r .archives.container wovtools/config.json`\" == '`realpath container`' ] && echo 1" 0 1 '1'
+  tr_test "test .archives.coderepo"   "[ \"`jq -r .archives.coderepo wovtools/config.json`\" == '`realpath coderepo`' ] && echo 1" 0 1 '1'
 
   tr_run "cleanup" "_iProjConfig_Clear"
   tr_section "/ProjectConfigInitDeltas"
@@ -141,8 +148,8 @@ coderepo
 Y
 EOF
   tr_test "test .archives.k8s"   "jq -r .archives.k8s wovtools/config.json" 0 1 "${wov_K8SARCHIVE}"
-  tr_test "test .archives.container"   "[ \"`jq -r .archives.container wovtools/config.json`\" == 'container' ] && echo 1" 0 1 '1'
-  tr_test "test .archives.coderepo"   "[ \"`jq -r .archives.coderepo wovtools/config.json`\" == 'coderepo' ] && echo 1" 0 1 '1'
+  tr_test "test .archives.container"   "jq -r .archives.container wovtools/config.json" 0 1 "`realpath container`"
+  tr_test "test .archives.coderepo"   "jq -r .archives.coderepo wovtools/config.json" 0 1 "`realpath coderepo`"
 
   tr_run "cleanup" "_iProjConfig_Clear"
   tr_section "/ProjectConfigWGlobal"

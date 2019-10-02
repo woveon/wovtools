@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
+
+
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
 function fWovEnvBuildDisplayOptions()
@@ -30,6 +34,8 @@ Builds WovTool configurations for secrets (-s) and clusters (-c) (K8s, ConfigMap
   --cluster : build the K8s files (deployment, secrets, configmap, etc) with the config
 
 
+Exit values:
+  100 - bad stage
 
 EOF
 }
@@ -150,18 +156,20 @@ function fBuildConfig()
   local SECRETFILELAST="${WOV_CLUSTERDIR}/.config.json"
   l_ "  ... using origin      : ${WOV_ORIGIN}"
 
-  l_verbose "  CLUSTER=${WOV_CLUSTER}"
-  l_verbose "  SECRETFILE=${WOV_SECRETFILE}"
+  l_verbose "  CLUSTER='${WOV_CLUSTER}'"
+  l_verbose "  SECRETFILE='${WOV_SECRETFILE}'"
 
   # Read the source secrets files from WOV_CONFIGFILE_MERGED , to 
   # generate the WOV_SECRETFILE for the CLUSTER.
   # ---------------------------------------------------------------------
   local SRCSECRETFILES=( $(jq -r ".secrets.${WOV_STAGE}[] " ${WOV_CONFIGFILE_MERGED} 2> /dev/null) )
   if [ "$?" != "0" ] || [ "${#SRCSECRETFILES}" == "0" ]; then
-    printf "\n\nERROR: either no entry or no files for stage '${WOV_STAGE}' in ${WOV_CONFIGFILE_MAIN} file '.secrets'.\n"
-    printf "  - You probably just need to create an entry in wovtools/config|local.json, similar to the other stages.\n\n"
-    exit 1
+    l_error "Either no entry or no files for stage '${WOV_STAGE}' in ${WOV_CONFIGFILE_MAIN} file '.secrets'.\n"`
+           `"  - You probably just need to create an entry in wovtools/config|local.json, similar to the other stages."
+    exit 101
   fi
+
+  l_verbose "  SRCSECRETFILES=( ${SRCSECRETFILES[@]} ) "
 
   # Find the databases as array, then flatten for WOV_DATABASES
   DATABASES=( $(doFindDatabases) )
@@ -194,8 +202,9 @@ function fBuildConfig()
   "PROJECTDESCRIPTION" : "${WOV_PROJECTDESCRIPTION}",
   "DATABASES"          : "${WOV_DATABASES}",
 
-  "ARCHIVEREPOSITORY" : "${WOV_ARCHIVEREPOSITORY}",
-  "ARCHIVEENV"        : "${WOV_ARCHIVEENV}",
+  "CONTAINERARCHIVE"   : "${WOV_CONTAINERARCHIVE}",
+  "K8SARCHIVE"         : "${WOV_K8SARCHIVE}",
+  "CODEREPOARCHIVE"    : "${WOV_CODEREPOARCHIVE}",
 
   "USERNAME"  : "${WOV_USERNAME}",
   "USEREMAIL" : "${WOV_USEREMAIL}",
@@ -211,10 +220,10 @@ EOF
 
   # STEP 1: Check for source file existence
   for sf in ${SRCSECRETFILES[*]}; do
-    # echo "looking for ${WOV_BASEDIR}/wovtools/secrets/$sf"
+    l_debug "looking for ${WOV_BASEDIR}/wovtools/secrets/$sf"
     if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/$sf" ]; then
-      printf "ERROR: file for secret build does not exist: 'wovtools/secrets/$sf'.\n"
-      printf "  : Your wovtools/{config|local}.json has entries for files @: '.secrets.${WOV_STAGE}'.\n"
+      l_error "ERROR: file for secret build does not exist: 'wovtools/secrets/$sf'.\n"
+      l_error "  : Your wovtools/{config|local}.json has entries for files @: '.secrets.${WOV_STAGE}'.\n"
       exit 1
     fi
   done
@@ -405,14 +414,16 @@ function fPostBuildSecretsJSON()
 function fCleanCacheAll() 
 {
   HAS_CLEAN=1
+  # l_verbose "  ...clean ${WOV_CONFIGFILE_MERGED:$((${#WOV_BASEDIR}+1))}"
+  # rm -f "${WOV_CONFIGFILE_MERGED}"
   _fCleanCache "clusters" "secrets"
 }
 function _fCleanCache() 
 {
   BUILDDIRS=( "$*" )
   for f in ${BUILDDIRS[@]}; do
-    DEST=${WOV_BASEDIR}/wovtools/cache/$f
-    if [ $DOECHO -ge 2 ]; then echo "  ... clean cache in dir '${DEST}'."; fi
+    DEST="${WOV_BASEDIR}/wovtools/cache/$f"
+    l_verbose "  ...clean cache in dir '${DEST}'."
     rm -fR ${DEST}/* || true
   done
 }

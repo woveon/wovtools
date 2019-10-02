@@ -102,9 +102,10 @@ EOF
   tr_test "it should exist now" "[ -e \"wovtools/secrets/${DPN}db_mm.json\" ] ; printf $?" 0 1 0
   # TODO - json tests and validation
 
+  tr_test "WOV_BASEDIR ${WOV_BASEDIR} is set" "[ \"${WOV_BASEDIR}\" != '' ] && echo 1" 0 1 1
 
   tr_comment "link project local archives to remote repos"
-  tr_test "Set up remote repos" "iLocalArchives_InteractiveSetRemoteRepos \"${WOV_BASEDIR}\" > /dev/null ; printf $?" 0 1 0  <<EOF
+  tr_test "Set up remote repos" "iLocalArchives_InteractiveSetRemoteRepos 1 \"${WOV_BASEDIR}\" > /dev/null ; printf \$?" 0 1 0  <<EOF
 Y
 Y
 Y

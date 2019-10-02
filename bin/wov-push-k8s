@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
+
+
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 function fDisplayOptions()
@@ -109,8 +113,8 @@ function doPushClusterToArchive()
   local R=
   local Re=
 
-  if [ "${WOV_ARCHIVEENV}" == "" ]; then
-    l_error "No WOV_ARCHIVEENV set. Update your '${WOV_CONFIGFILE_MAIN}' file's '.archive.env' entry."
+  if [ "${WOV_K8SARCHIVE}" == "" ]; then
+    l_error "No WOV_K8SARCHIVE set. Update your '${WOV_CONFIGFILE_MAIN}' file's '.archive.env' entry."
     exit 1
   fi
 
@@ -123,31 +127,31 @@ function doPushClusterToArchive()
     exit 1
   fi
 
-  l_ "  ... pushing to archive: '${WOV_ARCHIVEENV}/${ARCHPATH}'"
+  l_ "  ... pushing to archive: '${WOV_K8SARCHIVE}/${ARCHPATH}'"
   # l_verbose "$(cd ${WOV_CLUSTERDIR} ; ls -d * */* )"
 
-  R=$(cd ${PUSH_CLUSTERDIR} ; aws s3 sync cm  "${WOV_ARCHIVEENV}/${ARCHPATH}/cm"  --delete) ; Re=$?
+  R=$(cd ${PUSH_CLUSTERDIR} ; aws s3 sync cm  "${WOV_K8SARCHIVE}/${ARCHPATH}/cm"  --delete) ; Re=$?
   if [ $Re -ne 0 ] ; then
     l_error "${R}"
     l_error "Failed pushing to AWS S3."
     l_error " SRC : ${PUSH_CLUSTERDIR}"
-    l_error " DEST: ${WOV_ARCHIVEENV}/${ARCHPATH}/cm"
+    l_error " DEST: ${WOV_K8SARCHIVE}/${ARCHPATH}/cm"
     exit 1
   fi
-  R=$(cd ${PUSH_CLUSTERDIR} ; aws s3 sync se  ${WOV_ARCHIVEENV}/${ARCHPATH}/se  --delete) ; Re=$?
+  R=$(cd ${PUSH_CLUSTERDIR} ; aws s3 sync se  ${WOV_K8SARCHIVE}/${ARCHPATH}/se  --delete) ; Re=$?
   if [ $Re -ne 0 ] ; then
     l_error "${R}"
     l_error "Failed pushing to AWS S3."
     l_error " SRC : ${PUSH_CLUSTERDIR}"
-    l_error " DEST: ${WOV_ARCHIVEENV}/${ARCHPATH}/cm"
+    l_error " DEST: ${WOV_K8SARCHIVE}/${ARCHPATH}/cm"
     exit 1
   fi
-  R=$(cd ${PUSH_CLUSTERDIR} ; aws s3 sync k8s ${WOV_ARCHIVEENV}/${ARCHPATH}/k8s --delete) ; Re=$?
+  R=$(cd ${PUSH_CLUSTERDIR} ; aws s3 sync k8s ${WOV_K8SARCHIVE}/${ARCHPATH}/k8s --delete) ; Re=$?
   if [ $Re -ne 0 ] ; then
     l_error "${R}"
     l_error "Failed pushing to AWS S3."
     l_error " SRC : ${PUSH_CLUSTERDIR}"
-    l_error " DEST: ${WOV_ARCHIVEENV}/${ARCHPATH}/cm"
+    l_error " DEST: ${WOV_K8SARCHIVE}/${ARCHPATH}/cm"
     exit 1
   fi
 

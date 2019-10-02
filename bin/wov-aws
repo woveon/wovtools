@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
+
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 function fDisplayOptions()
@@ -182,7 +185,7 @@ function doGrantUserAccessToS3()
       {
           "Effect": "Allow",
           "Action":   ["s3:PutObject","s3:GetObject"],
-          "Resource": "arn:aws:s3:::${WOV_ARCHIVEENV:5}/${WOV_CLUSTER}/${WOV_PROJECT}/${UserCode}/*"
+          "Resource": "arn:aws:s3:::${WOV_K8SARCHIVE:5}/${WOV_CLUSTER}/${WOV_PROJECT}/${UserCode}/*"
         }
   ]
 }
@@ -205,7 +208,6 @@ EOF
   esac
 
   # Run command
-  set -x
   aws iam put-user-policy --user-name "${AWSUser}" --policy-name "${PolicyName}" --policy-document file://$f
   if [ $? -ne 0 ]; then
     #rm "$f"
@@ -346,10 +348,8 @@ EOF
 #  fi
 #done
 
-#  set -x
 #COMMAND=$1
 #shift
-#set +x
 
 if   [ "${COMMAND}" == "volume-id" ]; then
   doVolumeID       $*

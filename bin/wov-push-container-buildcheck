@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
+
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 function fDisplayOptions()
@@ -7,7 +10,7 @@ function fDisplayOptions()
   cat <<EOF | fold -w ${FOLD} -s
 
 
-usage: `basename $0` [options] container microservice
+usage: `basename $0` [options] microservice
 
 Checks if the microservice's current container needs to be built. The container will be a lower case version of the microservice's name.
 
@@ -105,7 +108,7 @@ function fCheckForRemoteImage()
   local retval=101
   local RR=""
 
-  if [[ $WOV_ARCHIVEREPOSITORY == *".amazonaws.com" ]]; then
+  if [[ $WOV_CONTAINERARCHIVE == *".amazonaws.com" ]]; then
 
     # do check
     RR=$(ecs-cli images ${WOV_PROJECT}/${CN} 2>&1 )
@@ -139,7 +142,7 @@ function fCheckForRemoteImage()
 
         # ex. 686413534598.dkr.ecr.us-east-1.amazonaws.com/api/apidata@sha256:03ed7fb9e67e8ebf2f998a936b7039d8a9d6a931a3af803c0de0bd4f557189bd
         R_sha=$(echo "${R}" | awk '{print $3}')
-        R_repoDigest="${WOV_ARCHIVEREPOSITORY}/${WOV_PROJECT}/${CN}@${R_sha}"
+        R_repoDigest="${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CN}@${R_sha}"
         Local_repoDigest=$(docker inspect ${WOV_PROJECT}/${CN} | jq -r '.[0].RepoDigests[0]')
           # TODO: what if repo digests has multiple entries? go through each?
         #echo "R ${R_repoDigest}    L ${Local_repoDigest}" 1>&2
@@ -156,7 +159,7 @@ function fCheckForRemoteImage()
       fi
     fi
   else
-    l_error "Unknown provider to check '${WOV_ARCHIVEREPOSITORY}' (only AWS known in wov-pushcontainer-check).\n"
+    l_error "Unknown provider to check '${WOV_CONTAINERARCHIVE}' (only AWS known in wov-pushcontainer-check).\n"
     l_error "  :   NOTE: should be an easy fix for regular git!"
     retval=101
   fi
@@ -169,7 +172,7 @@ function fCheckForRemoteImage()
 function fGetRepoLabel() 
 {
   local retval=""
-  if [[ $WOV_ARCHIVEREPOSITORY == *".amazonaws.com" ]]; then
+  if [[ $WOV_CONTAINERARCHIVE == *".amazonaws.com" ]]; then
     retval=$(ecs-cli images ${WOV_PROJECT}/${CN} | awk '{print $2}' | sort -k '1,1' | tail -1)
 #    echo "RETVAL: ${retval}"
   else
@@ -180,16 +183,16 @@ function fGetRepoLabel()
 }
 
 
-if [ "$#" != "2" ]; then
-  printf "\nERROR: need to supply the container name.\n"
+if [ "$#" != "1" ]; then
+  printf "\nERROR: need to supply the microservice code.\n"
   fDisplayOptions
   exit 1
 fi
 
-# CONTAINER=$1
-CN=$1
-MS=$2
-MSDIR=`findMSDir "${MS}"`
+MSCODE=$1
+MS="${WOV_PROJECT}${MSCODE}"
+CN=${MS,,}
+MSDIR=`findMSDir "${MSCODE}"`
 
 DESTDIR=${WOV_BASEDIR}/wovtools/cache/containers/${MS}
 ARCHDIR=${WOV_BASEDIR}/wovtools/cache/containers/archive/${MS}
@@ -207,6 +210,7 @@ elif [ ${DOFORCE} -eq 1 ]; then
   if [ $DOECHO -ge 1 ]; then echo "    ... forcing build."; fi
 
 elif [ "$(docker images -q ${WOV_PROJECT}/${CN} )" == "" ]; then
+  l_debug "ran docker cmd : 'docker images -q ${WOV_PROJECT}/${CN}'"
   if [ $DOECHO -ge 1 ]; then echo "    ... no existing container, building"; fi
   docker images -q "${WOV_PROJECT}/${CN}"
 

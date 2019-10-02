@@ -562,7 +562,7 @@ function doDeployStage()
   chmod 700 ${DEPLOYSRC}
   if [ "$?" != "0" ]; then exit 1; fi
 
-  l_verbose "...pulling deployment from Archive : '${WOV_ARCHIVEENV}/${ARCHPATH}'"
+  l_verbose "...pulling deployment from Archive : '${WOV_K8SARCHIVE}/${ARCHPATH}'"
   l_verbose "...placing into '${DEPLOYSRC:${#WOV_BASEDIR}+1}'"
   if [ ! -e ${DEPLOYSRC} ]; then
     mkdir -p ${DEPLOYSRC}
@@ -570,7 +570,7 @@ function doDeployStage()
   fi
 
   # Pull AWS S3 files
-  R=$(cd ${DEPLOYSRC} ; aws s3 sync --quiet "${WOV_ARCHIVEENV}/${ARCHPATH}" "." --delete) ; Re=$?
+  R=$(cd ${DEPLOYSRC} ; aws s3 sync --quiet "${WOV_K8SARCHIVE}/${ARCHPATH}" "." --delete) ; Re=$?
   if [ $Re -ne 0 ]; then
     l_error "Failed to pull from AWS S3 : '${R}'."
     exit 1
@@ -715,7 +715,7 @@ function doListVersions
   #fi
   #echo "extra ${extra}"
 
-  local vers=( $(aws s3 ls ${WOV_ARCHIVEENV}/${ARCHBASE}${l}/${WOV_PROJECT}/${WOV_STAGE}/ | awk '{print $2}') )
+  local vers=( $(aws s3 ls ${WOV_K8SARCHIVE}/${ARCHBASE}${l}/${WOV_PROJECT}/${WOV_STAGE}/ | awk '{print $2}') )
 
   for f in ${vers[@]}; do
     echo ${f%/}

@@ -97,6 +97,12 @@ export WOV_CACHEDIR="${WOV_BASEDIR}/wovtools/cache"
 export WOV_CONFIGFILE_MAINRAW="${WOV_BASEDIR}/${WOV_CONFIGFILE_MAIN}"
 export WOV_CONFIGFILE_MINERAW="${WOV_BASEDIR}/${WOV_CONFIGFILE_MINE}"
 export WOV_CONFIGFILE_MERGED="${WOV_CACHEDIR}/.merged.json"
+
+
+# NOTE: These variables are conflated with the Local Archive... so don't use for now
+# export WOV_SEADIR="${WOV_BASEDIR}/secrets"
+# export WOV_DBADIR="${WOV_BASEDIR}/db/archive"
+#export WOV_DSADIR="${WOV_BASEDIR}/secrets"
 SED=`which gsed`
 
 # --------------------------------------------------------------------- 
@@ -150,7 +156,7 @@ function getWovProjectVars()
   if [ ${WOV_CONFIGFILE_MAINRAW} -nt ${WOV_CONFIGFILE_MERGED} ] || [ ${WOV_CONFIGFILE_MINERAW} -nt ${WOV_CONFIGFILE_MERGED} ]; then
     # echo "... merged file out of date, creating: ${WOV_CONFIGFILE_MERGED}"
     mkdir -m 700 -p ${WOV_CACHEDIR}
-    touch ${WOV_CONFIGFILE_MERGED}
+    echo "" > ${WOV_CONFIGFILE_MERGED}
     chmod 600 ${WOV_CONFIGFILE_MERGED}
     jq -s ".[0] * .[1]" ${WOV_CONFIGFILE_MAINRAW} ${WOV_CONFIGFILE_MINERAW} >> ${WOV_CONFIGFILE_MERGED} 2> /dev/null
     if [ "$?" != "0" ]; then
@@ -170,7 +176,7 @@ function getWovProjectVars()
   MERGEDVARS=()
   while read f; do
     MERGEDVARS+=( "$f" )
-  done <<<$(cat ${WOV_CONFIGFILE_MERGED} | jq -r ". | ( .ver, .project.masterproject, .project.name, .project.type, .project.title, .project.description, .archives.k8s, .archives.container, .archives.coderepo )" )
+  done <<<$(cat ${WOV_CONFIGFILE_MERGED} | jq -r ". | ( .ver, .project.masterproject, .project.name, .project.type, .project.title, .project.description, .archives.container, .archives.k8s, .archives.coderepo )" )
   WOV_PVERSION=${MERGEDVARS[0]}
   if [ "${WOV_PVERSION}" != "${WOV_VERSION}" ] && [ "${WOV_PVERSION}" != "initing" ] ; then
     printf "\n\nERROR: Your project version '${WOV_PVERSION}', does not match to the WovTools version '${WOV_VERSION}'.\n"
@@ -187,9 +193,9 @@ function getWovProjectVars()
   export WOV_PROJECTDESCRIPTION="${MERGEDVARS[5]}"
 
   # mimic from ~/.wovtools
-  export WOV_ARCHIVESK8S="${MERGEDVARS[6]}"
-  export WOV_ARCHIVESCONTAINER="${MERGEDVARS[7]}"
-  export WOV_ARCHIVESCODEREPO="${MERGEDVARS[8]}"
+  export WOV_CONTAINERARCHIVE="${MERGEDVARS[6]}"
+  export WOV_K8SARCHIVE="${MERGEDVARS[7]}"
+  export WOV_CODEREPOARCHIVE="${MERGEDVARS[8]}"
 
 
   # vars from Kubernetes
@@ -202,6 +208,7 @@ function getWovProjectVars()
     fi
     export WOV_CONTEXT
   fi
+
   array=( ${WOV_CONTEXT//-/ } )
   if [ "${#array[@]}" != "6" ]; then
     echo "ERROR: bad context '${WOV_CONTEXT}'. Should be {ORIGIN:}CLTYPE-PROVIDER-REGION-FLAVOR-PROJECT-STAGE."

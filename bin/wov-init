@@ -6,6 +6,7 @@ FOLD=$(tput cols)
 export PATH=$PATH:/usr/local/bin/wovlib
 
 
+
 # first call, set WOV_BASEDIR to here
 WOV_BASEDIR=`pwd`
 ISWOVPROJECT="0"
@@ -13,6 +14,19 @@ ISWOVPROJECT="0"
 . wov-env-logging
 . wov-env-common
 . wov-init-common
+
+
+# TODO add switches that control these
+OP_SKIPGLOBALCONFIG=0       # --skip-global - validate and readIn but don't CreateIfNotExists
+OP_SKIPWOVTOOLSCONFIG=0     # --skip-project-config
+OP_SKIPWOVTOOLSMYCONFIG=0   # --skip-project-myconfig
+OP_LOCALARCHIVEDEFAULT=     # --local-archive-default X
+OP_PROJ_CODEREPOARCHIVE=    # --proj-coderepo-default X
+OP_WOVDBNAME=               # --wov-db-name
+OP_CLUSTER_HOSTEDZONE=      # --cluster-hostedzone X
+OP_CLUSTER_NAME=            # --cluster-name X
+OP_CLUSTER_FORCEBUILD=0     # --cluster-force-build
+OP_WOVDB_QUESTION=1         # --wovdb-question X  - on by default
 
 # ---------------------------------------------------------------------
 # Precommands
@@ -24,6 +38,40 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--verbose" ] || [ "$1" == "-v" ]; then
     DOECHO=2
     shift
+
+  elif [ "$1" == "--wovdb-question" ]; then
+    shift
+    OP_WOVDB_QUESTION=$1
+
+  elif [ "$1" == "--local-archive-default" ]; then
+    shift
+    OP_LOCALARCHIVEDEFAULT=$1
+    shift
+
+  elif [ "$1" == "--proj-coderepo-default" ]; then
+    shift
+    OP_PROJ_CODEREPOARCHIVE=$1
+    shift
+
+  elif [ "$1" == "--wov-db-name" ]; then
+    shift
+    OP_WOVDBNAME=$1
+    shift
+
+  elif [ "$1" == "--cluster-hostedzone" ]; then
+    shift
+    OP_CLUSTER_HOSTEDZONE=$1
+    shift
+
+  elif [ "$1" == "--cluster-name" ]; then
+    shift
+    OP_CLUSTER_NAME=$1
+    shift
+
+  elif [ "$1" == "--cluster-force-build" ]; then
+    OP_CLUSTER_FORCEBUILD=1
+    shift
+
   else
     l_error "***ERROR: unknown option '$1'."
     fDisplayOptions
@@ -35,64 +83,112 @@ done
 # ---------------------------------------------------------------------
 # Spew
 # ---------------------------------------------------------------------
-echo ""
-figlet "`basename $0`"
-echo "Initializes this directory as a wovtools project. This should be non-destructive, only adding at .git and wovtools directories." | fold -w ${FOLD} -s
-echo ""
+echo
+l_title "`basename $0`"
+l_block "Initializes this directory as a wovtools project. This should be non-destructive, only adding at .git and wovtools directories."
+echo
+echo
+echo
 
 
-
-# --------------------------------------------------------------------- 
-l_verbose "Work with Global Woveon file : ~/.wovtools"
-# --------------------------------------------------------------------- 
-iGlobalConfig_CreateIfNotExists || exit 1
-iGlobalConfig_Validate || exit 1
-iGlobalConfig_ReadIn
+# TODO - move past regular ocmmands, so switches can toggle behavior
 
 
 # --------------------------------------------------------------------- 
-l_verbose "Set WOV_BASEDIR"
+l_block "Select the base directory of this project (i.e. WOV_BASEDIR)"
 # --------------------------------------------------------------------- 
 WOV_BASEDIR=`pwd`
+if [ -d '.git' ]; then WOV_BASEDIR=$(git rev-parse --show-toplevel); fi
 while true; do
-  read -r -p "Select project base directory (Root of git repository) (\"${WOV_BASEDIR}\") ... Correct? [Y/n] " A
+  read -r -p "Use (\"${WOV_BASEDIR}\") ... Correct? [Y/n] " A
   case $A in
     ""|[Yy][Ee][Ss]|[Yy])
       break
       ;;
     [Nn][Oo]|[Nn])
-      read -p -r "ok, enter base directory : " B
-      if [ ! -e "${B}" ]; then l_warn "That is not a directory.";
-      else WOV_BASEDIR=${B}; break; fi
+      read -e -p "ok, enter base directory (relative paths accepted) : " -i ${WOV_BASEDIR} B
+      if [ ! -d "${B}" ]; then l_warn "That is not a directory.";
+      else WOV_BASEDIR=`realpath ${B}`; break; fi
       ;;
     *)
       echo "Invalid input... (${A})"
       ;;
   esac
 done
-echo "  ... WOV_BASEDIR : ${WOV_BASEDIR}"
+l_verbose "  ... WOV_BASEDIR : ${WOV_BASEDIR}"
 
-
-# ---------------------------------------------------------------------
-l_verbose "Project Config file : wovtools/config.json"
-# ---------------------------------------------------------------------
-l_verbose "Create the wovtools/config.json file"
-iProjConfig_CreateIfNotExists || exit 1
-  # --- creates it if not exists, then goes interactive
-
-
-# ---------------------------------------------------------------------
-l_verbose "Project MyConfig file : wovtools/myconfig.json"
-# ---------------------------------------------------------------------
-l_verbose "Create the wovtools/myconfig.json file"
-doCreateMyConfigJSON "${WOV_BASEDIR}/wovtools/myconfig.json" "${WOV_ME}" "${WOV_MASTERPROJECT}"
 
 
 # --------------------------------------------------------------------- 
-l_verbose "Figure out project and repository naming (for git)"
+l_subtitle "Global Woveon File"
+l_block    "Configure the Global Woveon File : ~/.wovtools"
+# --------------------------------------------------------------------- 
+if [ -e "${HOME}/.wovtools" ] && [ "$(iGlobalConfig_Validate ; echo $?)" == "0" ]; then
+  read -r -p "~/.wovtools exists and is valid. Skip? [Y/n] " A
+  case $A in
+    ""|[Yy][Ee][Ss]|[Yy])
+      OP_SKIPGLOBALCONFIG=1
+      ;;
+  esac
+fi
+
+if [ ${OP_SKIPGLOBALCONFIG} -eq 1 ]; then
+  l_ "  ...skipping"
+else
+  iGlobalConfig_CreateIfNotExists || exit 1
+  iGlobalConfig_Validate || exit 1
+fi
+iGlobalConfig_ReadIn
+
+
+# ---------------------------------------------------------------------
+l_subtitle "Project Config Files"
+l_ "Setup the project's main configuration in the wovtools/config.json and wovtools/myconfig.json files."
+# ---------------------------------------------------------------------
+
+# ---------------------------------------------------------------------
+echo ""
+l_block    "Config : wovtools/config.json"
+# ---------------------------------------------------------------------
+if [ -e "${WOV_BASE}/wovtools/config.json" ] && [ "$(iProjConfig_Validate ; echo $?)" == "0" ]; then
+  read -r -p "wovtools/config.json exists and is valid. Skip? [Y/n] " A
+  case $A in
+    ""|[Yy][Ee][Ss]|[Yy])
+      OP_SKIPWOVTOOLSCONFIG=1
+      ;;
+  esac
+fi
+if [ ${OP_SKIPWOVTOOLSCONFIG} -eq 1 ]; then
+  l_ "  ...skipping"
+else
+  if [ "${OP_PROJ_CODEREPOARCHIVE}" != "" ]; then WOV_CODEREPOARCHIVE="${OP_PROJ_CODEREPOARCHIVE}"; fi
+  iProjConfig_CreateIfNotExists || exit 1          # --- creates it if not exists, then goes interactive
+fi
+iProjConfig_ReadIn || exit 1                     # --- reads and replaces some globals if set here
+
+# ---------------------------------------------------------------------
+echo ""
+l_block    "MyConfig : wovtools/myconfig.json"
+# ---------------------------------------------------------------------
+if [ -e "${WOV_BASE}/wovtools/myconfig.json" ] && [ "$(iProjMyConfig_Validate ; echo $?)" == "0" ]; then
+  read -r -p "wovtools/myconfig.json exists and is valid. Skip? [Y/n] " A
+  case $A in
+    ""|[Yy][Ee][Ss]|[Yy])
+      OP_SKIPWOVTOOLSMYCONFIG=1
+      ;;
+  esac
+fi
+if [ ${OP_SKIPWOVTOOLSMYCONFIG} -eq 1 ]; then
+  l_ "  ...skipping"
+else
+  doCreateMyConfigJSON "${WOV_BASEDIR}/wovtools/myconfig.json" "${WOV_ME}" "${WOV_MASTERPROJECT}"
+fi
+
+# --------------------------------------------------------------------- 
+l_subtitle "Git Configuration"
+l_         "Configure the project\'s git. This includes remote repositories and branches."
 # --------------------------------------------------------------------- 
 iProjRepo_InteractiveNaming "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "`basename ${WOV_BASEDIR}`" "`basename $(realpath ${WOV_BASEDIR}/..)`"
-
 
 # ---------------------------------------------------------------------
 # Ensure git is configured properly
@@ -101,63 +197,51 @@ iProjGit_InteractiveUpdate "${WOV_CODEREPOARCHIVE}" "${wov_REPO_EXT}" "${WOV_ME}
 
 
 # ---------------------------------------------------------------------
-# Ensure wovtools directory is setup
+l_verbose "Ensure wovtools directory is setup"
 # ---------------------------------------------------------------------
 iProjDir_Init "${WOV_BASEDIR}" || exit 1
 
 
 # ---------------------------------------------------------------------
-# Link wovtools directory to Local Archives (create as needed)
+l_subtitle "Project Local Archives"
+l_         "Set LocalArchives for Project, using the global values as defaults. If you just set global values, this might feel redundant."
 # ---------------------------------------------------------------------
-iLocalArchives_LinkLocalArchives "." "${WOV_MASTERPROJECT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" ; Re=$?
+iProjLocalArchives_InteractiveUpdate "${OP_LOCALARCHIVEDEFAULT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" ; Re=$?
 
 # ---------------------------------------------------------------------
-l_verbose "Set Remote Repos for Project Local Archives"
+l_verbose "Link wovtools directory to Local Archives (create as needed)"
 # ---------------------------------------------------------------------
-iLocalArchives_InteractiveSetRemoteRepos "${WOV_BASEDIR}"
+iLocalArchives_LinkLocalArchives "." "${WOV_MASTERPROJECT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" "${WOV_USERNAME}" "${WOV_USEREMAIL}" ; Re=$?
 
 # ---------------------------------------------------------------------
-l_verbose "Load project vars now... since we know we have the links at least... new projects will be empty here"
+l_subtitle "Connect Local Archives"
+l_         "Connect your project\'s Local Archives to their remote repositories."
+# ---------------------------------------------------------------------
+iLocalArchives_InteractiveSetRemoteRepos 0 "${WOV_BASEDIR}"
+
+
+
+# ---------------------------------------------------------------------
+echo ""
+l_h1 "...Loading what we can of the project environment"
 # ---------------------------------------------------------------------
 . wov-env-loader
+WOV_cluster_dns_domain=$(wov-env --var WOV_cluster_dns_domain 2> /dev/null) ; Re=$?
+if [ $? -ne 0 ]; then echo "failed to load in"; fi
 
 # ---------------------------------------------------------------------
-l_verbose "Select Cluster DNS Domain (needed for Secrets)"
+echo ""
+l_h3 "Select Cluster DNS Domain (needed for Secrets)"
 # ---------------------------------------------------------------------
-WOV_cluster_dns_domain=$(wov-env --var WOV_cluster_dns_domain)
-#if [ $? -ne 0 ]; then echo "failed to load in"; exit 1; fi
-if [ "${WOV_cluster_dns_domain}" == "" ]; then
-  while true; do
-    read -r -p "Enter DNS Domain Name (ex. example.com, sub-domain not needed): (\"${WOV_cluster_dns_domain}\") ... Correct? [Y/n]" A
-    case $A in 
-      ""|[Yy][Ee][Ss]|[Yy])
-        break;
-        ;;
-      ""|[Nn][Oo]|[Nn])
-        read -r -p "Ok, domain name: " WOV_cluster_dns_domain
-        ;;
-      *)
-        echo "Invalid input... (${A})"
-        ;;
-    esac
-  done
-fi
-
-# ---------------------------------------------------------------------
-l_verbose "Generate Project Secrets if needed"
-# ---------------------------------------------------------------------
-iLocalArchives_SEFiles "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_ME}" "${WOV_cluster_dns_domain}"
-
-read -r -p "Do you want to configure secrets for a project database? [Y/n] " A
+if [ "${WOV_cluster_dns_domain}" == "" ]; then WOV_cluster_dns_domain="${wov_COMPANYDOMAIN}"; fi
 while true; do
-  case $A in
+  read -r -p "Enter DNS Domain Name (ex. example.com, sub-domain not needed): (\"${WOV_cluster_dns_domain}\") ... Correct? [Y/n]" A
+  case $A in 
     ""|[Yy][Ee][Ss]|[Yy])
-      iLocalArchives_SEDBFiles "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_ME}"
       break;
       ;;
     ""|[Nn][Oo]|[Nn])
-      l_ "  ... skipping db configuration. run wov-init-db in future"
-      break
+      read -r -p "Ok, domain name: " WOV_cluster_dns_domain
       ;;
     *)
       echo "Invalid input... (${A})"
@@ -166,14 +250,232 @@ while true; do
 done
 
 
+# ---------------------------------------------------------------------
+l_h1 "Create Project Default Secrets"
+# ---------------------------------------------------------------------
+iLocalArchives_SEFiles "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_ME}" "${WOV_cluster_dns_domain}"
 
-wov-init-cluster ${WOV_cluster_dns_domain}
+
+# ---------------------------------------------------------------------
+l_subtitle "Cluster Configureation"
+l_block    "Configure which cluster you are connecting to. This cluster does not yet have to exist. To create it, run 'wov-cluster' after this script. WovTools uses Kops to create and manage clusters."
+# ---------------------------------------------------------------------
+wov-init-cluster \
+  --cluster-hostedzone "${OP_CLUSTER_HOSTEDZONE}" \
+  --cluster-name       "${OP_CLUSTER_NAME}" \
+  $([ ${OP_CLUSTER_FORCEBUILD} -eq 1 ] && echo "--force-build" || echo "") \
+  "${WOV_cluster_dns_domain}"
 if [ $? -ne 0 ]; then exit 1; fi
 
+
+# ---------------------------------------------------------------------
+l_h1 "WovDatabase Setup"
+# ---------------------------------------------------------------------
+if [ ${OP_WOVDB_QUESTION} -eq 1 ]; then
+  l_   "WovTools gives a name for each database used by your system (though many projects only have one), and refers to this database as a WovDatabase. This WovDatabase can be realized in many different configurations/locations across database server(s). Because of this, WovTools has three concepts of 'Database' (that will become clear over time with usage of WovTools):"
+  l_tab 1 "- Database Server - a server that stores persistent data and has multiple database instances. You could have servers for each stage or one for all; it's up to you in your configuration. (ex. an AWS RDS Postgres Database Server)"
+  l_tab 1 "- WovDatabase - A named persistent store of data. This has different database instances for each stage, which are indepdentent of the database server"
+  l_tab 1 "- Database Instance - a WovDatabase's entry in a database server, for a database stage (NOTE: AWS calls database servers 'instances' which should not be confused with this.)"
+  echo ""
+
+  if [ "${OP_WOVDBNAME}" == "" ]; then 
+    read -r -p "Do you want to configure a WovDatabase for your project now? [Y/n] " A
+  else A=y; fi
+
+  while true; do
+
+    case $A in
+      ""|[Yy][Ee][Ss]|[Yy])
+
+        if [ "${OP_WOVDBNAME}" == "" ]; then
+          read -r -p "Create a WovDatabase named? " OP_WOVDBNAME
+        fi
+        if [[ "${OP_WOVDBNAME}" =~ ^[A-Za-z][A-Za-z_0-9]+$ ]]; then
+          wov-init-db ${OP_WOVDBNAME}
+        else
+        l_warn "Please provide a database name that is lowercase of alphanumeric/underscore but starts with a character"
+        OP_WOVDBNAME=
+      fi
+      break;
+      ;;
+    [Nn][Oo]|[Nn])
+      l_ "  ... skipping db configuration. run wov-init-db in future"
+      break
+      ;;
+    *)
+      echo "Invalid input... (${A})"
+      ;;
+  esac
+done
+else
+  l_ "  ...skipping Wov Database configuration. Use 'wov-init-db --help' for help with the command."
+fi
+
+
+
+
+# ---------------------------------------------------------------------
+l_h1 "Code Repository Access"
+# ---------------------------------------------------------------------
+l_   "Configure WovTools to know how to access your private repositories."
 wov-init-coderepoaccess
 if [ $? -ne 0 ]; then exit 1; fi
 
-echo "exiting now"
+
+# ---------------------------------------------------------------------
+l_h1 "Microservice Configuration"
+l_   "Individual microservices have secrets and config files that need to be configured. This will go through and find these microservices. Some projects have multiple microservices in them."
+# ---------------------------------------------------------------------
+
+# ---------------------------------------------------------------------
+l_ "...finding possible microservice(s) in project directories :${wov_REPO_TYPE}"
+# ---------------------------------------------------------------------
+ms_dirs=( )   # microservice directories
+ms_codes=( )  # codes
+# ---------------------------------------------------------------------
+if [ "${wov_REPO_TYPE}" == "single" ]; then
+  l_ "...single microservice project"
+  ms_dirs+=( "." )
+  ms_codes+=( "${wov_REPO_MSCODE}" )
+else
+  l_ "...searching for microservices"
+  for ii in $(ls -d */); do
+    i=${i%%/}
+    f=${i::${#PROJ}}
+    if [ "$f" == "${WOV_PROJECT}" ]; then
+      b=${i:${#WOV_PROJECT}}
+      if [ -d "$i/src" ]; then
+        ms_dirs+=( "$i" )
+        ms_codes+=( "${b}" )
+      else
+        l_warn "Possible microservice directory '${ii}' has no 'src' directory in it."
+        # TODO- not all microservices necessarily will have src... figure out some other way of identifying it
+      fi
+    fi
+  done
+fi
+l_ "microservices in project (codes) : ${ms_codes[@]}"
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+if [ ${#ms_codes[@]} -eq 0 ]; then
+  l_warn "Could find no microservice(s) in this project. Skipping init of any microservices. Run wov-init-ms when you have one."
+
+else
+  for $i in `seq 0 ${#ms_dirs}`; do
+    ms_dir="${ms_dirs[$i]}"
+    ms_code="${ms_codes[$i]}"
+
+    l_ "  ...init micrservice ${WOV_PROJECT}${ms_code}"
+
+    l_debug "microservice k8s"
+    wov-init-ms --repo-entry "aws" --ms "${WOV_PROJECT}${ms_dir}"
+  done
+fi
+
+
+## ---------------------------------------------------------------------
+#l_ "Identified this as a single microservice repository."
+#
+#  MSC=$(basename $(pwd))
+#  MSC=${MSC:${#WOV_PROJECT}}
+#  echo ""
+#  echo "Enter a code for this microservice, where the full microservice name will be '${WOV_PROJECT}CODE'."
+#  while true; do
+#    echo ""
+#    read -r -p "  Assuming MS named \"${WOV_PROJECT}${MSC}\", using MS Code of \"${MSC}\". Correct? [Y/n]:" A
+#    case $A in
+#      ""|[Yy][Ee][Ss]|[Yy])
+#        break
+#        ;;
+#      [Nn][Oo]|[Nn])
+#        read -r -p "  ok, enter Microservice Code (MSC): " A
+#        if [[ ! "${A}" =~ ^[a-z][a-z0-9]*$ ]]; then
+#          l_warn "Bad input. Use only lowercase and no special characters. Numbers can not start. (reg expr /^[a-z][a-z0-9]+$/)."
+#        else
+#          MSC=${A}
+#        fi
+#        ;;
+#      *)
+#        echo "Invalid input... (${A})"
+#        ;;
+#    esac
+#  done
+
+
+#  echo "  ...creating: src/${WOV_PROJECT}${MSC}config.sh"
+##
+
+#    # Init the file for config incorporation into microservices
+#  if [ ! -e "${WOV_BASEDIR}/src/${WOV_PROJECT}${MSC}config.sh" ]; then
+#    touch "${WOV_BASEDIR}/src/${WOV_PROJECT}${MSC}config.sh"
+#    chmod 700 "${WOV_BASEDIR}/src/${WOV_PROJECT}${MSC}config.sh"
+#    cat <<EOF > "${WOV_BASEDIR}/src/${WOV_PROJECT}${MSC}config.sh"
+##!/usr/bin/env bash
+#
+## This file lists the SPECIFIC ENV variables used by your microservice. Both the
+## basic (i.e. Kubernetes ConfigMaps) and secrets (i.e. Kubernetes
+## Secrets).
+##
+## List ALL the env vars: (as compiled by merging your secrets files in wovtools/secrets/*)
+##   wov-env --envs
+##
+## List the ConfigMap env vars:
+##   wov-env --cm ${WOV_PROJECT}${MSC}
+##
+## List the Secrets env vars:
+##   wov-env --se ${WOV_PROJECT}${MSC}
+##
+## NOTE: WOV_${WOV_PROJECT}_port below will be empty until a json entry
+##       is created in a file like: wovtools/secrets/${WOV_PROJECT}.json.
+##
+## NOTE: The woveon-service NodeJS package is designed to integrate
+##       config information without this .sh file. See it for more
+##       information if you are using NodeJS.
+#
+#if [ "\$1" == "cm" ]; then
+#  echo "WOV_${WOV_PROJECT}${MSC}_port=\${WOV_${WOV_PROJECT}${MSC}_port}"
+##elif [ "\$1" == "se" ]; then
+#fi
+#EOF
+#  fi
+##
+#  echo "  ...adding to configuration for the microservice"
+#  cat <<EOF > ${WOV_BASEDIR}/.tmp.$$
+#{
+#  "${WOV_PROJECT}${MSC}" : {
+#    "containerfrom"   : "node:12.6-alpine",
+#    "ver"             : "v1",
+#    "port"            : 80,
+#    "healthpath"      : "/${WOV_PROJECT}${MSC}/v1/health",
+#    "healthprobetime" : "15",
+#    "secrettoken"     : null,
+#    "//secrettoken"   : "run: openssl rand -hex 20",
+#    "ORIGINlocal"     : { "port" : 3001, "healthprobetime" : "99" }
+#  }
+#}
+#EOF
+
+#  # merge in
+#  jq -s ".[0] * .[1]" "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}.json" "${WOV_BASEDIR}/.tmp.$$" > "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}.json.$$"
+#  if [ $? -ne 0 ]; then
+#    rm "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}.json.$$"
+#    rm ${WOV_BASEDIR}/.tmp.$$
+#    exit 1
+#  fi
+#  mv "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}.json.$$" "${WOV_BASEDIR}/wovtools/secrets/${WOV_PROJECT}.json"
+##  rm ${WOV_BASEDIR}/.tmp.$$
+#fi
+
+# For some reason, the merged file is bad here so delete it and it will be rebuilt
+rm ${WOV_BASEDIR}/wovtools/cache/.merged.json
+wov-env-build -f --config
+
+
+
+printf "\n\n... success! WovTools is successfully initialized for this project.\n"
+
 exit 0
 
 
@@ -210,7 +512,7 @@ exit 0
 #    if [ "$?" != "0" ]; then echo "ERROR: setting git remote origin failed."; exit 1; fi
 #    git remote -v
 #    if [ "$?" != "0" ]; then echo "ERROR: testing of remote git repo failed."; exit 1; fi
-#    WOV_ARCHIVEREPOSITORY="${A}"
+#    WOV_CONTAINERARCHIVE="${A}"
 #  fi
 #
 #  # ---------------------------------------------------------------------
@@ -715,30 +1017,30 @@ if [ "${A}" != "" ]; then WOV_PROJECTDESCRIPTION=${A}; fi
 
 
 # get from config.json or ~/.wovtools or best guess
-WOV_ARCHIVEREPOSITORY=$(cat ${WOV_CONFIGFILE_MAIN} | jq -r '.archive.repository')
-if [ "${WOV_ARCHIVEREPOSITORY}" == "null" ] || [ "${WOV_ARCHIVEREPOSITORY}" == "" ]; then
-  WOV_ARCHIVEREPOSITORY=$(cat ${HOME}/.wovtools | jq -r '.archive.repository')
+WOV_CONTAINERARCHIVE=$(cat ${WOV_CONFIGFILE_MAIN} | jq -r '.archive.repository')
+if [ "${WOV_CONTAINERARCHIVE}" == "null" ] || [ "${WOV_CONTAINERARCHIVE}" == "" ]; then
+  WOV_CONTAINERARCHIVE=$(cat ${HOME}/.wovtools | jq -r '.archive.repository')
 fi
-if [ "${WOV_ARCHIVEREPOSITORY}" == "null" ] || [ "${WOV_ARCHIVEREPOSITORY}" == "" ]; then
-  WOV_ARCHIVEREPOSITORY="$(aws sts get-caller-identity --output text --query 'Account').dkr.ecr.$(aws configure get region).amazonaws.com"
+if [ "${WOV_CONTAINERARCHIVE}" == "null" ] || [ "${WOV_CONTAINERARCHIVE}" == "" ]; then
+  WOV_CONTAINERARCHIVE="$(aws sts get-caller-identity --output text --query 'Account').dkr.ecr.$(aws configure get region).amazonaws.com"
 fi
 
 echo
 l_ "ARCHIVE> Remote Docker Repository:"
-l_ "  This is where your containers will be pushed and deployed from. Enter the root URL of this repo."
-l_ "    ex. AWS ECR is [aws_account_id].dkr.ecr.[region].amazonaws.com."
+l_ "This is where your containers will be pushed and deployed from. Enter the root URL of this repo."
+l_ "  ex. AWS ECR is [aws_account_id].dkr.ecr.[region].amazonaws.com."
 l_ "      AWS get account number: \"aws sts get-caller-identity --output text --query 'Account'\"."
 l_ "      AWS get default region: \"aws configure get region\"."
 while true; do
   echo ""
-  read -r -p "  Remote Docker Repository: (\"${WOV_ARCHIVEREPOSITORY}\") ... Correct? [Y/n] " A
+  read -r -p "  Remote Docker Repository: (\"${WOV_CONTAINERARCHIVE}\") ... Correct? [Y/n] " A
 
   case $A in
     ""|[Yy][Ee][Ss]|[Yy])
       break
     ;;
     [Nn][Oo]|[Nn])
-      read -r -p "  ok, enter name: " WOV_ARCHIVEREPOSITORY
+      read -r -p "  ok, enter name: " WOV_CONTAINERARCHIVE
     ;;
   *)
     l_warn "Invalid input... (${A})"
@@ -749,32 +1051,32 @@ done
 
 
 # get from config.json or ~/.wovtools or make best guess
-WOV_ARCHIVEENV=$(cat ${WOV_CONFIGFILE_MAIN} | jq -r '.archive.env')
-if [ "${WOV_ARCHIVEENV}" == "null" ] || [  "${WOV_ARCHIVEENV}" == "" ]; then
-  WOV_ARCHIVEENV=$(cat ${HOME}/.wovtools | jq -r '.archive.env')
+WOV_K8SARCHIVE=$(cat ${WOV_CONFIGFILE_MAIN} | jq -r '.archive.env')
+if [ "${WOV_K8SARCHIVE}" == "null" ] || [  "${WOV_K8SARCHIVE}" == "" ]; then
+  WOV_K8SARCHIVE=$(cat ${HOME}/.wovtools | jq -r '.archive.env')
 fi
-if [ "${WOV_ARCHIVEENV}" == "null" ] || [  "${WOV_ARCHIVEENV}" == "" ]; then
+if [ "${WOV_K8SARCHIVE}" == "null" ] || [  "${WOV_K8SARCHIVE}" == "" ]; then
   if [ "${COMPANYDOMAIN}" != "" ]; then
-    WOV_ARCHIVEENV="s3://wovtools.${COMPANYDOMAIN}/archive"
+    WOV_K8SARCHIVE="s3://wovtools.${COMPANYDOMAIN}/archive"
   else 
     COMPANYDOMAIN="$(wov-env --var WOV_cluster_dns_domain)"
-    if [ "${COMPANYDOMAIN}" != "" ]; then WOV_ARCHIVEENV="s3://wovtools.${COMPANYDOMAIN}/archive"; fi
+    if [ "${COMPANYDOMAIN}" != "" ]; then WOV_K8SARCHIVE="s3://wovtools.${COMPANYDOMAIN}/archive"; fi
   fi
 fi
 echo
 
 l_ "ARCHIVE> Kubernetes File Server:"
-l_ "  Currently, only AWS S3 is supported. (ex. s3://wovtools.MYCOMPANY.com/archive ): (\"${WOV_ARCHIVEENV}\") "
+l_ "Currently, only AWS S3 is supported. (ex. s3://wovtools.MYCOMPANY.com/archive ): (\"${WOV_K8SARCHIVE}\") "
 while true; do
   echo ""
-  read -r -p "  Kubernetes File Server: (\"${WOV_ARCHIVEENV}\") ... Correct? [Y/n] " A
+  read -r -p "  Kubernetes File Server: (\"${WOV_K8SARCHIVE}\") ... Correct? [Y/n] " A
 
   case $A in
     ""|[Yy][Ee][Ss]|[Yy])
       break
       ;;
     [Nn][Oo]|[Nn])
-      read -r -p "  ok, enter name: " WOV_ARCHIVEENV
+      read -r -p "  ok, enter name: " WOV_K8SARCHIVE 
       ;;
     *)
       l_warn "Invalid input... (${A})"
@@ -786,18 +1088,18 @@ done
 
 echo "... writing '${WOV_CONFIGFILE_MAIN}'"
 touch "${WOV_CONFIGFILE_MAINRAW}"
-jq ' .ver='${WOV_VERSION}' | .project.type="'"${WOV_PROJECTTYPE}"'" | .project.project="'"${WOV_PROJECT}"'"  | .project.title="'"${WOV_PROJECTTITLE}"'"  | .project.description="'"${WOV_PROJECTDESCRIPTION}"'" | .operation={} | .archive.env="'"${WOV_ARCHIVEENV}"'" | .archive.repository="'"${WOV_ARCHIVEREPOSITORY}"'"' "${WOV_CONFIGFILE_MAINRAW}" > ${WOV_BASEDIR}/wovtools/.config.json.$$ && cp ${WOV_BASEDIR}/wovtools/.config.json.$$ "${WOV_CONFIGFILE_MAINRAW}"
+jq ' .ver='${WOV_VERSION}' | .project.type="'"${WOV_PROJECTTYPE}"'" | .project.project="'"${WOV_PROJECT}"'"  | .project.title="'"${WOV_PROJECTTITLE}"'"  | .project.description="'"${WOV_PROJECTDESCRIPTION}"'" | .operation={} | .archive.env="'"${WOV_K8SARCHIVE}"'" | .archive.repository="'"${WOV_CONTAINERARCHIVE}"'"' "${WOV_CONFIGFILE_MAINRAW}" > ${WOV_BASEDIR}/wovtools/.config.json.$$ && cp ${WOV_BASEDIR}/wovtools/.config.json.$$ "${WOV_CONFIGFILE_MAINRAW}"
 rm ${WOV_BASEDIR}/wovtools/.config.json.*
 
 
 # update global if null
 if [ "$(cat ${HOME}/.wovtools | jq -r '.archive.repository')" == "null" ]; then
   l_ "  ...updating global archive.repository as well."
-  jq ' .archive.repository="'"${WOV_ARCHIVEREPOSITORY}"'"' "${HOME}/.wovtools" > ${HOME}/.wovtools.$$ && mv ${HOME}/.wovtools.$$ ${HOME}/.wovtools
+  jq ' .archive.repository="'"${WOV_CONTAINERARCHIVE}"'"' "${HOME}/.wovtools" > ${HOME}/.wovtools.$$ && mv ${HOME}/.wovtools.$$ ${HOME}/.wovtools
 fi
 if [ "$(cat ${HOME}/.wovtools | jq -r '.archive.env')" == "null" ]; then
   l_ "  ...updating global archive.env as well."
-  jq ' .archive.env="'"${WOV_ARCHIVEENV}"'"'  "${HOME}/.wovtools" > ${HOME}/.wovtools.$$ && mv ${HOME}/.wovtools.$$ ${HOME}/.wovtools
+  jq ' .archive.env="'"${WOV_K8SARCHIVE}"'"'  "${HOME}/.wovtools" > ${HOME}/.wovtools.$$ && mv ${HOME}/.wovtools.$$ ${HOME}/.wovtools
 fi
 
 
@@ -856,7 +1158,7 @@ if [ -e "${WOV_BASEDIR}/src" ]; then
   done
 
   l_ "  ...checking if container repo is an AWS ECR"
-  if [[ "${WOV_ARCHIVEREPOSITORY}" == *.dkr.ecr.*.amazonaws.com ]]; then
+  if [[ "${WOV_CONTAINERARCHIVE}" == *.dkr.ecr.*.amazonaws.com ]]; then
     echo "  ... ensuring an AWS ECR repository: ${WOV_PROJECT}/${WOV_PROJECT}${MSC}"
     aws ecr create-repository --repository-name "${WOV_PROJECT}/${WOV_PROJECT}${MSC}"
   fi
