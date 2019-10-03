@@ -93,24 +93,30 @@ function l_h3()
   printf -- "-%.0s" `seq 1 ${FOLD}`
 }
 
+
+function _l_()
+{
+  local head="$1"
+  local text="$2"
+  local headl=${#head}
+  local textl=${#text}
+
+  # optimization here
+  if [ $((headl+textl)) -le $((FOLD-headl)) ]; then printf -- "${head}${text}\n"
+  else printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1 s/^/$head/" -e "2,\$s/^/$(printf -- ' %.0s' `seq 2 $headl`}) /"; fi
+}
+
 # Typical logging
 function l_()
 {
   local head=""
-  local headl=0
   local text=
-  local testl=
   if [ ${DOECHO} -ge 1 ]; then
     text="${*}"
-    textl=${#text}
     if [ "${WOV_DEBUGMODE}" == "1" ]; then
       head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO}): "
-      headl=${#head}
     fi
-
-    # optimization here
-    if [ $((headl+textl)) -le $((FOLD-headl)) ]; then printf -- "${head}${text}\n"
-    else printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"; fi
+    _l_ "${head}" "${text}"
   fi
 }
 function l_tab() 
@@ -118,45 +124,32 @@ function l_tab()
   local head=$(printf -- " %.0s" `seq 1 $1`)
   shift
   local text="${*}"
-  local testl=${#text}
-  if [ "${WOV_DEBUGMODE}" == "1" ]; then
-    head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})${head}"
-  fi
-  local headl=${#head}
-  printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
+  if [ "${WOV_DEBUGMODE}" == "1" ]; then head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})${head}"; fi
+  # printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
+  _l_ "${head}" "${text}"
 }
 # Verbose logging
 function l_verbose()
 {
   local head="V:"
-  local headl=
   local text=
-  local testl=
   if [ ${DOECHO} -ge 2 ]; then
     text="${*}"
-    textl=${#text}
-    if [ "${WOV_DEBUGMODE}" == "1" ]; then
-      head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})V: "
-    fi
-    headl=${#head}
-    printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
+    if [ "${WOV_DEBUGMODE}" == "1" ]; then head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})V: "; fi
+    # printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
+    _l_ "${head}" "${text}"
   fi
 }
 
 function l_debug()
 {
   local head="DEBUG:"
-  local headl=
   local text=
-  local testl=
   if [ ${DOECHO} -ge 3 ]; then
     text="${*}"
-    textl=${#text}
-    if [ "${WOV_DEBUGMODE}" == "1" ]; then
-      head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})DEBUG: "
-    fi
-    headl=${#head}
-    printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat 
+    if [ "${WOV_DEBUGMODE}" == "1" ]; then head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})DEBUG: "; fi
+    # printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat 
+    _l_ "${head}" "${text}"
   fi
 }
 
@@ -164,17 +157,15 @@ function l_debug()
 function l_error()
 {
   local text="${*}"
-  local testl=${#text}
   local head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})ERROR  : "
-  local headl=${#head}
-  printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat
+  # printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat
+  _l_ "${head}" "${text}"
 }
 # Warning logging
 function l_warn()
 {
   local text="${*}"
-  local testl=${#text}
   local head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})WARNING: "
-  local headl=${#head}
-  printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat
+  # printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat
+  _l_ "${head}" "${text}"
 }
