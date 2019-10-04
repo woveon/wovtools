@@ -6,13 +6,50 @@ FOLD=$(tput cols)
 export PATH=$PATH:/usr/local/bin/wovlib
 
 
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [options]
+
+Initialize this directory as a new WovTools project. This assumes the parent directory is the master project directory. There are several functions useful to initialization and the creation of WovTools 'things':
+  + wov-init-ms      - initializes a microservice in this project
+  + wov-init-cluster - initializes a cluster to use
+  + wov-init-wovdb   - initializes a WovDataBase
+
+
+Options:
+---
+  --skip-global              - validate and readIn the ~/.wovtools file but don't create if it does not exist.
+  --skip-project-config      - do not create the wovtools/config.json file
+  --skip-project-myconfig    - do not create the wovtools/myconfig.json file
+  --local-archive-default X  - uses X as the default directory to use for Local Archives (overrides the global location)
+  --proj-coderepo-default X  - uses X as the default location for code (overrides teh global directory)
+  --wov-db-name X            - sets the database name to use when creating a WovDataBase
+  --cluster-hostedzone X     - sets the default value for a cluster's Hosted Zone
+  --cluster-name X           - sets the default cluster to use
+  --cluster-force-build      - forces the initialization of a cluster
+  --wovdb-question X         - should this question to create a WovDataBase? (default is yes)
+
+  -h : this help
+  -q/-v : quiet/verbose
+
+EOF
+}
+
 
 # first call, set WOV_BASEDIR to here
 WOV_BASEDIR=`pwd`
 ISWOVPROJECT="0"
-. wov-env-loader
-. wov-env-logging
-. wov-env-common
+. wov-env-ops fDisplayOptions "$@"
+if [ ${WOV_DODEFAULTCOMMAND} -eq 0 ]; then exit 0; fi
+
+#. wov-env-loader
+#. wov-env-logging
+#. wov-env-common
 . wov-init-common
 
 
@@ -221,13 +258,36 @@ iLocalArchives_InteractiveSetRemoteRepos 0 "${WOV_BASEDIR}"
 
 
 
+# # ---------------------------------------------------------------------
+# l_h1 "My Clusters Init"
+# l_   "Creating an empty file in secrets for your cluster configurations."
+# # ---------------------------------------------------------------------
+# l_debug "Create empty wovtools/secrets/cluster_mymanaged.json if does not exist"
+# MYMANAGED="${WOV_BASEDIR}/wovtools/secrets/cluster_mymanaged.json"
+# if [ ! -e "${MYMANAGED}" ]; then
+#   l_verbose "  ...creating ${MYMANAGED}"
+#   set -x
+#   cat <<EOF > "${MYMANAGED}"
+# {
+#   "//" : "This file is loaded for cluster creation so that a project has all necessary information",
+#   "cluster" : {
+#   }
+# }
+# EOF
+#   Re=$?
+#   set +x
+#   echo "result is $Re"
+#   cat "${MYMANAGED}"
+# fi
+
+
 # ---------------------------------------------------------------------
 echo ""
 l_h1 "...Loading what we can of the project environment"
 # ---------------------------------------------------------------------
 . wov-env-loader
 WOV_cluster_dns_domain=$(wov-env --var WOV_cluster_dns_domain 2> /dev/null) ; Re=$?
-if [ $? -ne 0 ]; then echo "failed to load in"; fi
+if [ $Re -ne 0 ]; then echo "failed to load in"; WOV_cluster_dns_domain=""; fi
 
 # ---------------------------------------------------------------------
 echo ""
@@ -909,24 +969,6 @@ exit 0
 
 
 
-# ---------------------------------------------------------------------
-# ---------------------------------------------------------------------
-function fDisplayOptions()
-{
-  cat <<EOF | fold -w ${FOLD} -s
-
-
-usage: `basename $0` [options]
-
-Initialize this project directory in a new WovTools project.
-
-#  -f : force push
-  -h : this help
-  -q/-v : quiet/verbose
-
-EOF
-}
-
 
 # ---------------------------------------------------------------------
 # Handle Params
@@ -1119,6 +1161,8 @@ else
 fi
 
 WOV_cluster_dns_domain=$(wov-env --var WOV_cluster_dns_domain)
+echo "DOMAIN : $WOV_cluster_dns_domain"
+exit 1
 wov-init-cluster ${WOV_cluster_dns_domain}
 if [ $? -ne 0 ]; then exit 1; fi
 

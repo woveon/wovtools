@@ -15,9 +15,15 @@ Defines secrets for private code repositories.
 EOF
 }
 . wov-env-ops fDisplayOptions "$@"
+. wov-init-common
+
 
 MYREPOSITORIESFILE="${WOV_BASEDIR}/wovtools/secrets/repositories.json"
 
+
+iProjConfig_MergeToSecrets "dev"         "repositories.json" || exit 1
+iProjConfig_MergeToSecrets "prod"        "repositories.json" || exit 1
+iProjMyConfig_MergeToSecrets "${WOV_ME}" "repositories.json" || exit 1
 
 l_ "Creating skeleton '${MYREPOSITORIESFILE:${#WOV_BASEDIR}+1}' file..."
 

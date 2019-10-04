@@ -11,3 +11,5 @@ test/test1
 test/dummyproject
 test/dummyprojectrepo
 test/dummyprojectlocalarchives
+test/testlocalarchives
+test/wtrunnerprotectedfiles

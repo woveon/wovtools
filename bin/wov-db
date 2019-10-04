@@ -113,6 +113,8 @@ if [ ${WOV_DODEFAULTCOMMAND} == 0 ]; then exit 0; fi
 
 XX="$(wov-env --exports -e)" ; Re=$?
 if [ $Re -ne 0 ]; then exit $Re; fi
+
+l_verbose "XX is '${XX}'"
 eval "$XX"
 . wov-env-common
 . wov-push-common

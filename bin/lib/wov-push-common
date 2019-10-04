@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+
+
+
+# ---------------------------------------------------------------------
+# For dev and prod, check local code and secrets are checked in and pushed.
+# @param {bool} $1 - if true, allows for err msg and exit
+# @return {bool} - 1 if error, 0 if ok
+# ---------------------------------------------------------------------
+function doGitChecksOnFormalStages()
+{
+  local retval=1
+
+  if [ "$WOV_STAGE" == "prod" ] || [ "$WOV_STAGE" == "dev" ]; then
+
+    local R1=0
+    wov-git-check ${WOV_BASEDIR}
+    R1=$?
+    if [ $R1 -eq 0 ]; then
+      wov-git-check ${WOV_BASEDIR}/wovtools/secrets
+      R2=$?
+      if [ $R2 -eq 0 ]; then
+        retval=0
+      fi
+    fi
+
+    if [ $retval -ne 0 ]; then
+      printf "\nERROR: failed git checks.\n"
+      if [ $1 == true ]; then
+        exit $retval
+      fi
+    fi
+  else
+    retval=0
+  fi
+
+
+  # echo "retval ${retval}"
+
+  return $retval
+}
+
+
+# ---------------------------------------------------------------------
+# Finds if the Microservice directory is on root or a directory in the git repo
+# $1 - microservice code
+# RET - echo "" on error, directory path on sucess
+# ---------------------------------------------------------------------
+function findMSDir()
+{
+  local retval=''
+
+  if [ -e ${WOV_BASEDIR}/${WOV_PROJECT}${1} ]; then
+    l_verbose "  ...found '${1}' microservice directory." 1>&2
+    retval="${WOV_BASEDIR}/${WOV_PROJECT}${1}"
+  elif [ `basename ${WOV_BASEDIR}` == "${WOV_PROJECT}${1}" ]; then
+    l_verbose "  ... root directory is microservice directory." 1>&2
+    retval="${WOV_BASEDIR}"
+  else
+    l_error "No '${1}' microservice directory in project. This looked at the current directory and child directories for '${1}'." 1>&2
+  fi
+  echo "$retval"
+}
+

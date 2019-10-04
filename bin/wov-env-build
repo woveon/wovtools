@@ -36,6 +36,8 @@ Builds WovTool configurations for secrets (-s) and clusters (-c) (K8s, ConfigMap
 
 Exit values:
   100 - bad stage
+  101 - error with (my)confg.json file.
+  102 - No entry with secrets files for stage in (my)config.json files.
 
 EOF
 }
@@ -162,12 +164,20 @@ function fBuildConfig()
   # Read the source secrets files from WOV_CONFIGFILE_MERGED , to 
   # generate the WOV_SECRETFILE for the CLUSTER.
   # ---------------------------------------------------------------------
-  local SRCSECRETFILES=( $(jq -r ".secrets.${WOV_STAGE}[] " ${WOV_CONFIGFILE_MERGED} 2> /dev/null) )
-  if [ "$?" != "0" ] || [ "${#SRCSECRETFILES}" == "0" ]; then
-    l_error "Either no entry or no files for stage '${WOV_STAGE}' in ${WOV_CONFIGFILE_MAIN} file '.secrets'.\n"`
-           `"  - You probably just need to create an entry in wovtools/config|local.json, similar to the other stages."
+  local SRCSECRETFILES=( $(jq -r ".secrets.${WOV_STAGE}[] " ${WOV_CONFIGFILE_MERGED} 2> /dev/null) ) ; Re=$?
+  if [ $Re -ne 0 ]; then
+    l_error "Error with (my)config.json files."
     exit 101
   fi
+  if [ ${#SRCSECRETFILES[@]} -eq 0 ]; then 
+    l_error "No entry with secrets files for stage '${WOV_STAGE}' in (my)config.json files."
+    exit 102
+  fi
+#  if [ $Re -ne 0 ] || [ "${#SRCSECRETFILES}" == "0" ]; then
+#    l_error "Either no entry or no files for stage '${WOV_STAGE}' in ${WOV_CONFIGFILE_MAIN} file '.secrets'.\n"`
+#           `"  - You probably just need to create an entry in wovtools/config|local.json, similar to the other stages."
+#    exit 101
+#  fi
 
   l_verbose "  SRCSECRETFILES=( ${SRCSECRETFILES[@]} ) "
 
@@ -193,6 +203,7 @@ function fBuildConfig()
   "FLAVOR"   : "${WOV_FLAVOR}",
   "NS"       : "${WOV_NS}",
   "PROJECT"  : "${WOV_PROJECT}",
+  "MASTERPROJECT" : "${WOV_MASTERPROJECT}",
   "STAGE"    : "${WOV_STAGE}",
   "ME"       : "${WOV_ME}",
 
@@ -453,6 +464,8 @@ fBuildCluster()
     WOVFILES=$(cd ${WOV_BASEDIR}/wovtools/k8s; ls *.wov 2> /dev/null)
     if [ "${WOVFILES}" == "" ]; then echo "  ... no files found in wovtools/k8s/*.wov."; fi
 
+    l_debug "wovfiles : ${WOVFILES[@]}"
+
     # Compile them if needed
     for f in ${WOVFILES}; do
 
@@ -464,7 +477,7 @@ fBuildCluster()
       # extract microservice out of the filename: (MS-k8sname|MS).yaml.wov -> (MS-k8sname|MS) -> MS
       MS=( $(echo $f | tr "." "\n") )
       MS0=( $(echo ${MS[0]} | tr "-" "\n") )
-      # echo "ms '${ms}'  MS0 '${MS0[@]}' MS '${MS[@]}'  proj: ${WOV_PROJECT} file: ${f}"
+      l_debug "ms '${ms}'  MS0 '${MS0[@]}' MS '${MS[@]}'  proj: ${WOV_PROJECT} file: ${f}"
       if [ "${MS0[0]}" == "${WOV_PROJECT}" ]; then
         ms=""
         D="{}"
@@ -490,6 +503,8 @@ fBuildCluster()
         # echo "{\"MS\" : \"${ms}\"}"
         # crate a new file descriptor. pipe stderr from wov-compile into it while stdout goes to file; later, pipe 4 back to 1 and capture it
         exec 4>&2
+        l_verbose "  SECRETFILE='${WOV_SECRETFILE}'"
+        l_debug "CMD: wov-compile -d '${D}' '${WOV_SECRETFILE}' ${SRC} ${DEST}"
         R=$({ wov-compile -d "${D}" ${WOV_SECRETFILE} ${SRC} 2>&4 > ${DEST}; } 4>&1 )
         Re=$?
         # release
@@ -541,8 +556,8 @@ fBuildCluster()
     # Create CM file to dump into and clear out
     # NOTE: if builing to CMFILE2, then all recipes would build that and only need to build once... TODO / OPTIMIZATION
     if [ $DOECHO -ge 2 ]; then echo "  ... review ConfigMap and Secret for '${f}${CONFEXT}'."; fi
-    local CMFILE=${WOV_CLUSTERDIR}/cm/${f}${CONFEXT}
-    l_verbose "  ... build ConfigMap ${f}${CONFEXT} in ${CMFILE}"
+    local CMFILE=${WOV_CLUSTERDIR}/cm/${WOV_PROJECT}${f}${CONFEXT}
+    l_verbose "  ... build ConfigMap ${WOV_PROJECT}${f}${CONFEXT} in ${CMFILE}"
 
     # Check if we need to compile K8s ConfigMap
     local dowecompile=${DOFORCE}
@@ -550,18 +565,18 @@ fBuildCluster()
     elif [ ! -e "${CMFILE}" ]; then dowecompile=1; # no CMFILE file
     elif [ -e "${CMFILE}" ] && [ ${WOV_SECRETFILE} -nt "${CMFILE}" ]; then dowecompile=1; # existing CMFILE and old
     fi
-    if [ $DOECHO -ge 2 ] && [ "${dowecompile}" == "1" ]; then echo "  ... compile ConfigMap for '${f}${CONFEXT}'."; fi
+    if [ $DOECHO -ge 2 ] && [ "${dowecompile}" == "1" ]; then echo "  ... compile ConfigMap for '${WOV_PROJECT}${f}${CONFEXT}'."; fi
 
     # Compile K8s ConfigMap file
     if [ "${dowecompile}" == "1" ]; then 
       rm -f ${CMFILE} || true
       touch ${CMFILE}
       chmod 600 ${CMFILE}
-      wov-env --context ${WOV_WORKINGCONTEXT} --cm ${f} 2> /dev/null  >> ${CMFILE}
+      wov-env --context ${WOV_WORKINGCONTEXT} --cm "${WOV_PROJECT}${f}" 2> /dev/null  >> ${CMFILE}
       # wov-env --context ${WOV_WORKINGCONTEXT} --cm ${f} >> ${CMFILE} 2>&1
       local a=$?
       if [ "$a" == "1" ]; then
-        if [ $DOECHO -ge 1 ]; then l_error "Missing Config needed to generate ConfigMap for recipe ${f}  ... skipping ${WOV_CLUSTER}/cm/${f}.\n"; fi
+        if [ $DOECHO -ge 1 ]; then l_error "Missing config (.sh/.js) needed to generate ConfigMap for recipe ${f} (ms ${WOV_PROJECT}${f})  ... skipping ${WOV_CLUSTER}/cm/${f}.\n"; fi
         rm ${CMFILE} 
       elif [ "$a" == "2" ]; then
         l_error "Failed generating configmap in cluster: '${WOV_CLUSTER}' for: '${f}'.\n"
@@ -574,11 +589,11 @@ fBuildCluster()
         chmod 600 ${CMFILE}.1
         sort ${CMFILE} | uniq >> ${CMFILE}.1
         mv ${CMFILE}.1 ${CMFILE}
-        if [ $DOECHO -ge 1 ]; then printf "  ... compiled ${WOV_CLUSTER}/cm/${f}.\n"; fi
+        if [ $DOECHO -ge 1 ]; then printf "  ... compiled ${WOV_CLUSTER}/cm/${WOV_PROJECT}${f}.\n"; fi
       fi
     fi
 
-    local SEFILE=${WOV_CLUSTERDIR}/se/${f}${CONFEXT}
+    local SEFILE=${WOV_CLUSTERDIR}/se/${WOV_PROJECT}${f}${CONFEXT}
 
     # Check if we need to compile K8s Secrets
     local dowecompile=${DOFORCE}
@@ -591,10 +606,10 @@ fBuildCluster()
       rm -f ${SEFILE} || true
       touch ${SEFILE}
       chmod 600 ${SEFILE}
-      wov-env --context ${WOV_WORKINGCONTEXT} --se ${f} 2> /dev/null >> ${SEFILE}
+      wov-env --context ${WOV_WORKINGCONTEXT} --se "${WOV_PROJECT}${f}" 2> /dev/null >> ${SEFILE}
       local a=$?
       if [ "$a" == "1" ]; then
-        if [ $DOECHO -ge 1 ]; then l_error "Missing Config needed to generate K8s Secrets for recipe ${f}  ... skipping ${WOV_CLUSTER}/se/${f}.\n"; fi
+        if [ $DOECHO -ge 1 ]; then l_error "Missing Config needed to generate K8s Secrets for recipe ${f} (ms ${WOV_PROJECT}${f})  ... skipping ${WOV_CLUSTER}/se/${WOV_PROJECT}${f}.\n"; fi
         rm ${SEFILE} 
       elif [ "$a" == "2" ]; then
         l_error "Failed generating K8s Secret in cluster: '${WOV_CLUSTER}' for: '${f}'.\n"
@@ -607,7 +622,7 @@ fBuildCluster()
         chmod 600 ${SEFILE}.1
         sort ${SEFILE} | uniq >> ${SEFILE}.1
         mv ${SEFILE}.1 ${SEFILE}
-        if [ $DOECHO -ge 1 ]; then printf "  ... compiled ${WOV_CLUSTER}/se/${f}.\n"; fi
+        if [ $DOECHO -ge 1 ]; then printf "  ... compiled ${WOV_CLUSTER}/se/${WOV_PROJECT}${f}.\n"; fi
       fi
     fi
   done

@@ -199,8 +199,10 @@ SEDCMD=''$WARNINGLINE"i$WARNING"
 # echo "wov-hbs calling ${TEMPLATEFILE}" 
 # >&2 echo "TEMPLATEFILE : ${TEMPLATEFILE}  SED ${SEDCMD}" 
 if [ "$DS" == "" ]; then
+  set -x
   wov-hbs -sf $SCF -d "${D}"  < $TEMPLATEFILE && exit 1  | $SED "$SEDCMD"
   Re=$?
+  set +x
 else
   wov-hbs -sf $SCF -ds $DS -d "${D}" < $TEMPLATEFILE && exit 1  | $SED "$SEDCMD"
   Re=$?

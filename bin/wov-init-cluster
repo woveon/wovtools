@@ -22,6 +22,7 @@ EOF
 }
 
 . wov-env-ops fDisplayOptions "$@"
+. wov-init-common
 
 
 
@@ -199,6 +200,9 @@ function doBuildClusterManaged()
   }
 }
 EOF
+  iProjConfig_MergeToSecrets   "dev"       "cluster_mymanaged.json" || exit 1
+  iProjConfig_MergeToSecrets   "prod"      "cluster_mymanaged.json" || exit 1
+  iProjMyConfig_MergeToSecrets "${WOV_ME}" "cluster_mymanaged.json" || exit 1
 
   l_ "  ... done. Created the '${MYMANAGED:${#WOV_BASEDIR}+1}' file."
   l_ "      Remember to create the cluster with 'wov-cluster' if it does not exist."

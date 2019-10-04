@@ -87,8 +87,8 @@ readInputStream(process.stdin, function(err, tmpl) {
       return handle(f, context);
     });
 
-    h.registerHelper('toLowerCase', function(_str) { return _str.toLowerCase(); });
-    h.registerHelper('lc', function(_str) { return _str.toLowerCase(); });
+    h.registerHelper('toLowerCase', function(_str) { if ( _str == null )  return ''; return _str.toLowerCase(); });
+    h.registerHelper('lc', function(_str) { if ( _str == null ) return '';  return _str.toLowerCase(); });
 
     // https://code-maven.com/handlebars-conditionals
     h.registerHelper('if_eq', function(a, b, opts) {

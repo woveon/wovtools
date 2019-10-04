@@ -131,7 +131,7 @@ function fBuildClusterSecrets
      [ "${WOV_BASEDIR}/wovtools/secrets/.git" -nt "${WOV_SECRETFILE}" ] ||
      [ "${WOV_BASEDIR}/.git"                  -nt "${WOV_SECRETFILE}" ]; then
 
-  #  echo "fBuildClusterSecrets building"
+    # echo "fBuildClusterSecrets building"
     wov-env-build --context ${WOV_CONTEXT} -q --config ; Re=$?
     if [ $Re -ne 0 ]; then exit $Re; fi
     touch "${WOV_SECRETFILE}"
@@ -469,35 +469,36 @@ function fConfGeneration()
   if [ -e "${WOV_BASEDIR}/${1}/src/${1}config.js" ]; then
     MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.js"
     if [ "$2" == "cm" ]; then 
-      R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ) 
-      RR=$?
+      R1=$(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ; RR=$?
+      R=( "${R1}" )
     elif [ "$2" == "se" ]; then
-      R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") )
-      RR=$?
+      R1=$(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") ; RR=$?
+      R=( "${R1}" )
     fi
     if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
 
   elif [ -e "${WOV_BASEDIR}/src/${1}config.js" ]; then
     MSCFILE="${WOV_BASEDIR}/src/${1}config.js"
     if [ "$2" == "cm" ]; then
-      R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ) 
-      RR=$?
+
+      R1=$(node -e "console.log((new (require('${MSCFILE}'))())._genK8SConfigMap())") ; RR=$?
+      R=( "${R1}" )
     elif [ "$2" == "se" ]; then 
-      R=( $(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") ) 
-      RR=$?
+      R1=$(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") ; RR=$?
+      R=( "${R1}" )
     fi
     if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
 
   elif [ -e "${WOV_BASEDIR}/${1}/src/${1}config.sh" ]; then
     MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.sh"
-    R=( $(${MSCFILE} $2) )
-    RR=$?
+    R1=$(${MSCFILE} $2) ; RR=$?
+    R=( "${R1}" )
     if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
 
   elif [ -e "${WOV_BASEDIR}/src/${1}config.sh" ]; then
     MSCFILE="${WOV_BASEDIR}/src/${1}config.sh"
-    R=( $(${MSCFILE} $2) )
-    RR=$?
+    R1=$(${MSCFILE} $2) ; RR=$?
+    R=( "${R1}" )
     if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
 
   else
@@ -508,22 +509,15 @@ function fConfGeneration()
   local SEP=' '
   if [ "$3" == "1" ]; then SEP='\n'; fi
 
-#  R+=( WOV_STAGE=${WOV_STAGE} WOV_ME=${WOV_ME} )
 
-#  echo "R: ${R[*]}"
+  l_debug "Checking for errors in running the config program/script for the microservice."
   if [[ "${R[@]}" =~ "[WARN"  ]]; then
-
-
-    echo "${R[*]}"
-    printf "\n***ERROR(wov-env): warning message in generation of environment variables. Stopping. See '${MSCFILE} file'.\n\n"
-
+    l_warn  "${R[@]}"
+    l_error "Warning message in generation of environment variables. Stopping. See '${MSCFILE} file'."
     if [ "$ECHOMODE" == "2" ]; then
-      printf "\nsecret file (${WOV_SECRETFILE}):\n";
+      l_verbose "secret file (${WOV_SECRETFILE}):";
       cat ${WOV_SECRETFILE}
     fi
-    printf "\n***ERROR(wov-env): see above.\n\n"
-
-
     exit 2
   fi
 

@@ -650,10 +650,8 @@ function iProjConfig_InteractiveUpdate()
     fi
 
     # Add Secrets and Origin Mods
-    iProjConfig_MergeToSecrets "dev"  "cluster_mymanaged.json" "repositories.json" \
-                                      "${WOV_MASTERPROJECT}.json" "${WOV_MASTERPROJECT}_dev.json" || exit 1
-    iProjConfig_MergeToSecrets "prod" "cluster_mymanaged.json" "repositories.json" \
-                                      "${WOV_MASTERPROJECT}.json" "${WOV_MASTERPROJECT}_prod.json" || exit 1
+    # iProjConfig_MergeToSecrets "dev"  "${WOV_MASTERPROJECT}.json" "${WOV_MASTERPROJECT}_dev.json" || exit 1
+    # iProjConfig_MergeToSecrets "prod" "${WOV_MASTERPROJECT}.json" "${WOV_MASTERPROJECT}_prod.json" || exit 1
     iProjConfig_AddOriginMod "local" "For deverlopers to develop locally." || exit 1
   fi
 
@@ -708,7 +706,7 @@ function iProj_Config_MergeToSecrets()
       if [ $Re -ne 0 ]; then retval=1; break; fi
       mv "${configfile}.$$" "${configfile}"
     else
-      l_debug "existing secrets.${stage}: ${f}"
+      l_ "...existing Secrets entry: secrets.${stage}: ${f}"
     fi
   done
 
@@ -1037,7 +1035,7 @@ function iProjGit_InteractiveUpdate()
   # Ensure lines in .gitignore
   l_ "  ...updating .gitignore"
   touch .gitignore
-  GITLINES=( ".DS_Store" "wovtools/secrets" "wovtools/cache" "wovtools/db/*.deltas" "wovtools/db/archive" "${WOV_CONFIGFILE_MINE}" '*.old' '*.orig' ".mochawesome-report" '*.log' '*.swp' )
+  GITLINES=( ".DS_Store" "wovtools/secrets" "wovtools/cache" "wovtools/db/*.deltas" "wovtools/ds/const" "wovtools/db/archive" "${WOV_CONFIGFILE_MINE}" '*.old' '*.orig' ".mochawesome-report" '*.log' '*.swp' )
   for f in "${GITLINES[@]}"; do
     l_debug "  ... adding to .gitignore: $f"
     if ! grep -qF "${f}" .gitignore ; then echo "${f}" >> .gitignore ; fi
@@ -1216,6 +1214,11 @@ function iLocalArchives_SEFiles()
   local ME=$3             # WOV_ME
   local DOMAIN=$4  # WOV_cluster_dns_domain
 
+  # Add to Config
+  iProjConfig_MergeToSecrets   "dev"       "${WOV_MASTERPROJECT}.json" "${WOV_MASTERPROJECT}_dev.json" || exit 1
+  iProjConfig_MergeToSecrets   "prod"      "${WOV_MASTERPROJECT}.json" "${WOV_MASTERPROJECT}_prod.json" || exit 1
+  iProjMyConfig_MergeToSecrets "${WOV_ME}" "${WOV_MASTERPROJECT}.json" "${WOV_MASTERPROJECT}_${WOV_ME}.json" || exit 1
+
   # make sure default secret files exist
   if [ ! -e "${BASEDIR}/wovtools/secrets/${MASTERPROJECT}.json" ]; then
     cat <<EOF > "${BASEDIR}/wovtools/secrets/${MASTERPROJECT}.json"
@@ -1230,6 +1233,19 @@ function iLocalArchives_SEFiles()
       "app"   : {"urlscheme" : "https", "url" : "app.${DOMAIN}"}
     }
   }
+}
+EOF
+  fi
+
+  if [ ! -e "${BASEDIR}/wovtools/secrets/${MASTERPROJECT}_dev.json" ]; then
+    cat <<EOF > "${BASEDIR}/wovtools/secrets/${MASTERPROJECT}_dev.json"
+{
+}
+EOF
+  fi
+  if [ ! -e "${BASEDIR}/wovtools/secrets/${MASTERPROJECT}_prod.json" ]; then
+    cat <<EOF > "${BASEDIR}/wovtools/secrets/${MASTERPROJECT}_prod.json"
+{
 }
 EOF
   fi
@@ -1583,10 +1599,6 @@ function doCreateMyConfigJSON()
   "curorigin" : "local",
   "secrets" : {
     "${2}" : [
-      "cluster_mymanaged.json",
-      "repositories.json",
-      "${3}.json",
-      "${3}_${2}.json"
     ]
   },
   "originmods" : {
@@ -1605,7 +1617,9 @@ EOF
 else
   l_ "  ... skipping '${1:${#WOV_BASEDIR}+1}' creation, already exists."
 fi
+
 }
+
 
 # /////////////////////////////////////////////////////////////////////
 # wovtool/myconfig.json

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
+
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 function fDisplayOptions()
@@ -341,8 +344,8 @@ function doUpdateDBArchiveLog()
   echo "  ... update Database Archive logs :$1 $2 $3 $4"
   R=$(wov-db $1 -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( '$1', '${WOV_VERSION}', '${2}_${3}', ${2}, ${3}, '${4}' );")
   if [ "$?" != "0" ]; then
-    printf "${R}"
-    printf "\n\nERROR: failed updating archive database(${1}) ${2}_${3} snapshot(${4}).\n"
+    l_warn "${R}"
+    l_error "Failed updating archive database(${1}) ${2}_${3} snapshot(${4})."
     fFailedDBConnection 3 $1
   fi
 }
@@ -383,10 +386,10 @@ function doCommitDB()
     l_error "Database not inited."
     fFailedDBConnection 1 $1
   fi
-  printf "\nDB_ENTRY '${DB_ENTRY}'\n"
+  l_ "\nDB_ENTRY '${DB_ENTRY}' DB_snapshot '${DB_snapshot}'"
 
   # should have been at least a snapshot entry
-  if [ "${DB_ENTRY}" == "" ]; then
+  if [ "${DB_ENTRY}" == "" ] && [ "${DB_snapshot}" == "" ]; then
     l_error "Need to provide a snapshot for first commit of database. Use wov-db --snapshot X. ex. rds:wov-aws-va-ant-db-alywandev-2017-07-17-07-20."
     fFailedDBConnection 3 $1
     retval=3

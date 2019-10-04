@@ -66,29 +66,31 @@ function doPushClusterToArchiveChecks()
   # Using already built configuration with ORIGIN of self, use that when testing things below
   local PUSH_CLUSTERDIR="$(WOV_getClusterConfigDir self ${WOV_CONTEXT})"
 
-  for ms in ${RECIPES[@]}; do
+  for msc in ${RECIPES[@]}; do
+
+    local msname=${WOV_PROJECT}${msc}
 
     # each ms should have a cm
-    if [ ! -e "${PUSH_CLUSTERDIR}/cm/${ms}" ]; then
-      l_warn "microservice '${ms}' has no K8s ConfigMap file in ${PUSH_CLUSTERDIR}/cm/${ms}";
+    if [ ! -e "${PUSH_CLUSTERDIR}/cm/${msname}" ]; then
+      l_warn "microservice '${ms}' has no K8s ConfigMap file in ${PUSH_CLUSTERDIR}/cm/${msname}";
       retval=1;
     fi
 
     # each microservice should have a secrets file
-    if [ ! -e "${PUSH_CLUSTERDIR}/se/${ms}" ]; then
-      l_warn "microservice '${ms}' has no K8s Secrets file.";
+    if [ ! -e "${PUSH_CLUSTERDIR}/se/${msname}" ]; then
+      l_warn "microservice '${msname}' has no K8s Secrets file.";
       retval=1;
     fi
 
     # each microservice should have a k8s deployment file
-    if [ ! -e "${PUSH_CLUSTERDIR}/k8s/${ms}.yaml" ]; then
-      l_warn "microservice '${ms}' has no K8s Deployment file.";
+    if [ ! -e "${PUSH_CLUSTERDIR}/k8s/${msname}.yaml" ]; then
+      l_warn "microservice '${msname}' has no K8s Deployment file.";
       retval=1;
     fi
 
     # each microservice should have a k8s service file
-    if [ ! -e "${PUSH_CLUSTERDIR}/k8s/${ms}-service.yaml" ]; then
-      l_warn "microservice '${ms}' has no K8s Service file.";
+    if [ ! -e "${PUSH_CLUSTERDIR}/k8s/${msname}-service.yaml" ]; then
+      l_warn "microservice '${msname}' has no K8s Service file.";
       retval=1;
     fi
 

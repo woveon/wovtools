@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+
+DOECHO=1
+FOLD=$(tput cols)
+WOV_DODEFAULTCOMMAND=1
+export PATH=$PATH:/usr/local/bin/wovlib
+
+
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+Usage: `basename $0` (options) [name]
+
+  name - the WovDatabase name to be created
+
+Creates and configures a WovDatabase for a project.
+
+  -h/--help - help
+
+Exit Values:
+101 - no name provided
+102 - existing database with that name
+103 - bad naming
+
+EOF
+}
+
+. wov-env-ops fDisplayOptions "$@"
+. wov-init-common
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "--foo" ]; then
+    shift
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+if [ ${WOV_DODEFAULTCOMMAND} == 1 ]; then
+
+  WOVDBNAME=$1
+  if [ "${WOVDBNAME}" == "" ]; then l_error "No name provided for the WovDatabase."; exit 101; fi
+  if [[ "${WOVDBNAME}" != *db ]]; then l_error "By convention, WovDataBases end with 'db' on them."; exit 103; fi
+
+  l_debug "Create the secrets files in secrets"
+  iLocalArchives_SEDBFiles "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_ME}" "${WOVDBNAME}"
+
+  l_debug "Ensure entry in the Local Archives: ${WOVDBNAME}.json, ${WOVDBNAME}/schemas dir"
+  if [ -d "${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}/schemas" ]; then l_ "...existing WovDatabase Archive with that name."; fi
+  mkdir -p -m 700 "${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}/schemas"
+
+  if [ ! -e "${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}.json" ]; then
+    cat <<EOF > "${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}.json"
+{
+  "wovtoolsversion": "${WOV_VERSION}",
+  "versions": {}
+}
+EOF
+  else
+    l_ "...existing WovDataBase Archive json file for WovDataBase."
+  fi
+
+fi
+
+
+
+

@@ -127,6 +127,9 @@ if [ "\$1" == "cm" ]; then
 #elif [ "\$1" == "se" ]; then
 fi
 EOF
+      # Add to git
+      git add "${MSDIR}/src/${WOV_PROJECT}${mscode}config.sh"
+      if [ $? -ne 0 ]; then l_error "Could not add '${WOV_PROJECT}${mscode}config.sh' to git."; exit 1; fi
     fi
   fi
 }
@@ -149,7 +152,11 @@ function doBuildMicroservice_NodeJS()
     cat <<EOFF > "${f}"
 console.log('${WOV_PROJECT}${mscode}');
 EOFF
+    # Add to git
+    git add "${f}"
+    if [ $? -ne 0 ]; then l_error "Could not add 'src/index.js' to git."; exit 1; fi
   fi
+
 
   l_verbose '  ...make a nodejs package and set license to UNLICENSED'
   f="${MSDIR}/package.json"
@@ -158,6 +165,10 @@ EOFF
     jqrule=".license=\"UNLICENSED\" | .version=\"0.0.1\" | .main=\"src/index.js\" | .scripts.start=\"node src\" "
     jq -r "${jqrule}" "${MSDIR}/package.json" > "${MSDIR}/package.json_" ; \
       mv "${MSDIR}/package.json_" "${MSDIR}/package.json"
+
+    # Add to git
+    git add "${MSDIR}/package.json"
+    if [ $? -ne 0 ]; then l_error "Could not add 'package.json' to git."; exit 1; fi
   fi
 
   doBuildMicroservice_base $mscode
@@ -181,6 +192,10 @@ function doBuildMicroservice_WoveonService()
     cat <<EOFF > "${f}"
 console.log('${WOV_PROJECT}${mscode}');
 EOFF
+
+    # Add to git
+    git add "${MSDIR}/src/index.js"
+    if [ $? -ne 0 ]; then l_error "Could not add 'src/index.js' to git."; exit 1; fi
   fi
 
 
@@ -194,24 +209,39 @@ module.exports = class TConfig extends require('woveon-service').Config {
    * @param {Logger} _logger - for log spew
    */
   constructor(_logger) {
-    super(_logger, [
-      'WOV_${WOV_PROJECT}db_username',     // ex. 'postgres'
-      'WOV_${WOV_PROJECT}db_endpoint',     // 'localhost' for ssh tunneling, AWS db for pod
-      'WOV_${WOV_PROJECT}db_database',     // database name
-      'WOV_${WOV_PROJECT}db_port',         // ssh tunneling port, or postgres default port 5432
-      'WOV_${WOV_PROJECT}db_type',         // postgres, mongo, etc.
+    super(_logger, 
+
+    // Config Secrets
+    [
+
+      // example database values
+      // 'WOV_${WOV_PROJECT}db_username',     // ex. 'postgres'
+      // 'WOV_${WOV_PROJECT}db_endpoint',     // 'localhost' for ssh tunneling, AWS db for pod
+      // 'WOV_${WOV_PROJECT}db_database',     // database name
+      // 'WOV_${WOV_PROJECT}db_port',         // ssh tunneling port, or postgres default port 5432
+      // 'WOV_${WOV_PROJECT}db_type',         // postgres, mongo, etc.
 
       // microservice calls to it
       'WOV_${WOV_PROJECT}${mscode}_ver',
       'WOV_${WOV_PROJECT}${mscode}_port',
 
-      'WOV_www_${WOV_PROJECT}_urlscheme',
-      'WOV_www_${WOV_PROJECT}_url',
+      // server ingress location
+      'WOV_www_api_urlscheme',
+      'WOV_www_api_url',
     ],
-    ['WOV_${WOV_PROJECT}db_password']);  // random: try 'openssl rand -hex 40'
+
+    // Secret Secrets
+    [
+      // example for database values
+      // 'WOV_${WOV_PROJECT}db_password',
+    ]); 
   };
 };
 EOFF
+
+    # Add to git
+    git add "${f}"
+    if [ $? -ne 0 ]; then l_error "Could not add '${f}' to git."; exit 1; fi
   fi
 
   l_verbose '  ...make a nodejs package and set license to UNLICENSED'
@@ -221,6 +251,10 @@ EOFF
     jqrule=".license=\"UNLICENSED\" | .version=\"0.0.1\" | .main=\"src/index.js\" | .scripts.start=\"node src\" "
     jq -r "${jqrule}" "${MSDIR}/package.json" > "${MSDIR}/package.json_" ; \
       mv "${MSDIR}/package.json_" "${MSDIR}/package.json"
+
+    # Add to git
+    git add "${f}"
+    if [ $? -ne 0 ]; then l_error "Could not add 'package.json' to git."; exit 1; fi
   fi
 
   doBuildMicroservice_base $mscode
@@ -238,6 +272,9 @@ function doBuildMicroservice()
 
   doBuildMicroservice_base $mscode
 
+#   # Add to git
+#  git add ${WOV_BASEDIR}/${WOV_PROJECT}${MSCODE}
+#  if [ $? -ne 0 ]; then l_error "git could not add newly created project files for some reason."; exit 1; fi
 }
 
 
@@ -278,6 +315,11 @@ EOF
     set -x
   if [ ! -e "${f}" ]; then
     echo $msentry > "${f}"
+
+    # Add to git
+    git -C "${WOV_BASEDIR}/wovtools/secrets" add "${WOV_MASTERPROJECT}.json"
+    if [ $? -ne 0 ]; then l_error "Could not add '${WOV_MASTERPROJECT}.json' to Secrets Local Archive's git."; exit 1; fi
+
   else # [ "$(jq -r \".${WOV_PROJECT}${mscode}\" ${f})" == "null" ]; then
     jq -r ".${WOV_PROJECT}${mscode} |= ${msentry}" "${f}"  > "${f}.1"
     if [ $? -eq 0 ]; then mv "${f}.1" "${f}"; 
@@ -310,7 +352,7 @@ EOF
 #  # /TODO
   
 
-  doCreateK8s $msname
+  doCreateK8s $mscode
 }
 
 
@@ -378,14 +420,18 @@ CMD  [ "npm", "run", "start" ]
 EOF
 EOFFF
     chmod 700 "${f}"
+
+    # Add to git
+    git add ${WOV_BASEDIR}/wovtools/msrecipes/${MSCODE}
+    if [ $? -ne 0 ]; then l_error "Could not add recipe to git."; exit 1; fi
   fi
+
 }
 
 # $1 - ms name
 function doCreateK8s()
 {
-
-  l_ "  ...k8s directory"
+  l_ "  ...k8s directory (${1})"
   mkdir -p "${WOV_BASEDIR}/wovtools/k8s"
 
   doCreateK8sService $1
@@ -402,6 +448,9 @@ function doCreateK8sIngress()
   local mscode_l="$(echo ${mscode} | tr '[:upper:]' '[:lower:]')"
   local msname="${WOV_PROJECT}${mscode}"
   local msname_l="$(echo ${msname} | tr '[:upper:]' '[:lower:]')"
+
+  l_debug "mscode '${mscode}'"
+  l_debug "msname '${msname}'"
 
   f="${WOV_BASEDIR}/wovtools/k8s/${WOV_PROJECT}-ingress.yaml.wov"
   if [ -e "${f}" ]; then
@@ -424,13 +473,17 @@ spec:
     http:
       paths:
 EOF
+
+    # add to git
+    git add ${f}
+    if [ $? -ne 0 ]; then l_error "git could not add ingress to git."; exit 1; fi
   fi
 
-  R=$(cat ${f} | grep "path: /${msname}/" | wc -l | tr -d "[:space:]")
+  R=$(cat ${f} | grep "path: /${msname_l}/" | wc -l | tr -d "[:space:]")
   if [ "$R" != "0" ]; then
-    l_ "  ...checking for ingress paths '/${msname}/', found '${R}' so skipping"
+    l_ "  ...checking for ingress paths '/${msname_l}/', found '${R}' so skipping"
   else
-    l_ "  ...adding ingress paths '/${msname}/'"
+    l_ "  ...adding ingress paths '/${msname_l}/'"
     cat <<EOF >> ${f}
 
       # ---------------------------------------------------------------------
@@ -460,6 +513,7 @@ EOF
           servicePort: 80
 EOF
   fi
+ 
 }
 
 
@@ -468,9 +522,10 @@ function doCreateK8sService()
 {
   local mscode="$1"
   local mscode_l="$(echo ${mscode} | tr '[:upper:]' '[:lower:]')"
+  local msname="${WOV_PROJECT}${mscode}"
   local msname_l="$(echo "${WOV_PROJECT}${mscode}" | tr '[:upper:]' '[:lower:]')"
  
-  f="${WOV_BASEDIR}/wovtools/k8s/${msname_l}-service.yaml.wov"
+  f="${WOV_BASEDIR}/wovtools/k8s/${msname}-service.yaml.wov"
   if [ -e "${f}" ]; then
     l_ "  ...skipping service k8s"
   else
@@ -480,19 +535,24 @@ function doCreateK8sService()
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{lc MS}}
+  name: ${msname_l}
   namespace: {{lc PROJECT}}-{{lc STAGE}}
   labels:
-    app: {{lc MS}}
+    app: ${msname_l}
 spec:
   selector:
-    app: {{lc MS}}
+    app: ${msname_l}
   ports:
   - port: 80
     protocol: TCP
-    targetPort: \{{{{MS}}.port}}
+    targetPort: {{${msname}.port}}
 EOF
+
+    # add to git
+    git add ${f}
+    if [ $? -ne 0 ]; then l_error "git could not add K8s Service to git."; exit 1; fi
   fi
+
 }
 
 
@@ -500,8 +560,10 @@ EOF
 function doCreateK8sDeployment()
 {
   local mscode="$1"
+  local msname="${WOV_PROJECT}${mscode}"
+  local msname_l="$(echo "${WOV_PROJECT}${mscode}" | tr '[:upper:]' '[:lower:]')"
 
-  f="${WOV_BASEDIR}/wovtools/k8s/${WOV_PROJECT}${mscode}.yaml.wov"
+  f="${WOV_BASEDIR}/wovtools/k8s/${msname}.yaml.wov"
   if [ -e "${f}" ]; then
     l_ "  ...skipping deployment k8s"
   else
@@ -511,17 +573,17 @@ function doCreateK8sDeployment()
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: {{lc MS}}
+  name: ${msname_l}
   namespace: {{lc PROJECT}}-{{lc STAGE}}
 spec:
   template:
     metadata:
       labels:
-        app: {{lc MS}}
+        app: ${msname_l}
     spec:
       containers:
-        - image: {{CONTAINERARCHIVE}}/{{PROJECT}}/{{lc MS}}:{{lc STAGE}}_{{PVER}}
-          name: {{lc MS}}
+        - image: {{CONTAINERARCHIVE}}/{{PROJECT}}/${msname_l}:{{lc STAGE}}_{{PVER}}
+          name: ${msname_l}
           imagePullPolicy: Always
           ports:
             - containerPort: 80
@@ -529,17 +591,22 @@ spec:
               protocol: TCP
           envFrom:
           - secretRef:
-              name: {{lc MS}}
+              name: ${msname_l}
           - configMapRef:
-              name: {{lc MS}}
+              name: ${msname_l}
           livenessProbe:
             httpGet:
-              path: \{{{{MS}}.healthpath}}
+              path: \\{{${msname}.healthpath}}
               port: 80
             initialDelaySeconds: 3
-            periodSeconds: \{{{{MS}}.healthprobetime}}
+            periodSeconds: \\{{${msname}.healthprobetime}}
 EOF
+
+    # Add to Git
+    git add ${f}
+    if [ $? -ne 0 ]; then l_error "git could not add K8s Deployment to git."; exit 1; fi
   fi
+
 }
 
 
@@ -591,6 +658,7 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
     exit 1
   else MSCODE=$1; fi
 
+  l_debug   "MSCODE         ${MSCODE}"
   l_verbose "CMD_REPO       ${CMD_REPO}"
   l_verbose "CMD_RECIPE     ${CMD_RECIPE}"
   l_verbose "CMD_K8S        ${CMD_K8S}"
@@ -626,6 +694,7 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
 
     # k8s does the following 3
     if [ ${CMD_K8S} -eq 1 ]; then
+      l_debug 'asdfsadfad'
       doCreateK8s ${MSCODE}
     else
 
@@ -638,6 +707,9 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
 
   # MS Container recipe
   if [ "${CMD_RECIPE}" -eq 1 ]; then doCreateMSRecipe ${MSCODE}; fi
+
+  git commit -m "Inited microservice '${WOV_PROJECT}${MSCODE}' with wov-init-ms."
+  if [ $? -ne 0 ]; then l_error "git could not commit git."; exit 1; fi
 
 fi
 
