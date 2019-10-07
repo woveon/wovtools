@@ -20,6 +20,7 @@ tr_runfile test011_init.sh
   tr_h1 "General Command Tests"
   tr_runfile test101_wov-env.sh
   tr_runfile test110_wov-db.sh
+  tr_runfile test120_wov-checkout.sh
 
 
   tr_h1 "Push Commands Tests"

@@ -39,13 +39,18 @@ Command Options:
   -lmsc          : lists the microservice codes
   -lms           : lists the microservices
 
-  Resource Names:
+  Ops Resource Names:
   --res SN RES ZONE  : subnet name
   --res DBSNG RES    : DB subnet group
   --res SG RES       : security group
   --res DB RES       : database name
   --res DBDNS RES    : DB DNS address
   --vres RN RES      : verify resource of type RN, name RES
+
+  Project Info:
+  --repo         : the ACTUAL name of the Code repo for this project (from Git)
+  --repo-d       : the DEFAULT name of the Code repo for this project (generated)
+  --repo-p       : the Project Entry name of the Code repo for this project (generated)
 
   Secrets/Config:
   --envs        : print all the configuration as environment variables (sep lines)
@@ -767,6 +772,15 @@ while [[ $1 =~ ^- ]]; do
 #    doLoadExports
     ensureSetContext ${WOV_CONTEXT}
     doPrintVarsEXPORTS
+
+  elif [ "$1" == "--repo" ]; then
+    echo "unimplemented"
+
+  elif [ "$1" == "--repo-d" ]; then
+    iProjRepo_Naming "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_BASEDIR}" "${WOV_BASEDIR}/.."
+
+  elif [ "$1" == "--repo-p" ]; then
+    jq -r ".projects.${WOV_PROJECT}" ~/.wovtools
 
   elif [ "$1" == "--rcAWS" ]; then
     shift

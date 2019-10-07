@@ -241,20 +241,20 @@ iProjDir_Init "${WOV_BASEDIR}" || exit 1
 
 # ---------------------------------------------------------------------
 l_subtitle "Project Local Archives"
-l_         "Set LocalArchives for Project, using the global values as defaults. If you just set global values, this might feel redundant."
+l_         "Your local archives store data and configuration used by all projects in your master project. Here, we ask for LocalArchives variables for this Project, using the global values as defaults. If you just set global values, this might feel redundant."
 # ---------------------------------------------------------------------
 iProjLocalArchives_InteractiveUpdate "${OP_LOCALARCHIVEDEFAULT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" ; Re=$?
 
 # ---------------------------------------------------------------------
 l_verbose "Link wovtools directory to Local Archives (create as needed)"
 # ---------------------------------------------------------------------
-iLocalArchives_LinkLocalArchives "." "${WOV_MASTERPROJECT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" "${WOV_USERNAME}" "${WOV_USEREMAIL}" ; Re=$?
+iProjLocalArchives_LinkLocalArchives "." "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" "${WOV_USERNAME}" "${WOV_USEREMAIL}" ; Re=$?
 
 # ---------------------------------------------------------------------
 l_subtitle "Connect Local Archives"
 l_         "Connect your project\'s Local Archives to their remote repositories."
 # ---------------------------------------------------------------------
-iLocalArchives_InteractiveSetRemoteRepos 0 "${WOV_BASEDIR}"
+iProjLocalArchives_InteractiveSetRemoteRepos 0 "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}"
 
 
 
@@ -287,7 +287,7 @@ l_h1 "...Loading what we can of the project environment"
 # ---------------------------------------------------------------------
 . wov-env-loader
 WOV_cluster_dns_domain=$(wov-env --var WOV_cluster_dns_domain 2> /dev/null) ; Re=$?
-if [ $Re -ne 0 ]; then echo "failed to load in"; WOV_cluster_dns_domain=""; fi
+if [ $Re -ne 0 ]; then l_warn "...not ready to load in yet. continuing."; WOV_cluster_dns_domain=""; fi
 
 # ---------------------------------------------------------------------
 echo ""

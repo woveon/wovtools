@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
 
-DOECHO=1
-DOFORCE=0
+# DOECHO=1
+# DOFORCE=0
+# WOV_DODEFAULTCOMMAND=1
 FOLD=$(tput cols)
-WOV_DODEFAULTCOMMAND=1
-ISWOVPROJECT="0"
 export PATH=$PATH:/usr/local/bin/wovlib
 
 # ---------------------------------------------------------------------
 # Define and init all used variables
-VARDEPS=( 'WOV_PROJECT' 'WOV_MASTERPROJECT' 'MSCODE' 'REPOEXT' 'WOV_BASEDIR' \
-          'PROJECTDIR'  \
-          'WOV_SEADIR' 'WOV_DBADIR' 'WOV_DSADIR' )
-for f in "${VARDEPS[@]}"; do
-  eval "${f}="
-done
-  
+VARDEPS=( 'GLOBALDIR'  'WOV_MASTERPROJECT' 'WOV_PROJECT' \
+          'MSCODE'     'REPODIR' 'REPOEXT'           'WOV_BASEDIR' \
+          'WOV_SEADIR' 'WOV_DBADIR'        'WOV_DSADIR' 'PROJSHORTCUT' \
+          'WOV_CODEREPOARCHIVE' )
+for f in "${VARDEPS[@]}"; do eval "${f}="; done
+
+
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
@@ -24,7 +23,7 @@ function fDisplayOptions()
   cat <<EOF | fold -w ${FOLD} -s
 
 
-Usage: `basename $0` [project] (mscode)
+Usage: `basename $0` (options) [project] (mscode)
 
   project - the WovTools project name                         ex. alywan
   mscode  - If this is a team project, the microservice code  ex. data
@@ -32,118 +31,30 @@ Usage: `basename $0` [project] (mscode)
 Checks out a WovTools project and connects it to WovTools resources.
 
 Checks out using ~/.wovtools settings for Git repository and using either:
-  master project : [REPOSITORY]/[MASTERPROJECT]
-  team project   : [REPOSITORY]/[MASTERPROJECT]_[TEAMPROJECT][MSCODE]
+  many   microservice project : [REPOSITORY]/[MASTERPROJECT]-[TEAMPROJECT]
+  single microservice project : [REPOSITORY]/[MASTERPROJECT]-[TEAMPROJECT]-[TEAMPROJECT][MSCODE]
 
   -h/--help - help
+
+  --config-only   : generates the configuration entry for insertion into ~/.wovtools
+
+  --master MASTER : Overrides the master project. (DEFAULT: parent directory name)
+  --shortcut X    : Overrides the project shortcut used in ~/.wovtools:.projects. (DEFAULT: [PROJECT] or [PROJECT][MSCODE]
+
+  --ref PROJECT   : crossreferences another project X in (~/.wovtools:.projects)
+  --repo REPOEXT  : override the repository extention name
+  --reposerver WOV_CODEREPOARCHIVE :
+                  : override the global configuration's Code Repository Archive (~/.wovtools:.archives.coderepo)
 
 EOF
 }
 
-. wov-env-loader
-. wov-env-logging
+ISWOVPROJECT="0"
+. wov-env-ops fDisplayOptions "$@"
+if [ ${WOV_DODEFAULTCOMMAND} -eq 0 ]; then exit 0; fi
 . wov-env-common
 . wov-init-common
 
-# --------------------------------------------------------------------- 
-# Precommands
-while [[ $1 =~ ^- ]]; do
-
-  if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
-    fDisplayOptions
-    exit 0
-  elif [ "$1" == "--verbose" ] || [ "$1" == "-v" ]; then
-    DOECHO=2
-    shift
-  else
-    l_error "***ERROR: unknown option '$1'."
-    fDisplayOptions
-    exit 1
-  fi
-done
-
-
-# --------------------------------------------------------------------
-# Checks
-
-iGlobalConfig_CreateIfNotExists || exit 1
-
-iGlobalConfig_Validate || exit 1
-
-
-## --- Ensure ~/.wovtools file
-#if [ ! -e "${HOME}/.wovtools" ]; then
-#  l_error "no ~/.wovtools file. You need to run wov-init-global"
-#  exit 1
-#fi
-#
-## --- Ensure formatting of ~/.wovtools
-#JQTEST=$(jq -r "." "${HOME}/.wovtools" 2>&1 ); Re=$?
-#if [ "${Re}" != 0 ]; then
-#  l_error "JSON format error in ~/.wovtools file."
-#  l_ "  : ${JQTEST}"
-#  exit 1
-#fi
-
-
-
-# --------------------------------------------------------------------- 
-# Project setup
-
-WOV_PROJECT=$1
-WOV_MASTERPROJECT=$1
-REPOEXT="${WOV_PROJECT}"
-shift
-if [[ !  $1 =~ ^- ]]; then
-  MSCODE=$1
-  WOV_PROJECT="${WOV_PROJECT}${MSCODE}"
-  shift 
-  REPOEXT="${WOV_MASTERPROJECT}-${WOV_PROJECT}${MSCODE}"
-fi
-
-if [ "${WOV_PROJECT}" == "" ]; then
-  fDisplayOptions
-  exit 1
-fi
-WOV_BASEDIR="`pwd`/${REPOEXT}"
-
-l_ "Master Project : ${WOV_MASTERPROJECT}"
-l_ "       Project : ${WOV_PROJECT}"
-l_ "        MSCODE : ${MSCODE}"
-l_ "      Repo ext : ${REPOEXT}"
-
-
-# ---------------------------------------------------------------------
-# Load vars
-
-# --- Grab from ~/.wovtools
-
-iGlobalConfig_ReadIn || exit 1
-
-#while read f; do
-#  _TMP+=( "$f" )
-#done <<<$(cat "${HOME}/.wovtools" | jq -r ".me, .archives.coderepo, .projects.${WOV_PROJECT}.dir, .projects.${WOV_PROJECT}${MSCODE}.dir, .projects.${WOV_PROJECT}${MSCODE}.repo, .projects.${WOV_PROJECT}${MSCODE}.repobase, .wovtools.secrets.dir, .wovtools.dbarchives.dir, .wovtools.dsarchives.dir" )
-#WOV_ME=$(            [ "${_TMP[0]}" == "null" ] && echo "" || echo "${_TMP[0]}" )
-#WOV_CODEREPOARCHIVE=$([ "${_TMP[1]}" == "null" ] && echo "" || echo "${_TMP[1]}" )
-#PROJECTDIR=$(        [ "${_TMP[2]}" == "null" ] && echo "" || echo "${_TMP[2]}" )
-#MSDIR=$(             [ "${_TMP[3]}" == "null" ] && echo "" || echo "${_TMP[3]}" )
-#MSREPO="${_TMP[4]}"     # $(            [ "${_TMP[4]}" == "null" ] && echo "" || echo "${_TMP[4]}" )
-#MSREPOBASE="${_TMP[5]}" # $(        [ "${_TMP[5]}" == "null" ] && echo "" || echo "${_TMP[5]}" )
-#SECRETSDIR=$(        [ "${_TMP[6]}" == "null" ] && echo "" || echo "${_TMP[6]}" )
-#DBARCHIVEDIR=$(      [ "${_TMP[7]}" == "null" ] && echo "" || echo "${_TMP[7]}" )
-#DSARCHIVEDIR=$(      [ "${_TMP[8]}" == "null" ] && echo "" || echo "${_TMP[8]}" )
-
-PROJECTDIR=$(cat ~/.wovtools | jq -r ".projects.${WOV_PROJECT}.dir")
-
-TARGETREPO=$(doGetProjectRepoName "${WOV_PROJECT}" "" )  ; Re=$?
-if [ $Re -ne 0 ]; then exit 1; fi
-# echo "Target repo ${TARGETREPO}"
-
-
-
-# ---------------------------------------------------------------------
-# Functions
-# ---------------------------------------------------------------------
 
 # ---------------------------------------------------------------------
 function doShowCheckoutEnvs()
@@ -154,6 +65,56 @@ function doShowCheckoutEnvs()
 }
 
 
+# ---------------------------------------------------------------------
+function doGenGlobalEntry()
+{
+  local retval=
+  read -r -d '' retval <<EOF
+{
+  "projects" : {
+    "${PROJSHORTCUT}" : {
+      "dir"        : "${WOV_BASEDIR}",
+      "repo"       : "${REPOEXT}",
+      "reposerver" : "${WOV_CODEREPOARCHIVE}",
+      "sub"        : [
+        {
+          "dir"        : "${WOV_SEADIR}",
+          "repo"       : "${WOV_MASTERPROJECT}-sea",
+          "reposerver" : "${WOV_CODEREPOARCHIVE}"
+        },
+        {
+          "dir"        : "${WOV_DBADIR}",
+          "repo"       : "${REPOEXT}-dba",
+          "reposerver" : "${WOV_CODEREPOARCHIVE}"
+        },
+        {
+          "dir"        : "${WOV_DSADIR}",
+          "repo"       : "${REPOEXT}-dsa",
+          "reposerver" : "${WOV_CODEREPOARCHIVE}"
+        }
+      ]
+    }
+  }
+}
+EOF
+
+  echo "$retval"
+  return 0
+}
+
+
+# --------------------------------------------------------------------
+# Create and Validate if not exists
+iGlobalConfig_CreateIfNotExists || exit 1
+iGlobalConfig_Validate || exit 1
+
+# --------------------------------------------------------------------
+# Read in (so can overwrite below)
+iGlobalConfig_ReadIn || exit 1
+
+
+
+COMMAND='checkout'
 
 
 # ---------------------------------------------------------------------
@@ -161,14 +122,40 @@ function doShowCheckoutEnvs()
 # ---------------------------------------------------------------------
 while [[ $1 =~ ^- ]]; do
 
-  if [ "$1" == "--force" ] || [ "$1" == "-f" ]; then
+  if [ "$1" == "--config-only" ]; then
+    COMMAND='config-only'
     shift
-    FORCE=1
 
   elif [ "$1" == "--envs" ] || [ "$1" == "-e" ]; then
+    COMMAND='envs'
     shift
-    doShowCheckoutEnvs
-    WOV_DODEFAULTCOMMAND=0
+
+  # ---------------------------------------------------------------------
+  # OVERRIDES
+  # ---------------------------------------------------------------------
+  elif [ "$1" == "--master" ]; then
+    shift
+    oWOV_MASTERPROJECT="$1"
+    shift
+
+  elif [ "$1" == "--shortcut" ]; then
+    shift
+    oPROJSHORTCUT="$1"
+    shift
+
+  elif [ "$1" == "--repo" ]; then
+    shift
+    oREPOEXT="$1"
+    shift
+
+  elif [ "$1" == "--reposerver" ]; then
+    shift
+    oWOV_CODEREPOARCHIVE="$1"
+    shift
+
+  # ---------------------------------------------------------------------
+  # /OVERRIDES
+  # ---------------------------------------------------------------------
 
   elif [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     shift
@@ -184,61 +171,203 @@ while [[ $1 =~ ^- ]]; do
 done
 
 
+# --------------------------------------------------------------------- 
+# Var Defaults
+GLOBALDIR=`pwd`
+WOV_MASTERPROJECT=$([ "${oWOV_MASTERPROJECT}" == "" ] && (basename "${GLOBALDIR}") || echo "${oWOV_MASTERPROJECT}")
+WOV_PROJECT=$1
+MSCODE=$2
+REPODIR=$(GenRepoName "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${MSCODE}")
+#REPOEXT=`echo ${REPODIR} | tr '_' '-' `
+REPOEXT=$([ "${oREPOEXT}" == "" ] && ( echo ${REPODIR} | tr '_' '-' ) || echo "${oREPOEXT}") 
+WOV_BASEDIR="$(realpath "`pwd`/../${REPODIR}")"
+WOV_BASEDIR="$(pwd | rev | cut -d'/' -f2- | rev)/${REPODIR}"
+PROJSHORTCUT=$([ "${oPROJSHORTCUT}" == "" ] && echo "${WOV_PROJECT}${MSCODE}" || echo "${oPROJSHORTCUT}")
+WOV_CODEREPOARCHIVE=$([ "${oWOV_CODEREPOARCHIVE}" == "" ] && echo "${WOV_CODEREPOARCHIVE}" || echo "${oWOV_CODEREPOARCHIVE}")
+if [ "${WOV_PROJECT}" == "" ]; then fDisplayOptions; exit 1; fi
 
+TARGETREPO="${WOV_CODEREPOARCHIVE}/${REPOEXT}"
+
+
+# --------------------------------------------------------------------- 
+# Run Commands
 if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
 
-  # ---------------------------------------------------------------------
-  # Spew and Checks
+  if [ "${COMMAND}" == "envs" ]; then
+    doShowCheckoutEnvs
 
+  elif [ "${COMMAND}" == "config-only" ]; then
+    echo "$(doGenGlobalEntry)"
 
-  if [ "${WOV_DBADIR}" == "null" ] || [ "${WOV_DBADIR}" == "" ]; then l_error "~/.wovtools .wovtools.dbarchives entry is missing. Run wov-init-global"; exit 1; fi
-  if [ "${WOV_DSADIR}" == "null" ] || [ "${WOV_DSADIR}" == "" ]; then l_error "~/.wovtools .wovtools.dsarchives entry is missing. Run wov-init-global"; exit 1; fi
+  elif [ "${COMMAND}" == "checkout" ]; then
 
-  l_verbose "Make sure the user provided directories exist"
-  iLocalArchives_CheckDirs "${WOV_MASTERPROJECT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" ; Re=$?
-  if [ $Re -ne 0 ]; then exit 1; fi
-
-  l_verbose "... make sure Git base repository is set in ~/.wovtools"
-  if [ "${TARGETREPO}" == "" ]; then
-    l_error "Git repository not set. In ~/.wovtools, set the .archives.coderepo or .projects.${WOV_PROJECT}.repobase"
-    exit 1
-  fi
-
-  l_verbose "--- ensure in project directory"
-  if [ "${WOV_BASEDIR}" != "${PROJECTDIR}" ]; then
-    l_warn "Checking out into '${WOV_BASEDIR}', when project directory is '${PROJECTDIR}' (from ~/.wovtools file)."
-    read -r -p "Not in project directory '${PROJECTDIR}'. Will just build a copy here. Continue? [Y/n] " $A
-    case $A in 
-      ""|[Yy][Ee][Ss]|[Yy])
-        ;;
-      [Nn][Oo]|[Nn])
-        l_ "...exiting with no checkout"; exit 0; ;;
-      *)
-        l_ "Invalid input... (${A}). ...exiting with no checkout"; ;;
-    esac
-  fi
-
-  l_verbose "... check for existing repo"
-  if [ -e "${WOV_BASEDIR}" ]; then
-    THEREPOREMOTE=$(git -C "${WOV_BASEDIR}" config --get remote.origin.url)
-    if [ "${THEREPOREMOTE}" == "${TARGETREPO}" ]; then
-      l_ "... existing repo already checked out... continuing."
-    else
-      l_error "Existing repository is at '${WOV_BASEDIR}', and is not from '${TARGETREPO}'. Exiting."
-      exit 1
+    if [ `basename "${GLOBALDIR}"` != "${WOV_MASTERPROJECT}" ]; then
+      l_error "Not in master project directory of '$(basename "${GLOBALDIR}")'."
+      exit 101
     fi
-  else
+
+    l_debug "Check to make sure no existing directory"
+    if [ -d "${REPODIR}" ]; then
+      THEREPOREMOTE=$(git -C "${REPODIR}" config --get remote.origin.url)
+      if [ "${THEREPOREMOTE}" == "${WOV_CODEREPOARCHIVE}/${REPOEXT}" ]; then
+        l_warn "... existing repo already checked out... exiting."
+        exit 107
+      else
+        l_error "Existing repository is at '${REPODIR}', and is not from '${WOV_CODEREPOARCHIVE}/${REPOEXT}'. Exiting."
+        exit 108
+      fi
+      l_error "Exising directory of '${REPODIR}'. Use --purpose-code to checkout a repo for an alternate purpose."
+      exit 102
+    fi
+
+    l_debug "Find any existing entry for this project"
+    CURPROJENTRY="$(jq -r ".projects.${PROJSHORTCUT}" ~/.wovtools)"; Re=$?
+    if [ $Re -ne 0 ]; then l_error "Failed reading from ~/.wovtools. Does it exist?"; exit 103; fi
+
+    l_debug "Generate what this project's global entry will look like"
+    NEWPROJENTRY="$(doGenGlobalEntry)"
+
+    l_debug  "if existing project entry in ~/.wovtools .projects, then test a bunch of things"
+    if [ "${CURPROJENTRY}" != "null" ]; then
+      HASDIFFS=0
+
+      l_debug "warn about all differences and give switch name to resolve it"
+
+      entrydiff=$(cmp <(echo "${CURPROJENTRY}" | jq -cS . ) <(echo "${NEWPROJENTRY}" | jq -cS . ))
+      # TODO
+      l_warn "Differences found : '${entrydiff}'"
+      HASDIFFS=1
+
+    #     if overwrite
+    #       move current entry to an ".projectsold[]" and dump there, add a time of move
+
+      #   - directoyr incorrect
+      #     --overwrite-project-entry
+      #     --shortcut to define a different entry
+      #   - all others
+      #                  
+
+      #   if warnings, exit
+      if [ $HASDIFFS -ne 0 ]; then exit 104; fi
+    fi
+
+
+
+    # if existing project entry in ~/.wovtools .projects
+    #   see if in correct directory (because they are checking out a duplicate)
+    #   if not in correct directory, 
+    #     warn and ask if they want to proceed checking out in a new location
+    #     ask if they want to overwrite the entry or create a new
+    #     if overwrite
+    #       move current entry to an ".projectsold[]" and dump there, add a time of move
+    #     else if new
+    #       ask for a prjectname to use instead of existing
+    #     else
+    #       exit 101
+    #     fi
+    #   else (checking out an existing project entry, in correct directory)
+    #     
+    #     
+    #     warn of any differences in generated vars 
+    #     exit 102
+    #   fi
+    # fi
+
+
+    # 
+    #  Example Structure:
+    #  test/test1/test1X       # multi project with two microservices
+    #            /test1Y
+    #  test/test1_test1Z       # single project with test1Z microservice
+    #  test/ref/test1_test1Z   # a reference project for test1_test1Z so you can work in one, and keep a clean copy around for merging or other work
+    #  test/issue/test1_test1Z # a copy of test1_test1Z checked out to resolve an issue.
+
+
+
+    # ---------------------------------------------------------------------
+    # Spew and Checks
+
+
+    if [ "${WOV_DBADIR}" == "null" ] || [ "${WOV_DBADIR}" == "" ]; then l_error "~/.wovtools .wovtools.dbarchives entry is missing. Run wov-init-global"; exit 1; fi
+    if [ "${WOV_DSADIR}" == "null" ] || [ "${WOV_DSADIR}" == "" ]; then l_error "~/.wovtools .wovtools.dsarchives entry is missing. Run wov-init-global"; exit 1; fi
+
+
+    # ---------------------------------------------------------------------
+    l_verbose "Starting clone"
+    # ---------------------------------------------------------------------
     l_verbose "... cloning into '${WOV_BASEDIR}' from '${TARGETREPO}'"
     git clone "${TARGETREPO}" "${REPOEXT}" ; Re=$?
     if [ ${Re} -ne 0 ]; then l_error "Failed to clone repository '${TARGETREPO}' in '${REPOEXT}'."; exit 1; fi
+
+    # ---------------------------------------------------------------------
+    l_verbose "Link wovtools directory to Local Archives (create as needed)"
+    # ---------------------------------------------------------------------
+    iLocalArchives_LinkLocalArchives "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" "${WOV_USERNAME}" "${WOV_USEREMAIL}" ; Re=$?
+    if [ $Re -ne 0 ]; then exit 106; fi
+
+
+    # ---------------------------------------------------------------------
+    l_verbose "Ensure 'wovtools/myconfig.json'"
+    # ---------------------------------------------------------------------
+    doCreateMyConfigJSON "${WOV_BASEDIR}/wovtools/myconfig.json" "${WOV_ME}" "${WOV_MASTERPROJECT}"
+
+
+
+
+
+
+#    l_verbose "Make sure the user provided directories exist"
+#
+#    iLocalArchives_CheckDirs "${WOV_MASTERPROJECT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" ; Re=$?
+#    if [ $Re -ne 0 ]; then exit 1; fi
+#
+#    l_verbose "... make sure Git base repository is set in ~/.wovtools"
+#    if [ "${TARGETREPO}" == "" ]; then
+#        l_error "Git repository not set. In ~/.wovtools, set the .archives.coderepo or .projects.${WOV_PROJECT}.repobase"
+#        exit 1
+#    fi
+#
+#    l_verbose "--- ensure in project directory"
+#    if [ "${WOV_BASEDIR}" != "${PROJECTDIR}" ]; then
+#        l_warn "Checking out into '${WOV_BASEDIR}', when project directory is '${PROJECTDIR}' (from ~/.wovtools file)."
+#          read -r -p "Not in project directory '${PROJECTDIR}'. Will just build a copy here. Continue? [Y/n] " $A
+#        case $A in 
+#          ""|[Yy][Ee][Ss]|[Yy])
+#            ;;
+#        [Nn][Oo]|[Nn])
+#            l_ "...exiting with no checkout"; exit 0; ;;
+#          *)
+#            l_ "Invalid input... (${A}). ...exiting with no checkout"; ;;
+#        esac
+#    fi
+#
+#    l_verbose "... check for existing repo"
+#    if [ -e "${WOV_BASEDIR}" ]; then
+#      THEREPOREMOTE=$(git -C "${WOV_BASEDIR}" config --get remote.origin.url)
+#      if [ "${THEREPOREMOTE}" == "${TARGETREPO}" ]; then
+#        l_ "... existing repo already checked out... continuing."
+#      else
+#        l_error "Existing repository is at '${WOV_BASEDIR}', and is not from '${TARGETREPO}'. Exiting."
+#        exit 1
+#      fi
+#    else
+#      l_verbose "... cloning into '${WOV_BASEDIR}' from '${TARGETREPO}'"
+#      git clone "${TARGETREPO}" "${REPOEXT}" ; Re=$?
+#      if [ ${Re} -ne 0 ]; then l_error "Failed to clone repository '${TARGETREPO}' in '${REPOEXT}'."; exit 1; fi
+#    fi
+#
+#    l_verbose "Link local archives"
+#    iLocalArchives_LinkLocalArchives "${REPOEXT}" "${WOV_MASTERPROJECT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" ; Re=$?
+#    if [ $Re -ne 0 ]; then exit 1; fi
+#
+#    l_verbose "Ensure 'wovtools/myconfig.json'"
+#    doCreateMyConfigJSON "${WOV_BASEDIR}/wovtools/myconfig.json" "${WOV_ME}" "${WOV_MASTERPROJECT}"
+
+
+  else
+    l_error "Unknown command '${COMMAND}'".
+    fDisplayOptions
+    exit 1
   fi
-
-  l_verbose "Link local archives"
-  iLocalArchives_LinkLocalArchives "${REPOEXT}" "${WOV_MASTERPROJECT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" ; Re=$?
-  if [ $Re -ne 0 ]; then exit 1; fi
-
-  l_verbose "Ensure 'wovtools/myconfig.json'"
-  doCreateMyConfigJSON "${WOV_BASEDIR}/wovtools/myconfig.json" "${WOV_ME}" "${WOV_MASTERPROJECT}"
-
 fi
 

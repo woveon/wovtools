@@ -7,6 +7,8 @@
 # =====================================================================
 # =====================================================================
 
+. wov-env-common
+
 DEFAULT_SEADIR=~/.wovtools_sea
 DEFAULT_DBADIR=~/.wovtools_dba
 DEFAULT_DSADIR=~/.wovtools_dsa
@@ -857,7 +859,26 @@ function iProjRepo_InteractiveNaming()
 }
 
 
+
 # ---------------------------------------------------------------------
+# Generates the Git Repository Name from params
+# ---------------------------------------------------------------------
+function GenRepoName()
+{
+  local MP="$1"
+  local P="$2"
+  local MSC="$3"   # or null
+  local retval=""
+
+  if   [ "${MSC}" == "" ]; then retval="${MP}/${P}"
+  else retval="${MP}/${P}-${P}${MSC}"; fi
+
+  echo "$retval"
+}
+
+# ---------------------------------------------------------------------
+# Figures out the params from environment and then call GenRepoName.
+# ---
 # single - one microservice is in this project, in 'src' dir
 # many   - microservices are directories off this project
 #  wov_REPO_TYPE   - single or many
@@ -902,7 +923,8 @@ function iProjRepo_Naming()
         retval=$((retval+4))
       else
         RECIPES+=( "${wov_REPO_MSCODE}" )
-        export wov_REPO_EXT="${MP}_${P}_${P}${wov_REPO_MSCODE}"
+        # export wov_REPO_EXT="${MP}_${P}_${P}${wov_REPO_MSCODE}"
+        export wov_REPO_EXT=$(GenRepoName "${MP}" "${P}" "${wov_REPO_MSCODE}")
       fi
     fi
 
@@ -911,7 +933,8 @@ function iProjRepo_Naming()
     export wov_REPO_TYPE="many"
     if [ "${MP}" != "${DD}" ]; then l_warn "Your project parent directory '${DD}' is not the master project name '${MP}'."; retval=$((retval+8)); fi
     if [ "${P}" != "${D}"   ]; then l_warn "Your project directory is not the project name."; retval=$((retval+16)); fi
-    export wov_REPO_EXT="${MP}_${P}"
+    # export wov_REPO_EXT="${MP}_${P}"
+    export wov_REPO_EXT=$(GenRepoName "${MP}" "${P}")
   fi
 
   # >&2 printf "exit set wov_REPO_TYPE: ${wov_REPO_TYPE}\n"
@@ -1121,15 +1144,18 @@ function iLocalArchives_CheckDirs()
 {
   local retval=0
   local MASTERPROJECT=$1  # WOV_MASTERPROJECT
-  local SEADIR=$2         # WOV_SEADIR
-  local DBADIR=$3         # WOV_DBADIR
-  local DSADIR=$4         # WOV_DSADIR
+  local PROJECT=$2        # WOV_PROJECT
+  local SEADIR=$3         # WOV_SEADIR
+  local DBADIR=$4         # WOV_DBADIR
+  local DSADIR=$5         # WOV_DSADIR
+
+  l_h1 "just changed vars. added #2 param of PROJECT"
 
   l_verbose "... make sure Secrets Archive exists"
   if [ ! -e "${SEADIR}/${MASTERPROJECT}" ]; then l_error "... Secrets Archive at '${SEADIR}/${MASTERPROJECT}' does not exist. Run 'wov-init'."; retval=1; fi
 
   l_verbose "... make sure DataBase Archive exists"
-  if [ ! -e "${DBADIR}/${MASTERPROJECT}" ]; then l_error "... DataBase Archive at '${DBADIR}/${MASTERPROJECT}' does not exist. Run 'wov-init-dba'."; retva=1; fi
+  if [ ! -e "${DBADIR}/${MASTERPROJECT}/${PROJECT}" ]; then l_error "... DataBase Archive at '${DBADIR}/${MASTERPROJECT}/${PROJECT}' does not exist. Run 'wov-init-dba'."; retva=1; fi
 
   l_verbose "... make sure DataSets Aarchive exists"
   if [ ! -e "${DSADIR}/${MASTERPROJECT}" ]; then l_error "... DataSets Archive at '${DSADIR}/${MASTERPROJECT}' does not exist. Run 'wov-init-dba'."; retva=1; fi
@@ -1141,16 +1167,17 @@ function iLocalArchives_CheckDirs()
 # --------------------------------------------------------------------- 
 # Assuming local archive directories exist, link to them for the project.
 # --------------------------------------------------------------------- 
-function iLocalArchives_LinkLocalArchives() 
+function iProjLocalArchives_LinkLocalArchives() 
 {
   local retval=0
   local BASEDIR=$1
   local MASTERPROJECT=$2  # WOV_MASTERPROJECT
-  local SEADIR=$3         # WOV_SEADIR
-  local DBADIR=$4         # WOV_DBADIR
-  local DSADIR=$5         # WOV_DSADIR
-  local USERNAME=$6       # WOV_USERNAME
-  local USEREMAIL=$7      # WOV_USEREMAIL
+  local PROJECT=$3
+  local SEADIR=$4         # WOV_SEADIR   - one per master project's user, but only one user so one directory is fine
+  local DBADIR=$5         # WOV_DBADIR   - one per master project's projects
+  local DSADIR=$6         # WOV_DSADIR   - one per master project
+  local USERNAME=$7       # WOV_USERNAME
+  local USEREMAIL=$8      # WOV_USEREMAIL
 
 
   l_verbose "... creating ${BASEDIR}/wovtools/[db|ds] directories"
@@ -1158,45 +1185,46 @@ function iLocalArchives_LinkLocalArchives()
   if [ ! -e "${BASEDIR}/wovtools/ds" ]; then mkdir -p -m 700 "${BASEDIR}/wovtools/ds" ; fi
 
   l_verbose "... ensure MasterProject exists in Local Archive Directories and is a git repo" 
-  local LADIRS=( "${SEADIR}" "${DBADIR}" "${DSADIR}" )
+  local LADIRS=( "${SEADIR}/${MASTERPROJECT}_sea" "${DBADIR}/${MASTERPROJECT}/${PROJECT}_dba" "${DSADIR}/${MASTERPROJECT}_dsa" )
+
   for f in ${LADIRS[@]}; do
     local laname=`basename "$f"`
     l_verbose "  ...Local Archive : ${laname}"
-    if [ ! -e "${f}/${MASTERPROJECT}/" ]; then mkdir -p -m 700 "${f}/${MASTERPROJECT}"; fi
-    if [ ! -d "${f}/${MASTERPROJECT}/.git" ]; then
+    if [ ! -e "${f}/" ]; then mkdir -p -m 700 "${f}"; fi
+    if [ ! -d "${f}/.git" ]; then
       l_ "  ...making '${laname}' local archive a git repo and making first commit."
-      git -C "${f}/${MASTERPROJECT}" init
-      git -C "${f}/${MASTERPROJECT}" config user.name "${USERNAME}"
-      git -C "${f}/${MASTERPROJECT}" config user.email "${USEREMAIL}"
-      if [ ! -e "${f}/${MASTERPROJECT}/.gitignore" ]; then
-        touch "${f}/${MASTERPROJECT}/.gitignore"
-        chmod 700 "${f}/${MASTERPROJECT}/.gitignore"
-        printf "*.swp\n.DS_Store\n" > "${f}/${MASTERPROJECT}/.gitignore"
+      git -C "${f}" init
+      git -C "${f}" config user.name "${USERNAME}"
+      git -C "${f}" config user.email "${USEREMAIL}"
+      if [ ! -e "${f}/.gitignore" ]; then
+        touch "${f}/.gitignore"
+        chmod 700 "${f}/.gitignore"
+        printf "*.swp\n.DS_Store\n" > "${f}/.gitignore"
       fi
-      git -C "${f}/${MASTERPROJECT}" add .gitignore
-      git -C "${f}/${MASTERPROJECT}" commit -m "first commit"
+      git -C "${f}" add .gitignore
+      git -C "${f}" commit -m "first commit"
     fi
   done
 
   l_ "  ...symlink Secrets"
   if [ -e "${BASEDIR}/wovtools/secrets" ]; then l_ "    ...existing connection to Secrets Archive. Skipping."
   else
-    ln -s ${SEADIR}/${MASTERPROJECT} ${BASEDIR}/wovtools/secrets ; Re=$?
-    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${BASEDIR}/wovtools/secrets' to '${SEADIR}/${MASTERPROJECT}'."; exit 1; fi
+    ln -s ${SEADIR}/${MASTERPROJECT}_sea ${BASEDIR}/wovtools/secrets ; Re=$?
+    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${BASEDIR}/wovtools/secrets' to '${SEADIR}/${MASTERPROJECT}_sea'."; exit 1; fi
   fi
 
   l_ "  ...symlink Database Archive"
   if [ -e "${BASEDIR}/wovtools/db/archive" ]; then l_ "    ...existing connection to Database Archive. Skipping."
   else
-    ln -s "${DBADIR}/${MASTERPROJECT}" "${BASEDIR}/wovtools/db/archive" ; Re=$?
-    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${BASEDIR}/wovtools/db/archive' to '${DBADIR}/${MASTERPROJECT}'."; exit 1; fi
+    ln -s "${DBADIR}/${MASTERPROJECT}/${PROJECT}_dba" "${BASEDIR}/wovtools/db/archive" ; Re=$?
+    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${BASEDIR}/wovtools/db/archive' to '${DBADIR}/${MASTERPROJECT}/${PROJECT}_dba'."; exit 1; fi
   fi
 
   l_ "  ...symlink DataSet Archive"
   if [ -e "${BASEDIR}/wovtools/ds/const" ]; then l_ "    ...existing connection to DataSet Archive. Skipping."
   else
-    ln -s "${DSADIR}/${MASTERPROJECT}" "${BASEDIR}/wovtools/ds/const" ; Re=$?
-    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${BASEDIR}/wovtools/ds/const' to '${DSADIR}/${MASTERPROJECT}'."; exit 1; fi
+    ln -s "${DSADIR}/${MASTERPROJECT}_dsa" "${BASEDIR}/wovtools/ds/const" ; Re=$?
+    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${BASEDIR}/wovtools/ds/const' to '${DSADIR}/${MASTERPROJECT}/dsa'."; exit 1; fi
   fi
 
   return $retval
@@ -1378,8 +1406,8 @@ function iProjLocalArchives_InteractiveUpdate()
 
   # overwrite if base provided
   if [ "${labase}" != "" ]; then
-    l_ "  ...Using local archive default of '${labase}' instead of global values."
-    dirs=( "${labase}/secrets" "${labase}/dbarchive" "${labase}/dsarchive" )
+    l_ "NOTE: Using local archive default base directory of '${labase}', instead of the global values."
+    dirs=( "${labase}/searchive" "${labase}/dbarchive" "${labase}/dsarchive" )
   fi
 
   for i in $(seq 0 $((${#dirs[@]}-1)) ); do
@@ -1388,8 +1416,8 @@ function iProjLocalArchives_InteractiveUpdate()
     varname="${varnames[$i]}"
 
     echo 
-    l_h2 "Project ${title} Local Archive"
-    l_   "Setting the value for this project by assuming the global default."
+    l_h2 "Project ${title} Local Archive Directory"
+    l_   "Setting the value for this project by assuming the global default. Project local archive data will be stored in directories off of this directory. (ex. /foo/bar/secrets would be /foo/bar/secrets/MASTERPROJECT/... )."
     while true; do
       echo ""
       read -r -p "Project ${title} Local Archive directory : (\"${dir}\") ... Correct? [Y/n] " A
@@ -1421,20 +1449,26 @@ function iProjLocalArchives_InteractiveUpdate()
 # --------------------------------------------------------------------- 
 # Configure the remote git repo for project's Local Archives
 # --------------------------------------------------------------------- 
-function iLocalArchives_InteractiveSetRemoteRepos() 
+function iProjLocalArchives_InteractiveSetRemoteRepos() 
 {
   local retval=0
   local askfirst=$1       # 1 to ask, 0 to accept vals
   local BASEDIR=$2        # WOV_BASEDIR
+  local MASTER=$3       
+  local PROJECT=$4
+  local ME=$5
   local sera=
   local dbra=
   local dsra=
 
-  if [ ${#@} != 2 ]; then l_error "Bad number of arguments in iLocalArchives_InteractiveSetRemoteRepos"; exit 1; fi 
+  if [ ${#@} != 5 ]; then l_error "Bad number of arguments in iProjLocalArchives_InteractiveSetRemoteRepos"; exit 1; fi 
 
-  # Guess at secrets remote (current repo plus _secrets)
-  ra=`git -C "${BASEDIR}" config --get remote.origin.url`
-  sera="${ra%.git}_secrets.git"
+  # Guess at remote archive location (based upon code repo base (this removes master and project names from Code Repo's name))
+  echo "base $(git -C "${BASEDIR}" config --get remote.origin.url)"
+  rabase=$(git -C "${BASEDIR}" config --get remote.origin.url | rev | cut -d'/' -f3- | rev)
+  l_debug "rabase ${rabase}"
+  sera="${rabase}/${MASTER}/sea/${ME}.git"
+  l_debug "sera ${sera}"
 
   # Set secrets remote origin if not set
   RR=$(git -C "${BASEDIR}/wovtools/secrets" config --get remote.origin.url 2> /dev/null)
@@ -1460,6 +1494,7 @@ function iLocalArchives_InteractiveSetRemoteRepos()
     # echo "  ... ${sera}"
 
     # config repo
+    set -x
     git -C "${BASEDIR}/wovtools/secrets" config user.name "${WOV_USERNAME}"
     git -C "${BASEDIR}/wovtools/secrets" config user.email "${WOV_USEREMAIL}"
     git -C "${BASEDIR}/wovtools/secrets" add .gitignore
@@ -1477,11 +1512,13 @@ function iLocalArchives_InteractiveSetRemoteRepos()
     # set upstream
     git -C "${BASEDIR}/wovtools/secrets" push --set-upstream origin master
     if [ "$?" != "0" ]; then l_error "SECRETS ARCHIVE> Pushing upstream failed."; exit 1; fi
+    set +x
   fi
 
 
   # Set database remote origin if not set
-  dbra="${sera%_secrets.git}_dba.git"
+  dbra="${rabase}/${MASTER}/${PROJECT}_dba.git"
+  l_debug "dbra ${dbra}"
   RR=$(git -C "${BASEDIR}/wovtools/db/archive" config --get remote.origin.url 2> /dev/null)
   if [ "$?" != "0" ]; then
     echo ""
@@ -1526,7 +1563,8 @@ function iLocalArchives_InteractiveSetRemoteRepos()
 
 
   # Set dataset remote origin if not set
-  dsra="${dbra%_dba.git}_dsa.git"
+  dsra="${rabase}/${MASTER}/dsa.git"
+  l_debug "dsra ${dsra}"
   RR=$(git -C "${BASEDIR}/wovtools/ds/const" config --get remote.origin.url 2> /dev/null)
   if [ "$?" != "0" ]; then
     echo ""
@@ -1569,6 +1607,7 @@ function iLocalArchives_InteractiveSetRemoteRepos()
     if [ "$?" != "0" ]; then l_error "DataSet Archive> Pushing upstream failed."; exit 1; fi
   fi
 
+  return $retval
 }
 
 
