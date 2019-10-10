@@ -25,7 +25,7 @@ if [ $_tr_testson -eq 1 ]; then
   # Remove old dirs and git test git repo
   rm -Rf "${TESTDIR}/${PROJ}"
   rm -Rf ${LADIR}/*archive
-  rm -Rf "${TESTREPODIR}/${MASTER}"           # Project repo
+  rm -Rf ${TESTREPODIR}/${MASTER}_*.git
 
   jq -r ".local.searchives.dir" "${HOME}/.wovtools"
 
@@ -40,20 +40,20 @@ if [ $_tr_testson -eq 1 ]; then
 
   # make dirs for "Remote" Git Repositories
   mkdir -p "${TESTDIR}/${PROJ}"
-  mkdir -p "${TESTREPODIR}/${MASTER}/${PROJ}.git"
-  mkdir -p "${TESTREPODIR}/${MASTER}/sea/${ME}.git"
-  mkdir -p "${TESTREPODIR}/${MASTER}/${PROJ}_dba.git"
-  mkdir -p "${TESTREPODIR}/${MASTER}/dsa.git"
+  mkdir -p "${TESTREPODIR}/${MASTER}_${PROJ}.git"
+  mkdir -p "${TESTREPODIR}/${MASTER}_sea_${ME}.git"
+  mkdir -p "${TESTREPODIR}/${MASTER}_${PROJ}_dba.git"
+  mkdir -p "${TESTREPODIR}/${MASTER}_dsa.git"
 
   # init "Remote" Git Repositories
-  git -C "${TESTREPODIR}/${MASTER}/${PROJ}.git" init --bare
-  git -C "${TESTREPODIR}/${MASTER}/sea/${ME}.git" init --bare
-  git -C "${TESTREPODIR}/${MASTER}/${PROJ}_dba.git" init --bare
-  git -C "${TESTREPODIR}/${MASTER}/dsa.git" init --bare
+  git -C "${TESTREPODIR}/${MASTER}_${PROJ}.git" init --bare
+  git -C "${TESTREPODIR}/${MASTER}_sea_${ME}.git" init --bare
+  git -C "${TESTREPODIR}/${MASTER}_${PROJ}_dba.git" init --bare
+  git -C "${TESTREPODIR}/${MASTER}_dsa.git" init --bare
 
   # Make local archives for testing
   mkdir -p -m 700 "${LADIR}/searchive/${MASTER}_sea"          # per Master Project Person, but only one person so single directory
-  mkdir -p -m 700 "${LADIR}/dbarchive/${MASTER}/${PROJ}_dba"  # per Master Project Team Project, and will create a local repo as needed
+  mkdir -p -m 700 "${LADIR}/dbarchive/${MASTER}_${PROJ}_dba"  # per Master Project Team Project, and will create a local repo as needed
   mkdir -p -m 700 "${LADIR}/dsarchive/${MASTER}_dsa"          # per Master Project
 
   # add to wovtools/myconfig.json
@@ -67,33 +67,39 @@ if [ $_tr_testson -eq 1 ]; then
 #              --cluster-hostedzone "Z1NR42SJ9ZADVC" \
 #              --wovdb-question 0
 #exit 1
+#             `"--wovdb-question 0  > ../kk 2>&1 " 0 1 0  <<EOF
+
+#  tr_test "sadf" "echo std1; echo std2; echo err >&2" 0 2 "std1" "std2"
+#  exit 1
+
   tr_comment '...starting wov-init'
   tr_vverbose
   tr_test    "start init" \
-    "wov-init -vv --debugmode --local-archive-default \"${LADIR}\" "` 
+    "wov-init -vv --debugmode "`
+             `"--local-archive-default \"${LADIR}\" "` 
              `"--proj-coderepo-default \"${TESTREPODIR}\" "` 
              `"--cluster-force-build  "`
              `"--cluster-name \"wov-aws-va-grape\" "`
              `"--cluster-hostedzone \"Z1NR42SJ9ZADVC\" "`
-             `"--wovdb-question 0  > /dev/null ; echo $?" 0 1 0  <<EOF
+             `"--wovdb-question 0 > /dev/null ; echo $? " 0 1 0  <<EOF
+Y
+Y
+Y
+Y
+Y
+Y
+Y
+Y
+Y
+Y
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+y
+Y
+Y
+Y
+Y
+Y
 EOF
   tr_verbose
 
@@ -104,15 +110,15 @@ fi
   tr_section 'symlinks'
 
 
-  tr_test "Project Secrets Archive correclty sym linked" \
+  tr_test "Project Secrets Archive correctly sym linked" \
     "echo ${PID} > \"${LADIR}/searchive/${MASTER}_sea/ii\" ; cat wovtools/secrets/ii" \
     0 1 "${PID}"
 
-  tr_test "Project DB Archives correclty sym linked" \
-    "echo ${PID} > \"${LADIR}/dbarchive/${MASTER}/${PROJ}_dba/ii\" ; cat wovtools/db/archive/ii" \
+  tr_test "Project DB Archives correctly sym linked" \
+    "echo ${PID} > \"${LADIR}/dbarchive/${MASTER}_${PROJ}_dba/ii\" ; cat wovtools/db/archive/ii" \
     0 1 "${PID}"
 
-  tr_test "Project DS Archives correclty sym linked" \
+  tr_test "Project DS Archives correctly sym linked" \
     "echo ${PID} > \"${LADIR}/dsarchive/${MASTER}_dsa/ii\" ; cat wovtools/ds/const/ii" \
     0 1 "${PID}"
     
@@ -124,19 +130,19 @@ fi
 
   tr_test "Project Code to Remote Repo" \
     "git -C "${PROJDIR}" config --get remote.origin.url"  \
-    0 1 "${TESTREPODIR}/${MASTER}/${PROJ}"
+    0 1 "${TESTREPODIR}/${MASTER}_${PROJ}"
 
   tr_test "Local Archive Secrets to Remote Repo" \
-    "git -C "${LADIR}/searchive/${MASTER}_sea" config --get remote.origin.url"  \
-    0 1 "${TESTREPODIR}/${MASTER}/sea/${ME}.git"
+    "git -C \"${LADIR}/searchive/${MASTER}_sea\" config --get remote.origin.url"  \
+    0 1 "${TESTREPODIR}/${MASTER}_sea_${ME}"
 
   tr_test "Local Archive DBA to Remote Repo" \
-    "git -C "${LADIR}/dbarchive/${MASTER}/${PROJ}_dba" config --get remote.origin.url"  \
-    0 1 "${TESTREPODIR}/${MASTER}/${PROJ}_dba.git"
+    "git -C \"${LADIR}/dbarchive/${MASTER}_${PROJ}_dba\" config --get remote.origin.url"  \
+    0 1 "${TESTREPODIR}/${MASTER}_${PROJ}_dba"
 
   tr_test "Local Archive DSA to Remote Repo" \
-    "git -C "${LADIR}/dsarchive/${MASTER}_dsa" config --get remote.origin.url"  \
-    0 1 "${TESTREPODIR}/${MASTER}/dsa.git"
+    "git -C \"${LADIR}/dsarchive/${MASTER}_dsa\" config --get remote.origin.url"  \
+    0 1 "${TESTREPODIR}/${MASTER}_dsa"
 
   tr_section '/repoconnections'
 }

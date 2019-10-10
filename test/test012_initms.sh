@@ -87,6 +87,7 @@ tr_comment "NOTE: Expects test1 project to exist, created by test001_init.sh"
   tr_test "wov-env --var port" "wov-env --var WOV_${TEST}${MSCODE}_port" 0 1 "75643"
 
 
+  tr_run "git cleanup" "git commit -a -m 'added ${TEST}${MSCODE}' ; git push"
 
   tr_section '/buildmicroservice'
 }
@@ -96,3 +97,5 @@ tr_comment "NOTE: Expects test1 project to exist, created by test001_init.sh"
   tr_comment "TODO"
   tr_section "/buildsinglems"
 }
+
+tr_results

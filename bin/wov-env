@@ -111,7 +111,8 @@ function fBuildClusterSecrets
 #    if [ "$?" != "0" ]; then exit 1; fi
 #  fi
 
-  # echo "fBuildClusterSecrets hit"
+  l_debug "fBuildClusterSecrets pre check, ${WOV_SECRETFILE}\n ${WOV_CONFIGFILE_MAIN}"
+  l_debug "1- $([ "${WOV_CONFIGFILE_MAIN}" -nt ${WOV_SECRETFILE} ] && echo 'nt')"
 
   # ---------------------------------------------------------------------
   # Ensure the SECRET_CACHE_DIR exists and is protected and then merge
@@ -136,13 +137,13 @@ function fBuildClusterSecrets
      [ "${WOV_BASEDIR}/wovtools/secrets/.git" -nt "${WOV_SECRETFILE}" ] ||
      [ "${WOV_BASEDIR}/.git"                  -nt "${WOV_SECRETFILE}" ]; then
 
-    # echo "fBuildClusterSecrets building"
-    wov-env-build --context ${WOV_CONTEXT} -q --config ; Re=$?
+    l_debug "fBuildClusterSecrets building"
+    wov-env-build -f --context ${WOV_CONTEXT} -q --config ; Re=$?
     if [ $Re -ne 0 ]; then exit $Re; fi
     touch "${WOV_SECRETFILE}"
     # . wov-env-loader -g ${WOV_CLUSTER}-${WOV_NS}"
-  # else
-  #  echo "fBuildClusterSecrets not building"
+  else
+    l_debug "fBuildClusterSecrets not building"
   fi
 }
 

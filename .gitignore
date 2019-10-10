@@ -8,8 +8,11 @@ tests/WovTools_test_tp1
 node_modules
 test/testremoterepo
 test/test1
+test/test1.bak
 test/dummyproject
 test/dummyprojectrepo
 test/dummyprojectlocalarchives
 test/testlocalarchives
 test/wtrunnerprotectedfiles
+bin/lib/wic
+.delme*

@@ -23,6 +23,7 @@ tr_protectfile "wovtools/myconfig.json"
 
   tr_test_todo 'here, need to delete and rebuild the database Archive.'
 
+  # NOTE: this has failed here below because of entries in wovtools/(my)config.json which were left over from a previous test
   tr_test 'list wov databases' 'wov-db -lwdb' 0 -1 ''
 
   tr_test 'list wov data sets' 'wov-db -lds' 0 -1 ''
@@ -50,7 +51,8 @@ tr_protectfile "wovtools/myconfig.json"
 {
   tr_section 'wov-database-inst'
 
-  tr_test 'clean up old Adb secrets' "rm -Rf wovtools/secrets/A*db.json" 0 -1
+  #tr_test 'clean up old Adb secrets' "rm -Rf wovtools/secrets/A*db.json" 0 -1
+  tr_test 'clean up old Adb secrets' "rm -Rf wovtools/secrets/Adb*.json" 0 -1
   tr_test 'clean up old Adb archive' "rm -Rf wovtools/db/archive/A*" 0 -1
 
   tr_test 'create a Wov database instance but missing values' \

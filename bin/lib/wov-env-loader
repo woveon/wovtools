@@ -154,7 +154,7 @@ function getWovProjectVars()
   # --------------------------------------------------------------------- 
   # Merge if out of date
   if [ ${WOV_CONFIGFILE_MAINRAW} -nt ${WOV_CONFIGFILE_MERGED} ] || [ ${WOV_CONFIGFILE_MINERAW} -nt ${WOV_CONFIGFILE_MERGED} ]; then
-    # echo "... merged file out of date, creating: ${WOV_CONFIGFILE_MERGED}"
+    l_debug "... merged file out of date, creating: ${WOV_CONFIGFILE_MERGED}"
     mkdir -m 700 -p ${WOV_CACHEDIR}
     echo "" > ${WOV_CONFIGFILE_MERGED}
     chmod 600 ${WOV_CONFIGFILE_MERGED}
@@ -168,6 +168,8 @@ function getWovProjectVars()
       if [ "$F2a" != "0" ]; then printf "\n\nERROR: ${WOV_CONFIGFILE_MINE} is not properly formatted.\n${F2}\n\n"; fi
       exit 1;
     fi
+  else
+    l_debug "... merged file current"
   fi
 
 

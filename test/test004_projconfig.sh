@@ -160,14 +160,14 @@ if [ `tr_istesting ; echo $?` -eq 1 ]; then
   tr_section "naming and repos"
 
   unset wov_REPO_TYPE wov_REPO_EXT wov_REPO_MSCODE
-  tr_test "many passing" 'iProjRepo_Naming MP P P MP ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '0' 'many' 'MP_P' ''
-  tr_test "many failing dir naming" 'iProjRepo_Naming MP P P1 MP1 ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '24' 'many' 'MP_P' ''
-  tr_test "many failing dir naming" 'iProjRepo_Naming MP P P MP1 ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '8' 'many' 'MP_P' ''
-  tr_test "many failing dir naming" 'iProjRepo_Naming MP P P1 MP ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '16' 'many' 'MP_P' ''
+  tr_test "many passing" 'iProjRepo_Naming MP P P MP ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '0' 'many' 'MP/P' ''
+  tr_test "many failing dir naming" 'iProjRepo_Naming MP P P1 MP1 ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '24' 'many' 'MP/P' ''
+  tr_test "many failing dir naming" 'iProjRepo_Naming MP P P MP1 ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '8' 'many' 'MP/P' ''
+  tr_test "many failing dir naming" 'iProjRepo_Naming MP P P1 MP ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '16' 'many' 'MP/P' ''
 
   mkdir 'src'
-  tr_test "single passing" 'iProjRepo_Naming MASTER PROJECT PROJECTmsc PROJECT ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '0' 'single' 'MASTER_PROJECT_PROJECTmsc' 'msc'
-  tr_test "single failing on dir" 'iProjRepo_Naming MASTER PROJECT PROJECTmsc _PROJECT ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '1' 'single' 'MASTER_PROJECT_PROJECTmsc' 'msc'
+  tr_test "single passing" 'iProjRepo_Naming MASTER PROJECT PROJECTmsc PROJECT ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '0' 'single' 'MASTER/PROJECT-PROJECTmsc' 'msc'
+  tr_test "single failing on dir" 'iProjRepo_Naming MASTER PROJECT PROJECTmsc _PROJECT ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '1' 'single' 'MASTER/PROJECT-PROJECTmsc' 'msc'
   tr_test "single failing on dir" 'iProjRepo_Naming MASTER PROJECT _PROJECTmsc _PROJECT ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '3' 'single' '' ''
   tr_test "single failing on dir" 'iProjRepo_Naming MASTER PROJECT PROJECmsc PROJECT ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '2' 'single' '' ''
   tr_test "single failing on dir" 'iProjRepo_Naming MASTER PROJECT PROJECT PROJECT ; printf "$?\n${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 4 '4' 'single' '' ''
@@ -184,7 +184,7 @@ EOF
 
   unset wov_REPO_TYPE wov_REPO_EXT wov_REPO_MSCODE
   rmdir src
-  tr_test "many, interactively" 'iProjRepo_InteractiveNaming MASTER PROJECT C D && printf "${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 3 'many' 'MASTER_PROJECT' '' <<EOF
+  tr_test "many, interactively" 'iProjRepo_InteractiveNaming MASTER PROJECT C D && printf "${wov_REPO_TYPE}\n${wov_REPO_EXT}\n${wov_REPO_MSCODE}\n"' 0 3 'many' 'MASTER/PROJECT' '' <<EOF
 n
 MASTER_PROJECT
 

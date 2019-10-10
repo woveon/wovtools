@@ -234,7 +234,7 @@ EOF
     l_debug "looking for ${WOV_BASEDIR}/wovtools/secrets/$sf"
     if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/$sf" ]; then
       l_error "ERROR: file for secret build does not exist: 'wovtools/secrets/$sf'.\n"
-      l_error "  : Your wovtools/{config|local}.json has entries for files @: '.secrets.${WOV_STAGE}'.\n"
+      l_error "  : Your wovtools/(my)config.json has entries for files @: '.secrets.${WOV_STAGE}'.\n"
       exit 1
     fi
   done

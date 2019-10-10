@@ -59,7 +59,7 @@ if [ ${WOV_DODEFAULTCOMMAND} == 1 ]; then
   iLocalArchives_SEDBFiles "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_ME}" "${WOVDBNAME}"
 
   l_debug "Ensure entry in the Local Archives: ${WOVDBNAME}.json, ${WOVDBNAME}/schemas dir"
-  if [ -d "${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}/schemas" ]; then l_ "...existing WovDatabase Archive with that name."; fi
+  if [ -d "${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}/schemas" ]; then l_ "...existing WovDataBase Archive with that name."; fi
   mkdir -p -m 700 "${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}/schemas"
 
   if [ ! -e "${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}.json" ]; then

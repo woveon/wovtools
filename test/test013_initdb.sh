@@ -5,6 +5,7 @@
 tr_h1 "Init WovDataBase"
 
 PROJ=test1
+ME=$(cat ${HOME}/.wovtools | jq -r '.me')
 
 {
   tr_section 'initfortests'
@@ -32,11 +33,23 @@ PROJ=test1
   tr_test "should list it now" "wov-db -lwdb" 0 1 "Adb"
 
   tr_vverbose
-  tr_test 'existing database' "wov-init-wovdb Adb | grep 'WARNING' > /dev/null && echo 1" 0 1 1
+  tr_test 'existing database' "wov-init-wovdb Adb | grep '...existing WovDataBase' | wc -l | tr -d '[:space:]'" 0 1 2
 
-  tr_run "remove entries from myconfig for database" "jq -r 'del( .secrets.dev[] | select( . == \"Adb.json\" or . == \"Adb_dev.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
-  tr_test "ensure wovdb not in secrets" "jq -r '.secrets.dev[]' wovtools/config.json | grep Adb.json " 1 -1 
-  tr_test 'existing database but not in secrets' "wov-init-wovdb Adb | grep 'WARNING'" 0 -1
+  tr_run "remove entries from config for database in dev" \
+    "jq -r 'del( .secrets.dev[] | select( . == \"Adb.json\" or . == \"Adb_dev.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
+  tr_run "remove entries from config for database in prod" \
+    "jq -r 'del( .secrets.prod[] | select( . == \"Adb.json\" or . == \"Adb_prod.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
+  tr_run "remove entries from myconfig for database in prod" \
+    "jq -r 'del( .secrets.${ME}[] | select( . == \"Adb.json\" or . == \"Adb_${ME}.json\" ) )' wovtools/myconfig.json > wovtools/myconfig.json.1 ; mv wovtools/myconfig.json.1 wovtools/myconfig.json"
+
+  # tr_run "now it is: " "cat wovtools/config.json"
+  tr_test "ensure wovdb not in dev secrets"  "jq -r '.secrets.dev[]' wovtools/config.json | grep Adb.json " 1 -1 
+  tr_test "ensure wovdb not in prod secrets" "jq -r '.secrets.prod[]' wovtools/config.json | grep Adb.json " 1 -1 
+  tr_test "ensure wovdb not in me secrets"   "jq -r '.secrets.me[]' wovtools/myconfig.json | grep Adb.json " 1 -1 
+
+#  wov-init-wovdb --context wov-aws-va-grape-alywan-dev Adb
+#  exit 1
+  tr_test 'existing database but not in secrets' "wov-init-wovdb --context wov-aws-va-grape-alywan-dev Adb | grep '...existing WovDataBase'|  wc -l  | tr -d '[:space:]'" 0 -1
   tr_test "ensure wovdb back in secrets" "jq -r '.secrets.dev[]' wovtools/config.json | grep Adb.json " 0 -1 
   tr_test "secrets should have this" "jq -r '.secrets.prod[]' wovtools/config.json | grep Adb.json" 0 1 "Adb.json"
 

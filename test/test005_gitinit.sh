@@ -12,8 +12,9 @@ DOECHO=2
 
 
 # Configure a dummy local git repo
+DMN="dummymaster"
 DPN="dummyproject"
-REPODIR="`pwd`/${DPN}repo"
+REPODIR="`pwd`/${DPN}remoterepo"
 LADIR="`pwd`/${DPN}localarchives"
 
 FOLD=`tput cols`
@@ -23,19 +24,22 @@ tr_h1 "Git Init Tests"
 {
   tr_section "inittests"
 
+  SKIP TEST
+  This is a good test, but I don't have time to update it. Test 011 alreayd does these checks.
+
   WOV_ME='aaa'
-  rm -Rf ./${DPN} || exit 1
-  mkdir ${DPN} || exit 1
+  rm -Rf ./${DMN} || exit 1
+  mkdir ${DMN} || exit 1
   rm -Rf "${REPODIR}"
   rm -Rf "${LADIR}"
-  mkdir -p "${REPODIR}/${DPN}.git"
-  mkdir -p "${REPODIR}/${DPN}_secrets.git"
-  mkdir -p "${REPODIR}/${DPN}_dba.git"
-  mkdir -p "${REPODIR}/${DPN}_dsa.git"
-  git -C "${REPODIR}/${DPN}.git" init --bare
-  git -C "${REPODIR}/${DPN}_secrets.git" init --bare
-  git -C "${REPODIR}/${DPN}_dba.git" init --bare
-  git -C "${REPODIR}/${DPN}_dsa.git" init --bare
+  mkdir -p "${REPODIR}/${DMN}/${DPN}.git"         # code - per project
+  mkdir -p "${REPODIR}/${DMN}/sea/${WOV_ME}.git"  # sea  - per user in master
+  mkdir -p "${REPODIR}/${DMN}/${DPN}_dba.git"     # dba  - per project
+  mkdir -p "${REPODIR}/${DMN}/dsa.git"            # dsa  - per master
+  git -C   "${REPODIR}/${DMN}/${DPN}.git"        init --bare
+  git -C   "${REPODIR}/${DMN}/sea/${WOV_ME}.git" init --bare
+  git -C   "${REPODIR}/${DMN}/${DPN}_dba.git"    init --bare
+  git -C   "${REPODIR}/${DMN}/dsa.git"           init --bare
 
   tr_dir ./${DPN}
   WOV_BASEDIR=`pwd`
@@ -74,9 +78,10 @@ EOF
   tr_section "init-proj-local-archives"
 
   if [ "${LADIR}" == "" ]; then echo "ERROR: LADIR needs to be set"; exit 1; fi
+  tr_vverbose
 
   tr_test "Link project to local Archives, creating local archives as well" \
-    "iLocalArchives_LinkLocalArchives \".\" \"${DPN}\" \"${LADIR}/se\" \"${LADIR}/db\" \"${LADIR}/ds\" 'Bob Brown' 'bb@example.com' > /dev/null"  \
+    "iProjLocalArchives_LinkLocalArchives \".\" \"${DPN}\" \"${LADIR}/se\" \"${LADIR}/db\" \"${LADIR}/ds\" 'Bob Brown' 'bb@example.com' > /dev/null"  \
     0 1 ''
 
   tr_comment "test local archive creationg and git repo setup"

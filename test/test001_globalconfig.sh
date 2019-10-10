@@ -10,20 +10,21 @@ export PATH=$PATH:/usr/local/bin/wovlib
 . wov-env-common
 WOV_DEBUGMODE=1
 
-GWOVTOOLSBAK="${HOME}/.wovtools.`date +%s`"
-function finish()
-{
-  if [ -e "${HOME}/.wovtools" ]; then cp ~/.wovtools ~/.wovtools.lasttestrun; fi
-  if [ -e "${GWOVTOOLSBAK}" ]; then mv "${GWOVTOOLSBAK}" ~/.wovtools ; fi
-}
-trap finish EXIT
+#GWOVTOOLSBAK="${HOME}/.wovtools.`date +%s`"
+#function finish()
+#{
+#  if [ -e "${HOME}/.wovtools" ]; then cp ~/.wovtools ~/.wovtools.lasttestrun; fi
+#  if [ -e "${GWOVTOOLSBAK}" ]; then mv "${GWOVTOOLSBAK}" ~/.wovtools ; fi
+#}
+#trap finish EXIT
+
 
 #tr_tests_off
 
 tr_h1 "Global .wovtools Tests"
 
-tr_comment "backing up ~/.wovtools"
-if [ -e ~/.wovtools ]; then mv ~/.wovtools "${GWOVTOOLSBAK}"; fi
+tr_protectfile "${HOME}/.wovtools"
+rm ~/.wovtools
 
 {
   tr_section "Global-Config-Testing"
@@ -51,6 +52,7 @@ n
 CR
 Y
 EOF
+
 
   tr_test "should exist" "[ -e ~/.wovtools ] && echo 'true'" 0 1 'true' 
   tr_test "secrets archives should exist" "[ -e ~/.wovtools_sea ] && echo '1'" 0 1 '1'
@@ -91,27 +93,29 @@ tr_tests_on
   tr_section "wov-env-common-tests"
 
 
-  tr_test "Project Repo Name : Normal Call" \
-    'doGetProjectRepoName "PROJECTNAME"' 1 1 'CR/UNKNOWN'
-  tr_test "Project Repo Name : Normal Call with User Provided repo ext" \
-    'doGetProjectRepoName "PROJECTNAME" "EXT"' 0 1 'CR/EXT'
+  tr_run "~/.wovtools now" "cat ~/.wovtools"
+
+#  tr_test "Project Repo Name : Normal Call" \
+#    'doGetProjectRepoName "PROJECTNAME"' 1 1 'CR/UNKNOWN'
+#  tr_test "Project Repo Name : Normal Call with User Provided repo ext" \
+#    'doGetProjectRepoName "PROJECTNAME" "EXT"' 0 1 'CR/EXT'
 
   tr_comment "add to ~/.wovtools the .projects.PROJECTNAME.[dir|repo|repoext]"
   cat ~/.wovtools | jq -r '.projects.PROJECTNAME={dir : "DIR", repo : "REPO", repobase: "REPOBASE"}' > ~/.wovtools.1 && mv ~/.wovtools.1 ~/.wovtools
 
-  tr_test "Project Repo Name : Master: User Provided" \
-    'doGetProjectRepoName "PROJECTNAME" "USERPROVIDED" "MSREPO" "MSREPOBASE"' 0 1 'MSREPOBASE/USERPROVIDED'
-  tr_test "Project Repo Name : Master: Default" \
-    'doGetProjectRepoName "PROJECTNAME" "" "MSREPO" "MSREPOBASE"' 0 1 'MSREPOBASE/MSREPO'
-  tr_test "Project Repo Name : Master: Read from WovTools" \
-    'doGetProjectRepoName "PROJECTNAME" "USERPROVIDED" "" ""' 0 1 'REPOBASE/USERPROVIDED'
-  tr_test "Project Repo Name : Master: Read from WovTools even though some data passed in" \
-    'doGetProjectRepoName "PROJECTNAME" "" "MSREPO" ""' 0 1 'REPOBASE/REPO'
+#  tr_test "Project Repo Name : Master: User Provided" \
+#    'doGetProjectRepoName "PROJECTNAME" "USERPROVIDED" "MSREPO" "MSREPOBASE"' 0 1 'MSREPOBASE/USERPROVIDED'
+#  tr_test "Project Repo Name : Master: Default" \
+#    'doGetProjectRepoName "PROJECTNAME" "" "MSREPO" "MSREPOBASE"' 0 1 'MSREPOBASE/MSREPO'
+#  tr_test "Project Repo Name : Master: Read from WovTools" \
+#    'doGetProjectRepoName "PROJECTNAME" "USERPROVIDED" "" ""' 0 1 'REPOBASE/USERPROVIDED'
+#  tr_test "Project Repo Name : Master: Read from WovTools even though some data passed in" \
+#    'doGetProjectRepoName "PROJECTNAME" "" "MSREPO" ""' 0 1 'REPOBASE/REPO'
 
-  tr_test "Project Repo Name : Normal Call" \
-    'doGetProjectRepoName "PROJECTNAME"' 0 1 'REPOBASE/REPO'
-  tr_test "Project Repo Name : Normal Call with User Provided repo ext" \
-    'doGetProjectRepoName "PROJECTNAME" "EXT"' 0 1 'REPOBASE/EXT'
+#  tr_test "Project Repo Name : Normal Call" \
+#    'doGetProjectRepoName "PROJECTNAME"' 0 1 'REPOBASE/REPO'
+#  tr_test "Project Repo Name : Normal Call with User Provided repo ext" \
+#    'doGetProjectRepoName "PROJECTNAME" "EXT"' 0 1 'REPOBASE/EXT'
 
 
   tr_section "/wov-env-common-tests"

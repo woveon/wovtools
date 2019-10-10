@@ -15,9 +15,11 @@ function l_title()
   echo
   echo
   printf -- "=%.0s" `seq 1 ${FOLD}`
+  printf -- "\n"
   figlet -w ${FOLD} -- "${*}"
   # printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
   printf -- "=%.0s" `seq 1 ${FOLD}`
+  printf -- "\n"
 }
 
 function l_subtitle() 
@@ -34,6 +36,7 @@ function l_subtitle()
   figlet -f "smslant"  -w ${FOLD} -- "${*}"
   # printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
   printf -- "-%.0s" `seq 1 ${FOLD}`
+  printf -- "\n"
 }
 
 function l_block() 
@@ -46,8 +49,10 @@ function l_block()
   fi
   local headl=${#head}
   printf -- "-%.0s" `seq 1 ${FOLD}`
+  printf -- "\n"
   printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
   printf -- "-%.0s" `seq 1 ${FOLD}`
+  printf -- "\n"
 }
 function l_h1() 
 {
@@ -60,8 +65,10 @@ function l_h1()
   local headl=${#head}
   echo ""
   printf -- "=%.0s" `seq 1 ${FOLD}`
+  printf -- "\n"
   printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
   printf -- "=%.0s" `seq 1 ${FOLD}`
+  printf -- "\n"
 }
 
 function l_h2() 
@@ -75,8 +82,10 @@ function l_h2()
   local headl=${#head}
   echo ""
   printf -- "-%.0s" `seq 1 ${FOLD}`
+  printf -- "\n"
   printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
   printf -- "-%.0s" `seq 1 ${FOLD}`
+  printf -- "\n"
 }
 
 function l_h3() 
@@ -91,6 +100,7 @@ function l_h3()
   echo ""
   printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
   printf -- "-%.0s" `seq 1 ${FOLD}`
+  printf -- "\n"
 }
 
 
@@ -149,7 +159,7 @@ function l_debug()
     text="${*}"
     if [ "${WOV_DEBUGMODE}" == "1" ]; then head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})DEBUG: "; fi
     # printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat 
-    _l_ "${head}" "${text}"
+    _l_ "${head}" "${text}" | >&2 cat
   fi
 }
 
@@ -159,7 +169,7 @@ function l_error()
   local text="${*}"
   local head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})ERROR  : "
   # printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat
-  _l_ "${head}" "${text}"
+  _l_ "${head}" "${text}" | >&2 cat
 }
 # Warning logging
 function l_warn()
@@ -167,5 +177,5 @@ function l_warn()
   local text="${*}"
   local head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})WARNING: "
   # printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/" | >&2 cat
-  _l_ "${head}" "${text}"
+  _l_ "${head}" "${text}" | >&2 cat
 }

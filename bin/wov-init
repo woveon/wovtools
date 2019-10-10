@@ -245,16 +245,40 @@ l_         "Your local archives store data and configuration used by all project
 # ---------------------------------------------------------------------
 iProjLocalArchives_InteractiveUpdate "${OP_LOCALARCHIVEDEFAULT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" ; Re=$?
 
-# ---------------------------------------------------------------------
-l_verbose "Link wovtools directory to Local Archives (create as needed)"
-# ---------------------------------------------------------------------
-iProjLocalArchives_LinkLocalArchives "." "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" "${WOV_USERNAME}" "${WOV_USEREMAIL}" ; Re=$?
 
-# ---------------------------------------------------------------------
-l_subtitle "Connect Local Archives"
-l_         "Connect your project\'s Local Archives to their remote repositories."
-# ---------------------------------------------------------------------
-iProjLocalArchives_InteractiveSetRemoteRepos 0 "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}"
+## ---------------------------------------------------------------------
+#l_verbose "... creating ${WOV_BASEDIR}/wovtools/[db|ds] directories"
+## ---------------------------------------------------------------------
+#if [ ! -e "${WOV_BASEDIR}/wovtools/db" ]; then mkdir -p -m 700 "${WOV_BASEDIR}/wovtools/db" ; fi
+#if [ ! -e "${WOV_BASEDIR}/wovtools/ds" ]; then mkdir -p -m 700 "${WOV_BASEDIR}/wovtools/ds" ; fi
+
+
+ra=$(git -C "${WOV_BASEDIR}" config --get remote.origin.url)
+rabase=$(git -C "${WOV_BASEDIR}" config --get remote.origin.url | rev | cut -d'/' -f2- | rev)
+l_ "...ensure SECRETS local archive"
+l_ "             WOV_SEADIR: ${WOV_SEADIR}"
+l_ "                 rabase: ${rabase}" 
+l_ "                     ra: ${ra}" 
+l_ " OP_LOCALARCHIVEDEFAULT: ${OP_LOCALARCHIVEDEFAULT}"
+
+iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${OP_LOCALARCHIVEDEFAULT}/searchive" "se" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
+iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${OP_LOCALARCHIVEDEFAULT}/dbarchive" "db" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
+iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${OP_LOCALARCHIVEDEFAULT}/dsarchive" "ds" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
+
+# "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_USERNAME}" "${WOV_USEREMAIL}" "${WOV_ME}" "${WOV_SEADIR}" "${WOV_CODEREPOARCHIVE}" "${rabase}"
+
+## ---------------------------------------------------------------------
+#l_subtitle "Connect Local Archives"
+#l_         "Connect your project\'s Local Archives to their remote repositories."
+## ---------------------------------------------------------------------
+#iProjLocalArchives_InteractiveSetRemoteRepos 0 "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}"
+
+
+## ---------------------------------------------------------------------
+#l_verbose "Link wovtools directory to Local Archives (create as needed)"
+## ---------------------------------------------------------------------
+#iProjLocalArchives_LinkLocalArchives "." "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" "${WOV_USERNAME}" "${WOV_USEREMAIL}" "${WOV_ME}" ; Re=$?
+
 
 
 
@@ -415,14 +439,19 @@ else
   done
 fi
 l_ "microservices in project (codes) : ${ms_codes[@]}"
+l_ 'sdfdf 1'
 
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 if [ ${#ms_codes[@]} -eq 0 ]; then
+l_ 'sdfdf 2'
   l_warn "Could find no microservice(s) in this project. Skipping init of any microservices. Run wov-init-ms when you have one."
 
 else
+l_ 'sdfdf 3'
+  l_ "mscodes ${ms_codes[@]}"
+  l_ "msdirs ${ms_dirs[@]}"
   for $i in `seq 0 ${#ms_dirs}`; do
     ms_dir="${ms_dirs[$i]}"
     ms_code="${ms_codes[$i]}"
@@ -433,6 +462,7 @@ else
     wov-init-ms --repo-entry "aws" --ms "${WOV_PROJECT}${ms_dir}"
   done
 fi
+l_ 'sdfdf 4'
 
 
 ## ---------------------------------------------------------------------
@@ -529,6 +559,7 @@ fi
 #fi
 
 # For some reason, the merged file is bad here so delete it and it will be rebuilt
+l_ asdfadsf
 rm ${WOV_BASEDIR}/wovtools/cache/.merged.json
 wov-env-build -f --config
 

@@ -700,7 +700,9 @@ function iProj_Config_MergeToSecrets()
   shift
   shift
 
+#  cat ${configfile}
   for f in ${*}; do
+    l_debug "f ${f}"
     local r=`jq -r ".secrets.${stage} | index( \"${f}\" )" "${configfile}"`
     if [ "${r}" == "null" ]; then
       l_debug "add in to secrets.${stage}: ${f}"
@@ -863,18 +865,18 @@ function iProjRepo_InteractiveNaming()
 # ---------------------------------------------------------------------
 # Generates the Git Repository Name from params
 # ---------------------------------------------------------------------
-function GenRepoName()
-{
-  local MP="$1"
-  local P="$2"
-  local MSC="$3"   # or null
-  local retval=""
-
-  if   [ "${MSC}" == "" ]; then retval="${MP}/${P}"
-  else retval="${MP}/${P}-${P}${MSC}"; fi
-
-  echo "$retval"
-}
+#function GenRepoName()
+#{
+#  local MP="$1"
+#  local P="$2"
+#  local MSC="$3"   # or null
+#  local retval=""
+#
+#  if   [ "${MSC}" == "" ]; then retval="${MP}/${P}"
+#  else retval="${MP}/${P}-${P}${MSC}"; fi
+#
+#  echo "$retval"
+#}
 
 # ---------------------------------------------------------------------
 # Figures out the params from environment and then call GenRepoName.
@@ -896,6 +898,7 @@ function GenRepoName()
 # ---------------------------------------------------------------------
 function iProjRepo_Naming()
 {
+  remote this too?
   local retval=0
   local MP="$1"    # WOV_MASTERPROJECT
   local P="$2"     # WOV_PROJECT
@@ -924,7 +927,8 @@ function iProjRepo_Naming()
       else
         RECIPES+=( "${wov_REPO_MSCODE}" )
         # export wov_REPO_EXT="${MP}_${P}_${P}${wov_REPO_MSCODE}"
-        export wov_REPO_EXT=$(GenRepoName "${MP}" "${P}" "${wov_REPO_MSCODE}")
+        # export wov_REPO_EXT=$(GenRepoName "${MP}" "${P}" "${wov_REPO_MSCODE}")
+        export wov_REPO_EXT=$(WovPathExt "PR" "${MP}" "${P}" "${wov_REPO_MSCODE}")
       fi
     fi
 
@@ -934,7 +938,8 @@ function iProjRepo_Naming()
     if [ "${MP}" != "${DD}" ]; then l_warn "Your project parent directory '${DD}' is not the master project name '${MP}'."; retval=$((retval+8)); fi
     if [ "${P}" != "${D}"   ]; then l_warn "Your project directory is not the project name."; retval=$((retval+16)); fi
     # export wov_REPO_EXT="${MP}_${P}"
-    export wov_REPO_EXT=$(GenRepoName "${MP}" "${P}")
+    # export wov_REPO_EXT=$(GenRepoName "${MP}" "${P}")
+    export wov_REPO_EXT=$(WovPathExt "PR" "${MP}" "${P}")
   fi
 
   # >&2 printf "exit set wov_REPO_TYPE: ${wov_REPO_TYPE}\n"
@@ -1165,70 +1170,388 @@ function iLocalArchives_CheckDirs()
 
 
 # --------------------------------------------------------------------- 
-# Assuming local archive directories exist, link to them for the project.
+# Try to fetch local archives
+# $1 - basedir (of project)
+# $2 - me
+# $3 - subs (JSON)
 # --------------------------------------------------------------------- 
-function iProjLocalArchives_LinkLocalArchives() 
+function iProjLocalArchives_FetchSubs() 
 {
-  local retval=0
-  local BASEDIR=$1
-  local MASTERPROJECT=$2  # WOV_MASTERPROJECT
-  local PROJECT=$3
-  local SEADIR=$4         # WOV_SEADIR   - one per master project's user, but only one user so one directory is fine
-  local DBADIR=$5         # WOV_DBADIR   - one per master project's projects
-  local DSADIR=$6         # WOV_DSADIR   - one per master project
-  local USERNAME=$7       # WOV_USERNAME
-  local USEREMAIL=$8      # WOV_USEREMAIL
+  local basedir=$1
+  local me=$2
+  local subs=$3
+  if [ ${#@} -ne 3 ]; then l_error "Bad number of params"; exit 1; fi
 
 
-  l_verbose "... creating ${BASEDIR}/wovtools/[db|ds] directories"
-  if [ ! -e "${BASEDIR}/wovtools/db" ]; then mkdir -p -m 700 "${BASEDIR}/wovtools/db" ; fi
-  if [ ! -e "${BASEDIR}/wovtools/ds" ]; then mkdir -p -m 700 "${BASEDIR}/wovtools/ds" ; fi
+  l_verbose "clone in ${subs}"
+  l_verbose " # subs $(echo "$subs" | jq -r "length")"
+  local max=$(echo "$subs" | jq -r "length")
+  local s=
+  local dir=
+  local repo=
+  local reposerver=
+  local repobranch=
+  local atype=
 
-  l_verbose "... ensure MasterProject exists in Local Archive Directories and is a git repo" 
-  local LADIRS=( "${SEADIR}/${MASTERPROJECT}_sea" "${DBADIR}/${MASTERPROJECT}/${PROJECT}_dba" "${DSADIR}/${MASTERPROJECT}_dsa" )
 
-  for f in ${LADIRS[@]}; do
-    local laname=`basename "$f"`
-    l_verbose "  ...Local Archive : ${laname}"
-    if [ ! -e "${f}/" ]; then mkdir -p -m 700 "${f}"; fi
-    if [ ! -d "${f}/.git" ]; then
-      l_ "  ...making '${laname}' local archive a git repo and making first commit."
-      git -C "${f}" init
-      git -C "${f}" config user.name "${USERNAME}"
-      git -C "${f}" config user.email "${USEREMAIL}"
-      if [ ! -e "${f}/.gitignore" ]; then
-        touch "${f}/.gitignore"
-        chmod 700 "${f}/.gitignore"
-        printf "*.swp\n.DS_Store\n" > "${f}/.gitignore"
+  if [ $max -gt 0 ]; then
+    max=$((max-1))  # so it is base 0
+    for i in `seq 0 $max`; do
+      # repobranch="${me}" # if [ "${repo: -4}" == "_sea" ]; then repobranch="master"; fi
+      s=$(echo "${subs}" | jq -r ".[$i]")
+      echo "s : $s"
+      A=( $(echo $s | jq -r ".dir, .repo, .reposerver, .repobranch, .atype") )
+      echo "A : ${A[@]}:${A[0]}:${A[1]}:${A[2]}:${A[3]}"
+      localdir="${A[0]}"
+      repo="${A[1]}"
+      reposerver="${A[2]}"
+      repobranch=$([ "${A[3]}" == "null" ] && echo "${me}" || echo "${A[3]}")
+      atype="${A[4]}"
+
+      echo "CLONE: git clone -b '${repobranch}' '${reposerver}/${repo}' '${localdir}'"
+      if [ -e "${localdir}" ]; then
+        l_debug "localdir exists... which is ok if it is to the same repo."
+        local localrepogitremote="$(git -C "${localdir}" config --get remote.origin.url)"
+        if [ "${reposerver}/${repo%.git}" == "${localrepogitremote%.git}" ]; then
+          l_verbose "Sub repository '${repo}' exists (same remote repository)."
+        else
+          l_error "Sub repository '${repo}' has existing directory to a different repository.\n"`
+                 `" -   current: ${localrepogitremote}\n"`
+                 `" - attempted: ${reposerver}/${repo}"
+          exit 1
+        fi
+      else
+        l_ "  ...cloning in ${repo} at '${localdir}'"
+        git clone -b "${repobranch}" "${reposerver}/${repo}" "${localdir}"
+        if [ $? -ne 0 ]; then l_error "Git issue. Exiting."; exit 1; fi
       fi
-      git -C "${f}" add .gitignore
-      git -C "${f}" commit -m "first commit"
-    fi
-  done
 
-  l_ "  ...symlink Secrets"
-  if [ -e "${BASEDIR}/wovtools/secrets" ]; then l_ "    ...existing connection to Secrets Archive. Skipping."
-  else
-    ln -s ${SEADIR}/${MASTERPROJECT}_sea ${BASEDIR}/wovtools/secrets ; Re=$?
-    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${BASEDIR}/wovtools/secrets' to '${SEADIR}/${MASTERPROJECT}_sea'."; exit 1; fi
+      if [ "${atype}" != "" ]; then
+        iProjLocalArchive_EnsureSymlink "${atype}" "${basedir}" "${localdir}"
+        if [ $? -ne 0 ]; then exit 1; fi
+      fi
+    done
   fi
 
-  l_ "  ...symlink Database Archive"
-  if [ -e "${BASEDIR}/wovtools/db/archive" ]; then l_ "    ...existing connection to Database Archive. Skipping."
-  else
-    ln -s "${DBADIR}/${MASTERPROJECT}/${PROJECT}_dba" "${BASEDIR}/wovtools/db/archive" ; Re=$?
-    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${BASEDIR}/wovtools/db/archive' to '${DBADIR}/${MASTERPROJECT}/${PROJECT}_dba'."; exit 1; fi
-  fi
+}
 
-  l_ "  ...symlink DataSet Archive"
-  if [ -e "${BASEDIR}/wovtools/ds/const" ]; then l_ "    ...existing connection to DataSet Archive. Skipping."
+
+# ---------------------------------------------------------------------
+# For the given archive type, symlink the repo. 
+# 
+# Used by wov-init and wov-checkout.
+# ---------------------------------------------------------------------
+function iProjLocalArchive_EnsureSymlink()
+{
+  local atype=$1
+  local basedir=$2
+  local localdir=$3
+  local symdir=
+  local retval=0
+
+  l_debug "... symlink archive '${atype}'"
+  case "${atype}" in
+    'se') symdir="${basedir}/wovtools/secrets"    ;;
+    'db') symdir="${basedir}/wovtools/db/archive"; mkdir -p -m 700 "${basedir}/wovtools/db" ;;
+    'ds') symdir="${basedir}/wovtools/ds/const"  ; mkdir -p -m 700 "${basedir}/wovtools/ds" ;;
+    *) l_error "Unknown Archive Type of '${atype}' when finding symdir."; retval=1 ;;
+  esac
+
+  l_debug "This just checks existance, not if actually pointing to expected directory."
+  if [ -e "${symdir}" ]; then l_ "    ...existing connection to Local Archive. No symlink changes."
   else
-    ln -s "${DSADIR}/${MASTERPROJECT}_dsa" "${BASEDIR}/wovtools/ds/const" ; Re=$?
-    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${BASEDIR}/wovtools/ds/const' to '${DSADIR}/${MASTERPROJECT}/dsa'."; exit 1; fi
+    l_debug "symlinking to '${localdir}' from '${symdir}'."
+    ln -s "${localdir}" "${symdir}"; Re=$?
+    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${symdir}' to '${localdir}'."; retval=1; fi
   fi
 
   return $retval
 }
+
+
+# --------------------------------------------------------------------- 
+# This ensures that a Local Archive is correctly configured for an 
+# initializing project, an in-process project or a checked out project.
+#
+# Assumption: Remote repo exists, but might not have correct repo so ask
+# 
+# This ensures the following:
+#  - local archive exists
+#  - remote of local archive is set
+#  - local archive is symlinked to from the project
+# --------------------------------------------------------------------- 
+function iProjLocalArchive_EnsureSetup()
+{
+  l_h1 'iProjLocalArchive_EnsureSetup'
+  local basedir="$1"
+  local rabase="$2"      # Remote Archive Base localtion (URL/path)
+  local labase="$3"
+  local atype="$4"       # Archive Type : se, db, ds
+  local masterp="$5"
+  local project="$6"
+  local me="$7"
+  local username="$8"
+  local useremail="$9"
+  if [ ${#@} -ne 9 ]; then l_error "Bad number of params to iProjLocalArchive_EnsureSetup"; exit 1; fi
+
+  if [ "${username}" == ""  ]; then l_error "No username passed to iProjLocalArchive_EnsureSetup"; exit 1; fi
+  if [ "${useremail}" == "" ]; then l_error "No useremail passed to iProjLocalArchive_EnsureSetup"; exit 1; fi
+
+  local Re=
+  local branch=
+  local raext=
+  local laext=
+  local la=
+  local ra=
+  local isnewgit=0
+  local createbranch=0
+  local symdir=
+  local curremotetepo=
+  
+  # Only secrets uses the master branch
+  branch="${me}"
+  if [ "${atype}" == "se" ]; then branch="master"; fi
+
+  raext="$(WovPathExt ra "${atype}" "${masterp}" "${project}" "${me}")"
+  l_debug "raext '${raext}'"
+
+  laext="$(WovPathExt la "${atype}" "${masterp}" "${project}" "${me}")"
+  l_debug "laext '${laext}'"
+
+  la="${labase}/${laext}"
+  l_debug "la '${la}'"
+
+  ra="${rabase}/${raext}"
+  l_debug "ra '${ra}'"
+
+#  local basedir=$1
+#  local username=$4
+#  local useremail=$5
+#  local ladir=$7
+#  local projectcoderepobase=$8
+    # this has the code repo's extension removed
+#  if [ ${#@} != 8 ]; then l_error "Bad number of params to iProjLocalArchive_EnsureSetup" ; exit 1; fi
+
+  l_debug "Check remote archive exists"
+  git ls-remote "${rabase}/${raext}" ; Re=$?
+  if [ $Re -ne 0 ]; then
+    l_error "No remote repository found for archive '${atype}' at : '${rabase}/${raext}'."
+    exit 1
+  else
+    l_debug "Remote Repo found"
+  fi
+
+  l_debug "Check local archive exists, and create if it does not."
+  if [ ! -e "${la}" ]; then mkdir -p -m 700 "${la}}"; fi
+
+  l_debug "ensure local archive git is setup properly"
+  if [ ! -d "${la}/.git" ]; then
+    isnewgit=1
+    l_ "  ...making '${laext}' local archive a git repo and making first commit. : '${la}' : '${username}' '${useremail}'"
+    git -C "${la}" init
+    git -C "${la}" config user.name "${username}"
+    git -C "${la}" config user.email "${useremail}"
+  fi
+
+  l_debug "Check for non-'secret' branches."
+  if [ "${atype}" != "se" ]; then
+    l_verbose "Ensure branch for non secret repos (secrets runs in master since it is an entire repo for the user)"
+
+    l_verbose "new git repos or repos without the user branch need to have a branch created"
+    if [ $isnewgit -eq 1 ]; then createbranch=1;
+    else
+      git -C "${la}" rev-parse --verify "${me}" 2> /dev/null
+      if [ $? -ne 0 ]; then createbranch=1; fi
+    fi
+
+    l_debug "checkout/create user branch as needed"
+    if [ $createbranch -eq 1 ]; then
+      l_verbose "...need to create branch : '${la}' '${me}'"
+      git -C "${la}" checkout -b "${me}" ; Re=$?
+      if [ $Re -ne 0 ]; then l_error "Failed to 'create' branch '${me}' in Local Archive ${laext}. Not sure why?"; exit 1; fi
+    else
+      l_verbose "...no need to create branch, just checkout"
+      git -C "${la}" checkout "${me}"
+      if [ $? -ne 0 ]; then l_error "Failed to 'checkout' branch '${me}' in Local Archive ${laext}. Not sure why?"; exit 1; fi
+    fi
+
+  else
+    l_debug "  ... this is a SECRET branch."
+  fi
+
+  l_debug "Make sure .gitignore is good"
+  if [ ! -e "${la}/.gitignore" ]; then
+    touch "${la}/.gitignore"
+    chmod 700 "${la}/.gitignore"
+    printf "*.swp\n.DS_Store\n" > "${la}/.gitignore"
+    git -C "${la}" add .gitignore
+    if [ $? -ne 0 ]; then l_error "Failed adding .gitignore to local '${aype}' repo? : ${laext}"; exit 1; fi
+  fi
+
+  if [ $isnewgit -eq 1 ]; then
+    git -C "${la}" commit -m "first commit"
+  else
+    git -C "${la}" commit -m "branch for stage '${me}' added"
+  fi
+
+  iProjLocalArchive_EnsureSymlink "${atype}" "${basedir}" "${la}"
+  if [ $? -ne 0 ]; then exit 1; fi
+
+#  l_debug "... symlink archive '${atype}'"
+#  case "${atype}" in
+#    'se') symdir="${basedir}/wovtools/secrets"    ;;
+#    'db') symdir="${basedir}/wovtools/db/archive" ;;
+#    'ds') symdir="${basedir}/wovtools/ds/const"   ;;
+#    *) l_error "Unknown Archive Type of '${atype}' when finding symdir."; exit 1 ;;
+#  esac
+#
+#  l_debug "This just checks existance, not if actually pointing to expected directory."
+#  if [ -e "${symdir}" ]; then l_ "    ...existing connection to Local Archive. Skipping."
+#  else
+#    l_debug "symlinking to '${la}' from '${symdir}'."
+#    ln -s "${la}" "${symdir}"; Re=$?
+#    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${symdir}' to '${la}'."; exit 1; fi
+#  fi
+
+  l_ "...now ensuring remote archive"
+  l_debug "now that the local archive is created and symlinked, set remote archive"
+
+  l_debug "get local archive remote origin, minus any .get extension"
+  curremoterepo="$(git -C "${la}" config --get remote.origin.url)" ; Re=$?
+  curremoterepo="${curremoterepo%.git}"
+  if [ $Re -ne 0 ]; then
+    local rtest=
+
+    l_debug "no remote origin, so set it to '${ra}''"
+    git -C "${la}" remote add origin "${ra}"
+    if [ $? -ne 0 ]; then l_error "Could not set remote for local archive '${atype}' : '${la}' -> '${ra}'"; exit 1; fi
+
+    l_debug "now test remote"
+    rtest=$(git -C "${la}" remote -v) ; Re=$?
+    if [ $Re -ne 0 ]; then l_error "Failed remote for local archive '${atype}' : '${la}' -> '${ra}'"; exit 1;
+    elif [ "${rtest}" == "" ] ; then l_error "Remote for local archive '${atype}' is nothing. : '${la}' -> '${ra}'"; exit 1; fi
+  fi
+
+  if [ $createbranch -eq 1 ]; then
+    l_debug "created branch so need to set upstream"
+    git -C "${la}" push --set-upstream origin "${branch}"
+    if [ $? -ne 0 ]; then l_error "Pushing upstream branch '${branch}' to remote failed."; fi
+  fi
+
+}
+
+
+## --------------------------------------------------------------------- 
+## Assuming local archive directories exist, link to them for the project.
+## --------------------------------------------------------------------- 
+#function iProjLocalArchives_LinkLocalArchives() 
+#{
+#  l_h1 "No longer used"
+#  exit 1
+#
+#  local retval=0
+#  local BASEDIR=$1
+#  local MASTERPROJECT=$2  # WOV_MASTERPROJECT
+#  local PROJECT=$3
+#  local SEADIR=$4         # WOV_SEADIR   - one per master project's user, but only one user so one directory is fine
+#  local DBADIR=$5         # WOV_DBADIR   - one per master project's projects
+#  local DSADIR=$6         # WOV_DSADIR   - one per master project
+#  local USERNAME=$7       # WOV_USERNAME
+#  local USEREMAIL=$8      # WOV_USEREMAIL
+#  local ME=$9             # WOV_ME
+#
+#  if [ "$ME" == "" ]; then
+#    l_error "Need more params to iProjLocalArchives_LinkLocalArchives"
+#    exit 1
+#  fi
+#
+#  l_verbose "... creating ${BASEDIR}/wovtools/[db|ds] directories"
+#  if [ ! -e "${BASEDIR}/wovtools/db" ]; then mkdir -p -m 700 "${BASEDIR}/wovtools/db" ; fi
+#  if [ ! -e "${BASEDIR}/wovtools/ds" ]; then mkdir -p -m 700 "${BASEDIR}/wovtools/ds" ; fi
+#
+#  l_verbose "... ensure MasterProject exists in Local Archive Directories and is a git repo" 
+#  local LADIRS=( "${SEADIR}/${MASTERPROJECT}_sea" "${DBADIR}/${MASTERPROJECT}/${PROJECT}_dba" "${DSADIR}/${MASTERPROJECT}_dsa" )
+#
+#  for f in ${LADIRS[@]}; do
+#    local laname=`basename "$f"`
+#    local isnewgit=0
+#    local createbranch=0
+#
+#    l_verbose "  ...Local Archive : ${laname} : ${f}"
+#    if [ ! -e "${f}/" ]; then mkdir -p -m 700 "${f}"; fi
+#    if [ ! -d "${f}/.git" ]; then
+#      isnewgit=1
+#      l_ "  ...making '${laname}' local archive a git repo and making first commit."
+#      git -C "${f}" init
+#      git -C "${f}" config user.name "${USERNAME}"
+#      git -C "${f}" config user.email "${USEREMAIL}"
+#    fi
+#
+#    l_debug "Check for non-'secret' branches."
+#    if [ "${f: -4}" != "_sea" ]; then
+#      l_debug "Ensure branch for non secret repos (secrets runs in master since it is an entire repo for the user)"
+#
+#      l_debug "new git repos or repos without the user branch need to have a branch created"
+#      if [ $isnewgit -eq 1 ]; then createbranch=1;
+#      else
+#        git -C "${f}" rev-parse --verify "${ME}" 2> /dev/null
+#        if [ $? -ne 0 ]; then createbranch=1; fi
+#      fi
+#
+#      l_debug "checkout/create user branch as needed"
+#      if [ $createbranch -eq 1 ]; then
+#        l_verbose "...need to create branch"
+#        git -C "${f}" checkout -b "${ME}"
+#        if [ $? -ne 0 ]; then l_error "Failed to 'create' branch '${ME}' in Local Archive ${f}. Not sure why?"; exit 1; fi
+#      else
+#        l_verbose "...no need to create branch, just checkout"
+#        git -C "${f}" checkout "${ME}"
+#        if [ $? -ne 0 ]; then l_error "Failed to 'checkout' branch '${ME}' in Local Archive ${f}. Not sure why?"; exit 1; fi
+#      fi
+#
+#    else
+#      l_debug "  ... this is a SECRET branches."
+#    fi
+#    l_debug "Make sure .gitignore is good"
+#    if [ ! -e "${f}/.gitignore" ]; then
+#      touch "${f}/.gitignore"
+#      chmod 700 "${f}/.gitignore"
+#      printf "*.swp\n.DS_Store\n" > "${f}/.gitignore"
+#      git -C "${f}" add .gitignore
+#    fi
+#
+#    if [ $isnewgit -eq 1 ]; then
+#      git -C "${f}" commit -m "first commit"
+#    else
+#      git -C "${f}" commit -m "branch for stage '${ME}' added"
+#    fi
+#  done
+#
+#  l_ "  ...symlink Secrets"
+#  if [ -e "${BASEDIR}/wovtools/secrets" ]; then l_ "    ...existing connection to Secrets Archive. Skipping."
+#  else
+#    set -x
+#    ln -s ${SEADIR}/${MASTERPROJECT}_sea ${BASEDIR}/wovtools/secrets ; Re=$?
+#    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${BASEDIR}/wovtools/secrets' to '${SEADIR}/${MASTERPROJECT}_sea'."; exit 1; fi
+#    set +x
+#  fi
+#
+#  l_ "  ...symlink Database Archive"
+#  if [ -e "${BASEDIR}/wovtools/db/archive" ]; then l_ "    ...existing connection to Database Archive. Skipping."
+#  else
+#    ln -s "${DBADIR}/${MASTERPROJECT}/${PROJECT}_dba" "${BASEDIR}/wovtools/db/archive" ; Re=$?
+#    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${BASEDIR}/wovtools/db/archive' to '${DBADIR}/${MASTERPROJECT}/${PROJECT}_dba'."; exit 1; fi
+#  fi
+#
+#  l_ "  ...symlink DataSet Archive"
+#  if [ -e "${BASEDIR}/wovtools/ds/const" ]; then l_ "    ...existing connection to DataSet Archive. Skipping."
+#  else
+#    ln -s "${DSADIR}/${MASTERPROJECT}_dsa" "${BASEDIR}/wovtools/ds/const" ; Re=$?
+#    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${BASEDIR}/wovtools/ds/const' to '${DSADIR}/${MASTERPROJECT}/dsa'."; exit 1; fi
+#  fi
+#
+#  return $retval
+#}
 
 
 # --------------------------------------------------------------------- 
@@ -1446,169 +1769,174 @@ function iProjLocalArchives_InteractiveUpdate()
 }
 
 
-# --------------------------------------------------------------------- 
-# Configure the remote git repo for project's Local Archives
-# --------------------------------------------------------------------- 
-function iProjLocalArchives_InteractiveSetRemoteRepos() 
-{
-  local retval=0
-  local askfirst=$1       # 1 to ask, 0 to accept vals
-  local BASEDIR=$2        # WOV_BASEDIR
-  local MASTER=$3       
-  local PROJECT=$4
-  local ME=$5
-  local sera=
-  local dbra=
-  local dsra=
-
-  if [ ${#@} != 5 ]; then l_error "Bad number of arguments in iProjLocalArchives_InteractiveSetRemoteRepos"; exit 1; fi 
-
-  # Guess at remote archive location (based upon code repo base (this removes master and project names from Code Repo's name))
-  echo "base $(git -C "${BASEDIR}" config --get remote.origin.url)"
-  rabase=$(git -C "${BASEDIR}" config --get remote.origin.url | rev | cut -d'/' -f3- | rev)
-  l_debug "rabase ${rabase}"
-  sera="${rabase}/${MASTER}/sea/${ME}.git"
-  l_debug "sera ${sera}"
-
-  # Set secrets remote origin if not set
-  RR=$(git -C "${BASEDIR}/wovtools/secrets" config --get remote.origin.url 2> /dev/null)
-  if [ "$?" != "0" ]; then
-    echo ""
-    l_ "...Local SECRETS Archive has no remote repository to push code to. Set that up now, and enter URL below."
-
-    while [ ${askfirst} -eq 1 ]; do
-      echo ""
-      read -r -p "Project Secrets Archive Remote Git repository (\"${sera}\") [Y/n]:  " A
-      case $A in
-        ""|[Yy][Ee][Ss]|[Yy])
-          break
-          ;;
-        [Nn][Oo]|[Nn])
-          read -r -p "  ok, enter git location: " sera
-          ;;
-        *)
-          echo "Invalid input... (${A})"
-          ;;
-      esac
-    done
-    # echo "  ... ${sera}"
-
-    # config repo
-    set -x
-    git -C "${BASEDIR}/wovtools/secrets" config user.name "${WOV_USERNAME}"
-    git -C "${BASEDIR}/wovtools/secrets" config user.email "${WOV_USEREMAIL}"
-    git -C "${BASEDIR}/wovtools/secrets" add .gitignore
-    git -C "${BASEDIR}/wovtools/secrets" commit -a -m "first commit"
-
-    # set remote origin
-    git -C "${BASEDIR}/wovtools/secrets" remote add origin ${sera}
-    if [ "$?" != "0" ]; then l_error "SECRETS ARCHIVE> Setting git remote origin failed."; exit 1; fi
-
-    # test newly set remote origin
-    RR=$(git -C "${BASEDIR}/wovtools/secrets" remote -v) ; Re=$?
-    if   [ $Re -ne 0 ]; then l_error "SECRETS ARCHIVE> Testing of remote git repo failed."; exit 1;
-    elif [ "${RR}" == "" ]; then l_error "SECRETS ARCHIVE> Remote git repo was not set correctly."; exit 1; fi
-
-    # set upstream
-    git -C "${BASEDIR}/wovtools/secrets" push --set-upstream origin master
-    if [ "$?" != "0" ]; then l_error "SECRETS ARCHIVE> Pushing upstream failed."; exit 1; fi
-    set +x
-  fi
-
-
-  # Set database remote origin if not set
-  dbra="${rabase}/${MASTER}/${PROJECT}_dba.git"
-  l_debug "dbra ${dbra}"
-  RR=$(git -C "${BASEDIR}/wovtools/db/archive" config --get remote.origin.url 2> /dev/null)
-  if [ "$?" != "0" ]; then
-    echo ""
-    l_ "...Local Database Archive repository has no remote repository to push code to. Set that up now, and enter URL below."
-
-    while [ ${askfirst} -eq 1 ]; do
-      echo ""
-      read -r -p "Project Database Archive Remote Git repository (\"${dbra}\") [Y/n]:  " A
-      case $A in
-        ""|[Yy][Ee][Ss]|[Yy])
-          break
-          ;;
-        [Nn][Oo]|[Nn])
-          read -r -p "  ok, enter git location: " dbra
-          ;;
-        *)
-          echo "Invalid input... (${A})"
-          ;;
-      esac
-    done
-    # echo "  ... ${dbra}"
-
-    # config repo
-    git -C "${BASEDIR}/wovtools/db/archive" config user.name "${WOV_USERNAME}"
-    git -C "${BASEDIR}/wovtools/db/archive" config user.email "${WOV_USEREMAIL}"
-    git -C "${BASEDIR}/wovtools/db/archive" add .gitignore
-    git -C "${BASEDIR}/wovtools/db/archive" commit -a -m "first commit"
-
-    # set remote origin
-    git -C "${BASEDIR}/wovtools/db/archive" remote add origin ${dbra}
-    if [ "$?" != "0" ]; then l_error "ARCHIVE> Setting git remote origin failed."; exit 1; fi
-
-    # test newly set remote origin
-    RR=$(git -C "${BASEDIR}/wovtools/db/archive" remote -v) ; Re=$?
-    if   [ $Re -ne 0 ]; then l_error "Database ARCHIVE> Testing of remote git repo failed."; exit 1;
-    elif [ "${RR}" == "" ]; then l_error "Database SECRETS ARCHIVE> Remote git repo was not set correctly."; exit 1; fi
-
-    # set upstream
-    git -C "${BASEDIR}/wovtools/db/archive" push --set-upstream origin master
-    if [ "$?" != "0" ]; then l_error "DatabaseARCHIVE> Pushing upstream failed."; exit 1; fi
-  fi
-
-
-  # Set dataset remote origin if not set
-  dsra="${rabase}/${MASTER}/dsa.git"
-  l_debug "dsra ${dsra}"
-  RR=$(git -C "${BASEDIR}/wovtools/ds/const" config --get remote.origin.url 2> /dev/null)
-  if [ "$?" != "0" ]; then
-    echo ""
-    l_ "  ...Local DataSet Archive repository has no remote repository to push code to. Set that up now, and enter URL below."
-
-    while [ ${askfirst} -eq 1 ]; do
-      echo ""
-      read -r -p "Project DataSet Archive Remote Git repository (\"${dsra}\") [Y/n]:  " A
-      case $A in
-        ""|[Yy][Ee][Ss]|[Yy])
-          break
-          ;;
-        [Nn][Oo]|[Nn])
-          read -r -p "  ok, enter git location: " dsra
-          ;;
-        *)
-          echo "Invalid input... (${A})"
-          ;;
-      esac
-    done
-    # echo "  ... ${dsra}"
-
-    # config repo
-    git -C "${BASEDIR}/wovtools/ds/const" config user.name "${WOV_USERNAME}"
-    git -C "${BASEDIR}/wovtools/ds/const" config user.email "${WOV_USEREMAIL}"
-    git -C "${BASEDIR}/wovtools/ds/const" add .gitignore
-    git -C "${BASEDIR}/wovtools/ds/const" commit -a -m "first commit"
-
-    # set remote origin
-    git -C "${BASEDIR}/wovtools/ds/const" remote add origin ${dsra}
-    if [ "$?" != "0" ]; then l_error "DataSet ARCHIVE> Setting git remote origin failed."; exit 1; fi
-
-    # test newly set remote origin
-    RR=$(git -C "${BASEDIR}/wovtools/ds/const" remote -v) ; Re=$?
-    if   [ $Re -ne 0 ]; then l_error "DataSet ARCHIVE> Testing of remote git repo failed."; exit 1;
-    elif [ "${RR}" == "" ]; then l_error "DataSet SECRETS ARCHIVE> Remote git repo was not set correctly."; exit 1; fi
-
-    # set upstream
-    git -C "${BASEDIR}/wovtools/ds/const" push --set-upstream origin master
-    if [ "$?" != "0" ]; then l_error "DataSet Archive> Pushing upstream failed."; exit 1; fi
-  fi
-
-  return $retval
-}
+## --------------------------------------------------------------------- 
+## Configure the remote git repo for project's Local Archives
+## --------------------------------------------------------------------- 
+#function iProjLocalArchives_InteractiveSetRemoteRepos() 
+#{
+#  l_h1 "No longer used"
+#  exit 1
+#
+#  local retval=0
+#  local askfirst=$1       # 1 to ask, 0 to accept vals
+#  local BASEDIR=$2        # WOV_BASEDIR
+#  local MASTER=$3       
+#  local PROJECT=$4
+#  local ME=$5
+#  local sera=
+#  local dbra=
+#  local dsra=
+#
+#  if [ ${#@} != 5 ]; then l_error "Bad number of arguments in iProjLocalArchives_InteractiveSetRemoteRepos"; exit 1; fi 
+#
+#
+#
+#  # Guess at remote archive location (based upon code repo base (this removes master and project names from Code Repo's name))
+#  l_debug "base $(git -C "${BASEDIR}" config --get remote.origin.url)"
+#  rabase=$(git -C "${BASEDIR}" config --get remote.origin.url | rev | cut -d'/' -f3- | rev)
+#  l_debug "rabase ${rabase}"
+#  sera="${rabase}/${MASTER}/sea/${ME}.git"
+#  l_debug "sera ${sera}"
+#
+#  # Set secrets remote origin if not set
+#  RR=$(git -C "${BASEDIR}/wovtools/secrets" config --get remote.origin.url 2> /dev/null)
+#  if [ "$?" != "0" ]; then
+#    echo ""
+#    l_ "...Local SECRETS Archive has no remote repository to push code to. Set that up now, and enter URL below."
+#
+#    while [ ${askfirst} -eq 1 ]; do
+#      echo ""
+#      read -r -p "Project Secrets Archive Remote Git repository (\"${sera}\") [Y/n]:  " A
+#      case $A in
+#        ""|[Yy][Ee][Ss]|[Yy])
+#          break
+#          ;;
+#        [Nn][Oo]|[Nn])
+#          read -r -p "  ok, enter git location: " sera
+#          ;;
+#        *)
+#          echo "Invalid input... (${A})"
+#          ;;
+#      esac
+#    done
+#    # echo "  ... ${sera}"
+#
+#    # config repo
+#    set -x
+#    git -C "${BASEDIR}/wovtools/secrets" config user.name "${WOV_USERNAME}"
+#    git -C "${BASEDIR}/wovtools/secrets" config user.email "${WOV_USEREMAIL}"
+#    git -C "${BASEDIR}/wovtools/secrets" add .gitignore
+#    git -C "${BASEDIR}/wovtools/secrets" commit -a -m "first commit"
+#
+#    # set remote origin
+#    git -C "${BASEDIR}/wovtools/secrets" remote add origin ${sera}
+#    if [ "$?" != "0" ]; then l_error "SECRETS ARCHIVE> Setting git remote origin failed."; exit 1; fi
+#
+#    # test newly set remote origin
+#    RR=$(git -C "${BASEDIR}/wovtools/secrets" remote -v) ; Re=$?
+#    if   [ $Re -ne 0 ]; then l_error "SECRETS ARCHIVE> Testing of remote git repo failed."; exit 1;
+#    elif [ "${RR}" == "" ]; then l_error "SECRETS ARCHIVE> Remote git repo was not set correctly."; exit 1; fi
+#
+#    # set upstream
+#    git -C "${BASEDIR}/wovtools/secrets" push --set-upstream origin master
+#    if [ "$?" != "0" ]; then l_error "SECRETS ARCHIVE> Pushing upstream failed."; exit 1; fi
+#    set +x
+#  fi
+#
+#
+#  # Set database remote origin if not set
+#  dbra="${rabase}/${MASTER}/${PROJECT}_dba.git"
+#  l_debug "dbra ${dbra}"
+#  RR=$(git -C "${BASEDIR}/wovtools/db/archive" config --get remote.origin.url 2> /dev/null)
+#  if [ "$?" != "0" ]; then
+#    echo ""
+#    l_ "...Local Database Archive repository has no remote repository to push code to. Set that up now, and enter URL below."
+#
+#    while [ ${askfirst} -eq 1 ]; do
+#      echo ""
+#      read -r -p "Project Database Archive Remote Git repository (\"${dbra}\") [Y/n]:  " A
+#      case $A in
+#        ""|[Yy][Ee][Ss]|[Yy])
+#          break
+#          ;;
+#        [Nn][Oo]|[Nn])
+#          read -r -p "  ok, enter git location: " dbra
+#          ;;
+#        *)
+#          echo "Invalid input... (${A})"
+#          ;;
+#      esac
+#    done
+#    # echo "  ... ${dbra}"
+#
+#    # config repo
+#    git -C "${BASEDIR}/wovtools/db/archive" config user.name "${WOV_USERNAME}"
+#    git -C "${BASEDIR}/wovtools/db/archive" config user.email "${WOV_USEREMAIL}"
+#    git -C "${BASEDIR}/wovtools/db/archive" add .gitignore
+#    git -C "${BASEDIR}/wovtools/db/archive" commit -a -m "first commit"
+#
+#    # set remote origin
+#    git -C "${BASEDIR}/wovtools/db/archive" remote add origin ${dbra}
+#    if [ "$?" != "0" ]; then l_error "ARCHIVE> Setting git remote origin failed."; exit 1; fi
+#
+#    # test newly set remote origin
+#    RR=$(git -C "${BASEDIR}/wovtools/db/archive" remote -v) ; Re=$?
+#    if   [ $Re -ne 0 ]; then l_error "Database ARCHIVE> Testing of remote git repo failed."; exit 1;
+#    elif [ "${RR}" == "" ]; then l_error "Database SECRETS ARCHIVE> Remote git repo was not set correctly."; exit 1; fi
+#
+#    # set upstream
+#    git -C "${BASEDIR}/wovtools/db/archive" push --set-upstream origin master
+#    if [ "$?" != "0" ]; then l_error "DatabaseARCHIVE> Pushing upstream failed."; exit 1; fi
+#  fi
+#
+#
+#  # Set dataset remote origin if not set
+#  dsra="${rabase}/${MASTER}/dsa.git"
+#  l_debug "dsra ${dsra}"
+#  RR=$(git -C "${BASEDIR}/wovtools/ds/const" config --get remote.origin.url 2> /dev/null)
+#  if [ "$?" != "0" ]; then
+#    echo ""
+#    l_ "  ...Local DataSet Archive repository has no remote repository to push code to. Set that up now, and enter URL below."
+#
+#    while [ ${askfirst} -eq 1 ]; do
+#      echo ""
+#      read -r -p "Project DataSet Archive Remote Git repository (\"${dsra}\") [Y/n]:  " A
+#      case $A in
+#        ""|[Yy][Ee][Ss]|[Yy])
+#          break
+#          ;;
+#        [Nn][Oo]|[Nn])
+#          read -r -p "  ok, enter git location: " dsra
+#          ;;
+#        *)
+#          echo "Invalid input... (${A})"
+#          ;;
+#      esac
+#    done
+#    # echo "  ... ${dsra}"
+#
+#    # config repo
+#    git -C "${BASEDIR}/wovtools/ds/const" config user.name "${WOV_USERNAME}"
+#    git -C "${BASEDIR}/wovtools/ds/const" config user.email "${WOV_USEREMAIL}"
+#    git -C "${BASEDIR}/wovtools/ds/const" add .gitignore
+#    git -C "${BASEDIR}/wovtools/ds/const" commit -a -m "first commit"
+#
+#    # set remote origin
+#    git -C "${BASEDIR}/wovtools/ds/const" remote add origin ${dsra}
+#    if [ "$?" != "0" ]; then l_error "DataSet ARCHIVE> Setting git remote origin failed."; exit 1; fi
+#
+#    # test newly set remote origin
+#    RR=$(git -C "${BASEDIR}/wovtools/ds/const" remote -v) ; Re=$?
+#    if   [ $Re -ne 0 ]; then l_error "DataSet ARCHIVE> Testing of remote git repo failed."; exit 1;
+#    elif [ "${RR}" == "" ]; then l_error "DataSet SECRETS ARCHIVE> Remote git repo was not set correctly."; exit 1; fi
+#
+#    # set upstream
+#    git -C "${BASEDIR}/wovtools/ds/const" push --set-upstream origin master
+#    if [ "$?" != "0" ]; then l_error "DataSet Archive> Pushing upstream failed."; exit 1; fi
+#  fi
+#
+#  return $retval
+#}
 
 
 # ///////////////////////////////////////////////////////////////////// 

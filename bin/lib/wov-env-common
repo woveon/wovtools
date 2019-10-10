@@ -60,6 +60,7 @@ function WOV_getArchiveRelativePath()
 }
 
 
+
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 function exitIfProd()
@@ -163,50 +164,50 @@ function doResName()
 }
 
 
-# Return the git repo for a project/ms
+## Return the git repo for a project/ms
+##
+##  - If $3 $4 WOV_CODEREPOARCHIVE are "", it will fetch them from ~/.wovtools
+##  - If $3 or $4 are null, it assumes they were already fetched and are null
+##
+## $1 - team project name
+## $2 - user provided repo extension (user provided or from PROJECT_PROJECTMSCODE) ex. alywan_alywandata (priority over $4)
+## $3 - global config project repo entry. (from .projects.PROJECTNAME.repo) ex. alywan_alywandata 
+## $4 - git repo base (from .projects.PROJECTNAME.repobase)  ex. git-codecommit.us-east-1.amazonaws.com/v1/repos/ (overrides $6)
+### WOV_CODEREPOARCHIVE - $5 - global git repo base (ex. git-codecommit.us-east-1.amazonaws.com/v1/repos/)
+#function doGetProjectRepoName()
+#{
+#  local RETVAL=
+#  local retval=0
+#  local projectname=$1
+#  local userprovidedext=$2 # USERREPOEXT=$2 
+#  local repoext=$3         # REPOEXT=$3
+#  local repobase=$4        # REPOBASE=$4
 #
-#  - If $3 $4 WOV_CODEREPOARCHIVE are "", it will fetch them from ~/.wovtools
-#  - If $3 or $4 are null, it assumes they were already fetched and are null
+#  # if missing vars passed in, load from ~/.wovtools
+#  if [ "${repoext}" == "" ] || [ "${repobase}" == "" ] || [ "${WOV_CODEREPOARCHIVE}" == "" ]; then
+#    while read f; do
+#      _TMP+=( "$f" )
+#    done <<<$(cat "${HOME}/.wovtools" | jq -r ".archives.coderepo, .projects.${projectname}.repo, .projects.${projectname}.repobase")
+#    #>&2 echo "TMP : ${_TMP[@]}"
+#    WOV_CODEREPOARCHIVE=$([ "${_TMP[0]}" == "null" ] && echo "" || echo "${_TMP[0]}" )
+#    repoext=$(           [ "${_TMP[1]}" == "null" ] && echo "" || echo "${_TMP[1]}" )
+#    repobase=$(          [ "${_TMP[2]}" == "null" ] && echo "" || echo "${_TMP[2]}" )
+#  fi
 #
-# $1 - team project name
-# $2 - user provided repo extension (user provided or from PROJECT_PROJECTMSCODE) ex. alywan_alywandata (priority over $4)
-# $3 - global config project repo entry. (from .projects.PROJECTNAME.repo) ex. alywan_alywandata 
-# $4 - git repo base (from .projects.PROJECTNAME.repobase)  ex. git-codecommit.us-east-1.amazonaws.com/v1/repos/ (overrides $6)
-## WOV_CODEREPOARCHIVE - $5 - global git repo base (ex. git-codecommit.us-east-1.amazonaws.com/v1/repos/)
-function doGetProjectRepoName()
-{
-  local RETVAL=
-  local retval=0
-  local projectname=$1
-  local userprovidedext=$2 # USERREPOEXT=$2 
-  local repoext=$3         # REPOEXT=$3
-  local repobase=$4        # REPOBASE=$4
-
-  # if missing vars passed in, load from ~/.wovtools
-  if [ "${repoext}" == "" ] || [ "${repobase}" == "" ] || [ "${WOV_CODEREPOARCHIVE}" == "" ]; then
-    while read f; do
-      _TMP+=( "$f" )
-    done <<<$(cat "${HOME}/.wovtools" | jq -r ".archives.coderepo, .projects.${projectname}.repo, .projects.${projectname}.repobase")
-    #>&2 echo "TMP : ${_TMP[@]}"
-    WOV_CODEREPOARCHIVE=$([ "${_TMP[0]}" == "null" ] && echo "" || echo "${_TMP[0]}" )
-    repoext=$(           [ "${_TMP[1]}" == "null" ] && echo "" || echo "${_TMP[1]}" )
-    repobase=$(          [ "${_TMP[2]}" == "null" ] && echo "" || echo "${_TMP[2]}" )
-  fi
-
-  # set full repo url
-  RETVAL=$([ "${repobase}" == "" ] && echo "${WOV_CODEREPOARCHIVE}" || echo "${repobase}")
-  if [ "${userprovidedext}" == "" ] && [ "${repoext}" == "" ]; then
-    l_error "No provided repository extension, or entry in '.projects.${projectname}.repo'. Unknown project repository."
-    retval=1;
-    RETVAL="${RETVAL}/UNKNOWN"
-  else
-    if [ "${userprovidedext}" != "" ]; then RETVAL="${RETVAL}/${userprovidedext}"; else RETVAL="${RETVAL}/${repoext}"; fi
-  fi
-  # >&2 echo "RETVAL ${RETVAL} retval ${retval}"
-
-  echo $RETVAL
-  return $retval
-}
+#  # set full repo url
+#  RETVAL=$([ "${repobase}" == "" ] && echo "${WOV_CODEREPOARCHIVE}" || echo "${repobase}")
+#  if [ "${userprovidedext}" == "" ] && [ "${repoext}" == "" ]; then
+#    l_error "No provided repository extension, or entry in '.projects.${projectname}.repo'. Unknown project repository."
+#    retval=1;
+#    RETVAL="${RETVAL}/UNKNOWN"
+#  else
+#    if [ "${userprovidedext}" != "" ]; then RETVAL="${RETVAL}/${userprovidedext}"; else RETVAL="${RETVAL}/${repoext}"; fi
+#  fi
+#  # >&2 echo "RETVAL ${RETVAL} retval ${retval}"
+#
+#  echo $RETVAL
+#  return $retval
+#}
 
 
 # ---------------------------------------------------------------------
@@ -300,3 +301,62 @@ function doCheckPush()
   return $retval
 }
 
+
+
+
+# ---------------------------------------------------------------------
+# Wov Path Extention
+# $1 - Path Type  : RemoteArchive/LocalArchive/ProjectRepo/ProjectPath
+# ---------------------------------------------------------------------
+function WovPathExt()
+{
+  local pt=$1
+  local retval=0
+  local Retval=""
+
+  case $pt in
+    'ra'|'RA'|'RemoteArchive')
+      local atype=$2
+      local masterp=$3
+      local project=$4
+      local me=$5
+
+        if [ "$atype" == "se" ]; then Retval="${masterp}_sea_${me}";
+      elif [ "$atype" == "db" ]; then Retval="${masterp}_${project}_dba";
+      elif [ "$atype" == "ds" ]; then Retval="${masterp}_dsa";
+      else l_error "Unknown local archive type of '${atype}'."; retval=1; fi
+      ;;
+    'la'|'LA'|'LocalArchive')
+      local atype=$2
+      local masterp=$3
+      local project=$4
+
+        if [ "$atype" == "se" ]; then Retval="${masterp}_sea";
+      elif [ "$atype" == "db" ]; then Retval="${masterp}_${project}_dba";
+      elif [ "$atype" == "ds" ]; then Retval="${masterp}_dsa";
+      else l_error "Unknown local archive type of '${atype}'."; retval=1; fi
+      ;;
+    'pr'|'PR'|'ProjectRepo')
+      local masterp=$2
+      local project=$3
+      local msc=$4
+
+        if [ "${msc}" == "" ]; then Retval="${masterp}_${project}";
+      else Retval="${masterp}_${project}_${project}${msc}"; fi
+      ;;
+    'pp'|'PP'|'ProjectPath')
+      local masterp=$2
+      local project=$3
+      local msc=$4
+
+        if [ "${msc}" == "" ]; then Retval="${masterp}/${project}";
+      else Retval="${masterp}/${project}_${project}${msc}"; fi
+      ;;
+    *)
+      echo "Unknown WovPath Type of '${pt}'."
+      ;;
+  esac
+
+  echo "${Retval}"
+  return $retval
+}
