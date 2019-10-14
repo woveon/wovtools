@@ -251,6 +251,7 @@ D2=.delme2
 
   tr_dir test1
   tr_test "wov-env should work" "wov-env -e" 0 -1
+  trap - Exit
   tr_popdir
 
   tr_section '/checkouttest'

@@ -31,6 +31,7 @@ Options:
   --wov-db-name X            - sets the database name to use when creating a WovDataBase
   --cluster-hostedzone X     - sets the default value for a cluster's Hosted Zone
   --cluster-name X           - sets the default cluster to use
+  --cluster-domain X         - sets teh default Domain name of the cluster
   --cluster-force-build      - forces the initialization of a cluster
   --wovdb-question X         - should this question to create a WovDataBase? (default is yes)
 
@@ -62,6 +63,7 @@ OP_PROJ_CODEREPOARCHIVE=    # --proj-coderepo-default X
 OP_WOVDBNAME=               # --wov-db-name
 OP_CLUSTER_HOSTEDZONE=      # --cluster-hostedzone X
 OP_CLUSTER_NAME=            # --cluster-name X
+OP_CLUSTER_DOMAIN=          # --cluster-domain X
 OP_CLUSTER_FORCEBUILD=0     # --cluster-force-build
 OP_WOVDB_QUESTION=1         # --wovdb-question X  - on by default
 
@@ -103,6 +105,11 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--cluster-name" ]; then
     shift
     OP_CLUSTER_NAME=$1
+    shift
+
+  elif [ "$1" == "--cluster-domain" ]; then
+    shift
+    OP_CLUSTER_DOMAIN=$1
     shift
 
   elif [ "$1" == "--cluster-force-build" ]; then
@@ -310,8 +317,12 @@ echo ""
 l_h1 "...Loading what we can of the project environment"
 # ---------------------------------------------------------------------
 . wov-env-loader
-WOV_cluster_dns_domain=$(wov-env --var WOV_cluster_dns_domain 2> /dev/null) ; Re=$?
-if [ $Re -ne 0 ]; then l_warn "...not ready to load in yet. continuing."; WOV_cluster_dns_domain=""; fi
+if [ "${OP_CLUSTER_DOMAIN}" != "" ]; then
+  WOV_cluster_dns_domain=${OP_CLUSTER_DOMAIN}
+else
+  WOV_cluster_dns_domain=$(wov-env --var WOV_cluster_dns_domain 2> /dev/null) ; Re=$?
+  if [ $Re -ne 0 ]; then l_warn "...not ready to load in yet. continuing."; WOV_cluster_dns_domain=""; fi
+fi
 
 # ---------------------------------------------------------------------
 echo ""
@@ -439,17 +450,14 @@ else
   done
 fi
 l_ "microservices in project (codes) : ${ms_codes[@]}"
-l_ 'sdfdf 1'
 
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 if [ ${#ms_codes[@]} -eq 0 ]; then
-l_ 'sdfdf 2'
   l_warn "Could find no microservice(s) in this project. Skipping init of any microservices. Run wov-init-ms when you have one."
 
 else
-l_ 'sdfdf 3'
   l_ "mscodes ${ms_codes[@]}"
   l_ "msdirs ${ms_dirs[@]}"
   for $i in `seq 0 ${#ms_dirs}`; do
@@ -462,7 +470,6 @@ l_ 'sdfdf 3'
     wov-init-ms --repo-entry "aws" --ms "${WOV_PROJECT}${ms_dir}"
   done
 fi
-l_ 'sdfdf 4'
 
 
 ## ---------------------------------------------------------------------
@@ -558,14 +565,37 @@ l_ 'sdfdf 4'
 ##  rm ${WOV_BASEDIR}/.tmp.$$
 #fi
 
+
+# --------------------------------------------------------------------- 
+l_block "Add entry to ~/.wovtools file"
+# --------------------------------------------------------------------- 
+PE="$(GlobalConfig_GenProjectEntry "${WOV_PROJECT}" "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${wov_REPO_MSCODE}" "${WOV_ME}" "${wov_REPO_EXT}" "${WOV_CODEREPOARCHIVE}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}")"
+l_ "PE : ${PE}"
+l_h1 "BEFORE"
+cat ~/.wovtools
+
+jq -s -S '.[0] * .[1]' <(echo "${PE}") ~/.wovtools > ~/.wovtools.$$ ; Re=$?
+# jq ".= '${PE}'" ~/.wovtools > ~/.wovtools.$$ ; Re=$?
+if [ $Re -ne 0 ]; then 
+  l_error "Failed merging project into ~/.wovtools file."
+  rm ~/.wovtools.$$
+  exit 1
+else
+  mv ~/.wovtools.$$ ~/.wovtools
+fi
+
+
+l_h1 "AFTER"
+cat ~/.wovtools
+
 # For some reason, the merged file is bad here so delete it and it will be rebuilt
-l_ asdfadsf
 rm ${WOV_BASEDIR}/wovtools/cache/.merged.json
 wov-env-build -f --config
 
 
 
-printf "\n\n... success! WovTools is successfully initialized for this project.\n"
+
+l_ "\n... success! WovTools is successfully initialized for this project.\n"
 
 exit 0
 
@@ -1304,11 +1334,15 @@ EOF
   rm ${WOV_BASEDIR}/.tmp.$$
 fi
 
+
+
+# --------------------------------------------------------------------- 
 # For some reason, the merged file is bad here
+# --------------------------------------------------------------------- 
 rm ${WOV_BASEDIR}/wovtools/cache/.merged.json
 wov-env-build -f --config
 
 
 
-printf "\n\n... success! WovTools is successfully initialized for this project.\n"
-printf "  - type 'wov-env -e' to verify and review settings.\n\n"
+l_ "\n\n... success! WovTools is successfully initialized for this project."
+l_ "  - type 'wov-env -e' to verify and review settings.\n"

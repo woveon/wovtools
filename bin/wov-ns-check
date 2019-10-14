@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
+
 # This script ensures that the namespace is consistent across the tools WovTools incorporates.
 #  - Namespace is a mix of {PROJECT}_{STAGE}.
 #  - Project is defined in K8s as part of the context name.
@@ -7,15 +10,20 @@
 #  - Stage is defined in K8s as part of the context name.
 #  - Stage is defined in git as the current branch.
 
-# --------------------------------------------------------------------- 
-# Load wov-env if not already loaded
-# --------------------------------------------------------------------- 
-if [ "${WOV_VERSION}" == "" ]; then
-  args=( "$@" )
-  set ""
-  . wov-env-loader
-  set -- "${args[@]}"
-fi
+# ---------------------------------------------------------------------
+# Import Env
+# ---------------------------------------------------------------------
+. wov-env-ops fDisplayOptions "$@"
+
+## --------------------------------------------------------------------- 
+## Load wov-env if not already loaded
+## --------------------------------------------------------------------- 
+#if [ "${WOV_VERSION}" == "" ]; then
+#  args=( "$@" )
+#  set ""
+#  . wov-env-loader
+#  set -- "${args[@]}"
+#fi
 
 
 # --------------------------------------------------------------------- 

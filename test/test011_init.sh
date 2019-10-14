@@ -15,6 +15,27 @@ PROJDIR="${TESTDIR}/${TEST}"
 ME=$(cat ${HOME}/.wovtools | jq -r '.me')
 PID=$$
 
+tr_h1      "Test ${0}"
+
+#tr_protectfile "${HOME}/.wovtools"
+. test_common.sh
+
+#if [ "${KOPS_CLUSTER_NAME}" == "" ]; then
+#  tr_comment "KOPS_CLUSTER_NAME is not set. See your available clusters with 'kops get clusters'."
+#  exit 1
+#else
+#  USEHOSTEDZONE="Z1NR42SJ9ZADVC"
+#  KOPSSPLIT=(${KOPS_CLUSTER_NAME//./ })
+#  if [ ${#KOPSSPLIT[@]} -ne 3 ]; then echo "KOPS_CLUSTER_NAME should be named CLUSTER.DOMAIN, with CLUSTER as per WovTools naming."; fi
+#  USECLUSTER="${KOPSSPLIT[0]}"
+#  USEDOMAIN="${KOPSSPLIT[1]}.${KOPSSPLIT[2]}"
+#fi
+#
+#tr_h3      "Assuming:"
+#tr_comment "         Cluster : ${USECLUSTER}"
+#tr_comment "         Domain  : ${USEDOMAIN}"
+#tr_comment " AWS Hosted Zone : ${USEHOSTEDZONE}"
+
 
 tr_h1 "Make Test Repo"
 
@@ -28,6 +49,10 @@ if [ $_tr_testson -eq 1 ]; then
   rm -Rf ${TESTREPODIR}/${MASTER}_*.git
 
   jq -r ".local.searchives.dir" "${HOME}/.wovtools"
+  cat "${HOME}/.wovtools" | jq -r "del(.projects.${PROJ})"  > ~/.wovtools.$$
+  mv ~/.wovtools.$$ ~/.wovtools
+
+#  tr_test "set current kubernetes context just in case" "kubectl config use-context ${USECLUSTER}-${PROJ}-${ME}" 0 -1
 
   tr_section '/clean-proj'
 fi
@@ -63,14 +88,13 @@ if [ $_tr_testson -eq 1 ]; then
 #              --local-archive-default "${LADIR}"  \
 #              --proj-coderepo-default "${TESTREPODIR}" \
 #              --cluster-force-build \
-#              --cluster-name "wov-aws-va-grape" \
-#              --cluster-hostedzone "Z1NR42SJ9ZADVC" \
+#              --cluster-name "${USECLUSTER}" \
+#              --cluster-domain "${USEDOMAIN}" \
+#              --cluster-hostedzone "${USEHOSTEDZONE}" \
 #              --wovdb-question 0
 #exit 1
-#             `"--wovdb-question 0  > ../kk 2>&1 " 0 1 0  <<EOF
 
-#  tr_test "sadf" "echo std1; echo std2; echo err >&2" 0 2 "std1" "std2"
-#  exit 1
+
 
   tr_comment '...starting wov-init'
   tr_vverbose
@@ -79,8 +103,9 @@ if [ $_tr_testson -eq 1 ]; then
              `"--local-archive-default \"${LADIR}\" "` 
              `"--proj-coderepo-default \"${TESTREPODIR}\" "` 
              `"--cluster-force-build  "`
-             `"--cluster-name \"wov-aws-va-grape\" "`
-             `"--cluster-hostedzone \"Z1NR42SJ9ZADVC\" "`
+             `"--cluster-name \"${USECLUSTER}\" "`
+             `"--cluster-domain \"${USEDOMAIN}\" "`
+             `"--cluster-hostedzone \"${USEHOSTEDZONE}\" "`
              `"--wovdb-question 0 > /dev/null ; echo $? " 0 1 0  <<EOF
 Y
 Y
@@ -107,7 +132,7 @@ EOF
 fi
 
 {
-  tr_section 'symlinks'
+  tr_section 'symlinktest'
 
 
   tr_test "Project Secrets Archive correctly sym linked" \
@@ -122,7 +147,7 @@ fi
     "echo ${PID} > \"${LADIR}/dsarchive/${MASTER}_dsa/ii\" ; cat wovtools/ds/const/ii" \
     0 1 "${PID}"
     
-  tr_section '/symlinks'
+  tr_section '/symlinktest'
 }
 
 {
@@ -148,9 +173,36 @@ fi
 }
 
 {
+  tr_section 'testglobal'
+
+  FF="$(jq -r ".projects.${PROJ}" ~/.wovtools)" ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "Failed to parse ~/.wovtools file for '.projects.${PROJ}'"; exit 1; fi
+  if [ "${FF}" == "null" ]; then l_error "Failed to find '.projects.${PROJ}' entry in ~/.wovtools"; exit 1; fi
+  tr_section '/testglobal'
+}
+
+{
   tr_section 'gitcommits'
+
+  tr_h3 "Code Repo Git"
   tr_test "git commit" "git commit -a -m 'after init'" 0 -1
   tr_test "git push"   "git push" 0 -1
+
+  tr_h3 "Secrets Repo Git"
+  tr_test "add files" "git -C wovtools/secrets add cluster_mymanaged.json ii repositories.json test.json test_${ME}.json test_dev.json test_prod.json" 0 -1
+  tr_test "git commit" "git -C wovtools/secrets commit -a -m 'after init'" 0 -1
+  tr_test "git push"   "git -C wovtools/secrets push"                      0 -1
+
+  tr_h3 "DataBase Repo Git"
+  tr_test "add files"  "git -C wovtools/db/archive add ii" 0 -1
+  tr_test "git commit" "git -C wovtools/db/archive commit -a -m 'after init'" 0 -1
+  tr_test "git push"   "git -C wovtools/db/archive push"                      0 -1
+
+  tr_h3 "DataSet Repo Git"
+  tr_test "add files"  "git -C wovtools/ds/const add ii" 0 -1
+  tr_test "git commit" "git -C wovtools/ds/const commit -a -m 'after init'" 0 -1
+  tr_test "git push"   "git -C wovtools/ds/const push"                      0 -1
+
   tr_section '/gitcommits'
 }
 

@@ -38,6 +38,7 @@ Exit values:
   100 - bad stage
   101 - error with (my)confg.json file.
   102 - No entry with secrets files for stage in (my)config.json files.
+  103 - Missing secrets file.
 
 EOF
 }
@@ -233,9 +234,8 @@ EOF
   for sf in ${SRCSECRETFILES[*]}; do
     l_debug "looking for ${WOV_BASEDIR}/wovtools/secrets/$sf"
     if [ ! -e "${WOV_BASEDIR}/wovtools/secrets/$sf" ]; then
-      l_error "ERROR: file for secret build does not exist: 'wovtools/secrets/$sf'.\n"
-      l_error "  : Your wovtools/(my)config.json has entries for files @: '.secrets.${WOV_STAGE}'.\n"
-      exit 1
+      l_error "Stage '${WOV_STAGE}' [from wovtools/(my)config.json '.secrets.${WOV_STAGE}'] requires missing file : 'wovtools/secrets/${sf}'."
+      exit 103
     fi
   done
 

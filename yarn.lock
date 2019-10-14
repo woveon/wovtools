@@ -29,10 +29,10 @@ dotenv@^8.1.0:
   resolved "https://registry.yarnpkg.com/dotenv/-/dotenv-8.1.0.tgz#d811e178652bfb8a1e593c6dd704ec7e90d85ea2"
   integrity sha512-GUE3gqcDCaMltj2++g6bRQ5rBJWtkWTmqmD0fo1RnnMuUqHNCt2oTPeDnS9n6fKYvlhn7AeBkb38lymBtWBQdA==
 
-handlebars@^4.4.0:
-  version "4.4.0"
-  resolved "https://registry.yarnpkg.com/handlebars/-/handlebars-4.4.0.tgz#22e1a897c5d83023d39801f35f6b65cf97ed8b25"
-  integrity sha512-xkRtOt3/3DzTKMOt3xahj2M/EqNhY988T+imYSlMgs5fVhLN2fmKVVj0LtEGmb+3UUYV5Qmm1052Mm3dIQxOvw==
+handlebars@^4.4.3:
+  version "4.4.3"
+  resolved "https://registry.yarnpkg.com/handlebars/-/handlebars-4.4.3.tgz#180bae52c1d0e9ec0c15d7e82a4362d662762f6e"
+  integrity sha512-B0W4A2U1ww3q7VVthTKfh+epHx+q4mCt6iK+zEAzbMBpWQAwxCeKxEGpj/1oQTpzPXDNSOG7hmG14TsISH50yw==
   dependencies:
     neo-async "^2.6.0"
     optimist "^0.6.1"
@@ -73,10 +73,10 @@ sprintf-js@~1.0.2:
   resolved "https://registry.yarnpkg.com/sprintf-js/-/sprintf-js-1.0.3.tgz#04e6926f662895354f3dd015203633b857297e2c"
   integrity sha1-BOaSb2YolTVPPdAVIDYzuFcpfiw=
 
-ssh-config@^2.0.0-beta.1:
-  version "2.0.0-beta.1"
-  resolved "https://registry.yarnpkg.com/ssh-config/-/ssh-config-2.0.0-beta.1.tgz#7e16dd777b31eef717540ea179bc00c1c310f972"
-  integrity sha512-+jkJDdd/aQ2+ALS5VBpcRtH37EIfiAzKF9dqghGDkCgw03MnCyIrmCDmtyptu/UyS44dweXie6u3a0o4nuq87Q==
+ssh-config@^2.0.0:
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/ssh-config/-/ssh-config-2.0.0.tgz#84ed978ca0e56939a44e851117a6c5181256df94"
+  integrity sha512-yjsjUa33gtB0UoQj0FKqfEMf+KABs/l21Lf/vslT7hkbnK05d5Dm8vApg/dHAn4WMq/pwLjP/N3ep408WspSBQ==
 
 uglify-js@^3.1.4:
   version "3.6.0"

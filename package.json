@@ -4,8 +4,8 @@
     "bcryptjs": "^2.4.3",
     "crypto-js": "^3.1.9-1",
     "dotenv": "^8.1.0",
-    "handlebars": "^4.4.0",
+    "handlebars": "^4.4.3",
     "minimist": "^1.2.0",
-    "ssh-config": "^2.0.0-beta.1"
+    "ssh-config": "^2.0.0"
   }
 }

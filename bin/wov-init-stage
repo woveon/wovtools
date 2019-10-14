@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+  
+DOECHO=1
+FOLD=$(tput cols)
+COMMAND='init'
+export PATH=$PATH:/usr/local/bin/wovlib
+RETVAL=0
+
+OP_CREATE_NS=0
+OP_CREATE_CONTEXT=0
+
+
+# ---------------------------------------------------------------------
+# Define and init all used variables
+VARDEPS=( 'WOV_MASTERPROJECT' 'WOV_PROJECT' \
+          'WOV_BASEDIR' 'NEWSTAGE')
+for f in "${VARDEPS[@]}"; do eval "${f}="; done
+
+
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+usage: `basename $0` {options} [STAGE]
+
+Creates a stage in this project.
+
+  STAGE - the new stage to create
+
+  -h/--help
+
+  -e/--envs
+  -t/--test   : checks if STAGE is a valid WovTools stage
+
+
+EOF
+}
+
+. wov-env-ops fDisplayOptions "$@"
+. wov-init-common
+. wov-env-common
+
+WOV_cluster_dns_domain="$(wov-env --var WOV_cluster_dns_domain)"
+
+
+# ---------------------------------------------------------------------
+# Functions
+# ---------------------------------------------------------------------
+
+# ---------------------------------------------------------------------
+function doShowEnvs()
+{
+  for f in "${VARDEPS[@]}"; do echo "${f}=${!f}"; done
+}
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "--envs" ] || [ "$1" == "-e" ]; then
+    COMMAND='envs'
+    shift
+
+  elif [ "$1" == "--test" ] || [ "$1" == "-t" ]; then
+    COMMAND='test'
+    shift
+
+  elif [ "$1" == "--create-ns" ] || [ "$1" == "--create-namespace" ]; then
+    OP_CREATE_NS=1
+    shift
+  elif [ "$1" == "--no-create-ns" ] || [ "$1" == "--no-create-namespace" ]; then
+    OP_CREATE_NS=-1
+    shift
+
+  elif [ "$1" == "--create-context" ]; then
+    OP_CREATE_CONTEXT=1
+    shift
+  elif [ "$1" == "--no-create-context" ]; then
+    OP_CREATE_CONTEXT=-1
+    shift
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+
+
+# ---------------------------------------------------------------------
+# Run Commands
+if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
+
+  # ---------------------------------------------------------------------
+  # Post options, capture params
+  NEWSTAGE="$1"
+    l_debug "stage '${NEWSTAGE}'"
+  if [[ "${NEWSTAGE}" =~ ^[a-z][a-z0-9]+$ ]]; then
+    l_debug "stage ${NEWSTAGE}"
+  else
+    l_error "Stage names must be lowercase, at least 2 digits long and first letter is a letter."
+    exit 1
+  fi
+
+  # ---------------------------------------------------------------------
+  # Run commands
+  if [ "${COMMAND}" == "envs" ]; then
+    doShowEnvs
+    RETVAL=0
+
+  elif [ "${COMMAND}" == "test" ]; then
+    cStage_TestFixInteractive 'test' "${WOV_ORIGIN}" "${WOV_CLUSTER}" "${WOV_PROJECT}" "${NEWSTAGE}" "${WOV_BASEDIR}" "${WOV_cluster_dns_domain}" ${OP_CREATE_NS} ${OP_CREATE_CONTEXT}; RETVAL=$?
+
+  elif [ "${COMMAND}" == "init" ]; then
+    l_ "Starting Init of stage '${NEWSTAGE}'"
+    cStage_TestFixInteractive 'interactive' "${WOV_ORIGIN}" "${WOV_CLUSTER}" "${WOV_PROJECT}" "${NEWSTAGE}" "${WOV_BASEDIR}" "${WOV_cluster_dns_domain}" ${OP_CREATE_NS} ${OP_CREATE_CONTEXT}; RETVAL=$?
+
+  else
+    l_error "Unknown command '${COMMAND}'".
+    fDisplayOptions
+    RETVAL=1
+  fi
+fi
+
+# ---------------------------------------------------------------------
+exit ${RETVAL}

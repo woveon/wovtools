@@ -137,7 +137,7 @@ function fBuildClusterSecrets
      [ "${WOV_BASEDIR}/wovtools/secrets/.git" -nt "${WOV_SECRETFILE}" ] ||
      [ "${WOV_BASEDIR}/.git"                  -nt "${WOV_SECRETFILE}" ]; then
 
-    l_debug "fBuildClusterSecrets building"
+    l_debug "fBuildClusterSecrets building context ${WOV_CONTEXT}"
     wov-env-build -f --context ${WOV_CONTEXT} -q --config ; Re=$?
     if [ $Re -ne 0 ]; then exit $Re; fi
     touch "${WOV_SECRETFILE}"

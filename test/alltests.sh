@@ -18,6 +18,7 @@ tr_runfile test011_init.sh
   tr_runfile test012_initms.sh
   tr_runfile test013_initdb.sh
   # TODO tr_runfile test013_initcluster.sh
+  tr_runfile test014_initstage.sh
 
 
   tr_h1 "General Command Tests"

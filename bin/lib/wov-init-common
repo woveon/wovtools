@@ -270,6 +270,8 @@ function iGlobalConfig_ReadIn()
 }
 
 
+
+
 ## --------------------------------------------------------------------- 
 ## Returns project vars from ~/.wovtools for: dir, repo, repobase.
 ## $1 - Team Project Name
@@ -1083,8 +1085,8 @@ function iProjGit_InteractiveUpdate()
 
   # ---------------------------------------------------------------------
   l_ "  ...make sure git is checked in"
-  doCheckCommit "." || ( l_error "You need to check in all code before init." ; exit 1 )
-  # doCheckPush "." || exit 1
+  cGit_CheckCommit "." || ( l_error "You need to check in all code before init." ; exit 1 )
+  # cGit_CheckPush "." || exit 1
 
   # ---------------------------------------------------------------------
   l_ "  ...ensure git branches of 'prod' and 'dev'"
@@ -1432,11 +1434,11 @@ function iProjLocalArchive_EnsureSetup()
     elif [ "${rtest}" == "" ] ; then l_error "Remote for local archive '${atype}' is nothing. : '${la}' -> '${ra}'"; exit 1; fi
   fi
 
-  if [ $createbranch -eq 1 ]; then
-    l_debug "created branch so need to set upstream"
-    git -C "${la}" push --set-upstream origin "${branch}"
-    if [ $? -ne 0 ]; then l_error "Pushing upstream branch '${branch}' to remote failed."; fi
-  fi
+#  if [ $createbranch -eq 1 ]; then
+  l_debug "set branch upstream"
+  git -C "${la}" push --set-upstream origin "${branch}"
+  if [ $? -ne 0 ]; then l_error "Pushing upstream branch '${branch}' to remote failed."; exit 1; fi
+#  fi
 
 }
 
@@ -2024,6 +2026,87 @@ function iProjDir_Init()
 
 # /////////////////////////////////////////////////////////////////////
 # Init Project Directory
+# /////////////////////////////////////////////////////////////////////
+
+
+# =====================================================================
+# =====================================================================
+# Kubernetes Funcs
+# =====================================================================
+# =====================================================================
+
+# --------------------------------------------------------------------- 
+# Create a namespace if they say yes.
+# --------------------------------------------------------------------- 
+function iKubernetes_InteractiveNamespace()
+{
+  local retval=1
+  local project=$1
+  local targetstage=$2
+  local op_create_ns=$3
+  local A
+
+  if [ ${op_create_ns} -eq -1 ]; then
+    l_warn "Forced skipping namespace creation."
+  else
+    while [ $retval -eq 1 ]; do
+      if [ ${op_create_ns} -eq 1 ]; then
+        A='y'
+      else
+        read -r -p "Create a Kubernetes Namespace '${project}-${targetstage}? [Y/n]" A
+      fi
+      case $A in
+        ""|[Yy]|[Yy][Ee][Ss]) 
+          kubectl create namespace "${project}-${targetstage}" ; retval=$?
+          ;;
+        *) l_ '...skipping'; ;;
+      esac
+    done
+  fi
+
+  echo "iKubernetes_InteractiveNamespace $retval"
+  return $retval
+}
+
+
+# --------------------------------------------------------------------- 
+# Set up a Kubernetes Context
+# --------------------------------------------------------------------- 
+function iKubernetes_InteractiveContext()
+{
+  local retval=1
+  local cluster="${1}"
+  local project="${2}"
+  local targetstage="${3}"
+  local domain="${4}"
+  local op_create_context=${5}
+  local A
+
+
+  if [ ${op_create_context} -eq -1 ]; then
+    l_warn "Forced skipping context creation."
+  else
+    while [ $retval -eq 1 ]; do
+      if [ ${op_create_context} -eq 1 ]; then
+        A='y'
+      else
+        read -r -p "Create a Kubernetes Context (of work) '${cluster}-${project}-${targetstage}? [Y/n]" A
+      fi
+      case $A in
+        ""|[Yy]|[Yy][Ee][Ss]) 
+          kubectl config set-context "${cluster}-${project}-${targetstage}" --cluster="${cluster}-${project}-${targetstage}.${domain}" --namespace="${project}-${targetstage}" --user="${cluster}.${domain}" ; retval=$?
+          ;;
+        *) l_ '...skipping'; ;;
+      esac
+    done
+  fi
+
+  echo "iKubernetes_InteractiveContext $retval"
+  return $retval
+}
+
+  # /////////////////////////////////////////////////////////////////////
+  # Kubernetes Funcs
 # /////////////////////////////////////////////////////////////////////
 
 

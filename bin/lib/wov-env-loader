@@ -169,7 +169,7 @@ function getWovProjectVars()
       exit 1;
     fi
   else
-    l_debug "... merged file current"
+    l_debug "... merged cached config is current"
   fi
 
 
@@ -202,6 +202,7 @@ function getWovProjectVars()
 
   # vars from Kubernetes
   # --------------------------------------------------------------------- 
+  # l_ "vars from kubernetes : ${WOV_CONTEXT}"
   if [ "${WOV_CONTEXT}" == "" ]; then 
     WOV_CONTEXT="$(kubectl config current-context 2> /dev/null )" ; Re=$?
     if [ $Re -ne 0 ]; then

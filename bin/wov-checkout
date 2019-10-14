@@ -80,47 +80,6 @@ function doShowCheckoutEnvs()
 }
 
 
-# ---------------------------------------------------------------------
-function doGenGlobalEntry()
-{
-  local retval=
-  read -r -d '' retval <<EOF
-{
-  "projects" : {
-    "${PROJSHORTCUT}" : {
-      "dir"        : "${WOV_BASEDIR}",
-      "repo"       : "${REPOEXT}",
-      "reposerver" : "${WOV_CODEREPOARCHIVE}",
-      "sub"        : [
-        {
-          "atype"      : "se",
-          "dir"        : "${WOV_SEADIR}/$(WovPathExt la se ${WOV_MASTERPROJECT})",
-          "repo"       : "$(WovPathExt ra se ${WOV_MASTERPROJECT} ${PROJSHORTCUT} ${WOV_ME})",
-          "reposerver" : "${WOV_CODEREPOARCHIVE}",
-          "repobranch" : "master"
-        },
-        {
-          "atype"      : "db",
-          "dir"        : "${WOV_DBADIR}/$(WovPathExt la db ${WOV_MASTERPROJECT} ${PROJSHORTCUT})",
-          "repo"       : "$(WovPathExt ra db ${WOV_MASTERPROJECT} ${PROJSHORTCUT} ${WOV_ME})",
-          "reposerver" : "${WOV_CODEREPOARCHIVE}"
-        },
-        {
-          "atype"      : "ds",
-          "dir"        : "${WOV_DSADIR}/$(WovPathExt la ds ${WOV_MASTERPROJECT} ${PROJSHORTCUT})",
-          "repo"       : "$(WovPathExt ra ds ${WOV_MASTERPROJECT} ${PROJSHORTCUT} ${WOV_ME})",
-          "reposerver" : "${WOV_CODEREPOARCHIVE}"
-        }
-      ]
-    }
-  }
-}
-EOF
-
-  echo "$retval"
-  return 0
-}
-
 
 # --------------------------------------------------------------------
 # Create and Validate if not exists
@@ -236,8 +195,6 @@ if [ "${REPOproto}" == "" ]; then WOV_CODEREPOARCHIVE=$(realpath ${WOV_CODEREPOA
 
 if [ "${WOV_PROJECT}" == "" ]; then fDisplayOptions; exit 1; fi
 
-TARGETREPO="${WOV_CODEREPOARCHIVE}/${REPOEXT}"
-# echo "TARGETREPO '${TARGETREPO}' '${WOV_CODEREPOARCHIVE}' '${REPOEXT}'"
 
 
 # --------------------------------------------------------------------- 
@@ -248,13 +205,33 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
     doShowCheckoutEnvs
 
   elif [ "${COMMAND}" == "config-only" ]; then
-    echo "$(doGenGlobalEntry)"
+    echo "$(GlobalConfig_GenProjectEntry "${PROJSHORTCUT}" "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${MSCODE}" "${WOV_ME}" "${REPOEXT}" "${WOV_CODEREPOARCHIVE}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}")"
 
   elif [ "${COMMAND}" == "checkout" ]; then
 
     if [ `basename "${GLOBALDIR}"` != "${WOV_MASTERPROJECT}" ]; then
       l_error "Not in master project directory of '$(basename "${GLOBALDIR}")'."
       exit 101
+    fi
+
+    l_debug "Find any existing entry for this project : ${PROJSHORTCUT}"
+    cat ~/.wovtools
+    PROJENTRY="$(jq -r ".projects.${PROJSHORTCUT}" ~/.wovtools)"; Re=$?
+    if [ $Re -ne 0 ]; then l_error "Failed reading from ~/.wovtools. Does it exist?"; exit 103; fi
+
+    if [ "${PROJENTRY}" == "null" ]; then
+      l_ "No current entry. Generating project structure."
+      PROJENTRY="$(GlobalConfig_GenProjectEntry "${PROJSHORTCUT}" "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${MSCODE}" "${WOV_ME}" "${REPOEXT}" "${WOV_CODEREPOARCHIVE}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}")"
+      l_ "Project Entry: ${PROJENTRY}"
+      TARGETREPO="${WOV_CODEREPOARCHIVE}/${REPOEXT}"
+    else
+      l_ "Current entry : '${PROJENTRY}'"
+      REQ=( $(echo ${PROJENTRY} | jq -r ".reposerver, .repo") )
+ 
+      l_ "REQ ${REQ[@]}"
+      WOV_CODEREPOARCHIVE="${REQ[0]}"
+      REPOEXT="${REQ[1]}"
+      TARGETREPO="${WOV_CODEREPOARCHIVE}/${REPOEXT}"
     fi
 
 
@@ -272,42 +249,38 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
       exit 102
     fi
 
-    l_debug "Find any existing entry for this project : ${PROJSHORTCUT}"
-    cat ~/.wovtools
-    CURPROJENTRY="$(jq -r ".projects.${PROJSHORTCUT}" ~/.wovtools)"; Re=$?
-    if [ $Re -ne 0 ]; then l_error "Failed reading from ~/.wovtools. Does it exist?"; exit 103; fi
 
-    l_debug "Generate what this project's global entry will look like"
-    NEWPROJENTRY="$(doGenGlobalEntry)"
+    # l_debug "Generate what this project's global entry will look like"
+    # NEWPROJENTRY="$(GlobalConfig_GenProjectEntry "${PROJSHORTCUT}" "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${MSCODE}" "${WOV_ME}" "${REPOEXT}" "${WOV_CODEREPOARCHIVE}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}")"
 
-    l_debug  "if existing project entry in ~/.wovtools .projects, then test a bunch of things"
-    if [ "${CURPROJENTRY}" != "null" ]; then
-      HASDIFFS=0
-
-      l_debug "warn about all differences and give switch name to resolve it"
-
-      CURPROJENTRY=$(echo "${CURPROJENTRY}" | jq -cS . )
-      NEWPROJENTRY=$(echo "${NEWPROJENTRY}" | jq -cS . )
-      l_debug "Current entry: ${CURPROJENTRY}"
-      # echo "${NEWPROJENTRY}"
-      l_debug "New:\n ${NEWPROJENTRY}"
-      entrydiff=$(cmp <(echo "${CURPROJENTRY}" | jq -cS . ) <(echo "${NEWPROJENTRY}" | jq -cS . ))
-      # TODO
-      l_warn "Differences found : '${entrydiff}'"
-      HASDIFFS=1
-
-    #     if overwrite
-    #       move current entry to an ".projectsold[]" and dump there, add a time of move
-
-      #   - directoyr incorrect
-      #     --overwrite-project-entry
-      #     --shortcut to define a different entry
-      #   - all others
-      #                  
-
-      #   if warnings, exit
-      if [ $HASDIFFS -ne 0 ]; then exit 104; fi
-    fi
+    #l_debug  "if existing project entry in ~/.wovtools .projects, then test a bunch of things"
+    #if [ "${CURPROJENTRY}" != "null" ]; then
+    #  HASDIFFS=0
+#
+#      l_debug "warn about all differences and give switch name to resolve it"
+#
+#      CURPROJENTRY=$(echo "${CURPROJENTRY}" | jq -cS . )
+#      NEWPROJENTRY=$(echo "${NEWPROJENTRY}" | jq -cS . )
+#      l_debug "Current entry: ${CURPROJENTRY}"
+#      # echo "${NEWPROJENTRY}"
+#      l_debug "New:\n ${NEWPROJENTRY}"
+#      entrydiff=$(cmp <(echo "${CURPROJENTRY}" | jq -cS . ) <(echo "${NEWPROJENTRY}" | jq -cS . ))
+#      # TODO
+#      l_warn "Differences found : '${entrydiff}'"
+#      HASDIFFS=1
+#
+#    #     if overwrite
+#    #       move current entry to an ".projectsold[]" and dump there, add a time of move
+#
+#      #   - directoyr incorrect
+#      #     --overwrite-project-entry
+#      #     --shortcut to define a different entry
+#      #   - all others
+#      #                  
+#
+#      #   if warnings, exit
+#      if [ $HASDIFFS -ne 0 ]; then exit 104; fi
+#    fi
 
 
 
@@ -346,8 +319,8 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
     # Spew and Checks
 
 
-    if [ "${WOV_DBADIR}" == "null" ] || [ "${WOV_DBADIR}" == "" ]; then l_error "~/.wovtools .wovtools.dbarchives entry is missing. Run wov-init-global"; exit 1; fi
-    if [ "${WOV_DSADIR}" == "null" ] || [ "${WOV_DSADIR}" == "" ]; then l_error "~/.wovtools .wovtools.dsarchives entry is missing. Run wov-init-global"; exit 1; fi
+#    if [ "${WOV_DBADIR}" == "null" ] || [ "${WOV_DBADIR}" == "" ]; then l_error "~/.wovtools .wovtools.dbarchives entry is missing. Run wov-init-global"; exit 1; fi
+#    if [ "${WOV_DSADIR}" == "null" ] || [ "${WOV_DSADIR}" == "" ]; then l_error "~/.wovtools .wovtools.dsarchives entry is missing. Run wov-init-global"; exit 1; fi
 
 
     # ---------------------------------------------------------------------
@@ -373,7 +346,7 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
     # ---------------------------------------------------------------------
     l_verbose "Clone in all (Sub)ordinate Archives (i.e. Local Archives plus any additional)"
     # ---------------------------------------------------------------------
-    iProjLocalArchives_FetchSubs "${WOV_BASEDIR}" "${WOV_ME}" "$(echo ${NEWPROJENTRY} | jq -r .projects.${PROJSHORTCUT}.sub)"
+    iProjLocalArchives_FetchSubs "${WOV_BASEDIR}" "${WOV_ME}" "$(echo ${PROJENTRY} | jq -r .sub)"
 
     # ---------------------------------------------------------------------
     #l_verbose "Link wovtools directory to Local Archives (create as needed)"

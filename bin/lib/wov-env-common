@@ -211,18 +211,34 @@ function doResName()
 
 
 # ---------------------------------------------------------------------
-# Check local changes are committed (i.e. status is cool with it)
-# $1 - path
+# Check if the git repo is checked in and pushed to remote.
+# RETURN: 0 on success
 # ---------------------------------------------------------------------
-function doCheckCommit()
+function cGit_CheckFull()
+{
+  local retval=0
+  local gitpath="$1"
+
+  cGit_CheckCommit "${gitpath}" ; retval=$?
+  if [ $retval -eq 0 ]; then cGit_CheckPush "${gitpath}" ; retval=$?;  fi
+
+  return $retval
+}
+
+
+# ---------------------------------------------------------------------
+# Check local changes are committed (i.e. status is cool with it)
+# ---------------------------------------------------------------------
+function cGit_CheckCommit()
 {
   local retval=0
   local R=
   local Re=
+  local gitpath=$1
 
   if [ $retval -eq 0 ]; then
     l_verbose "  ...check for path variable"
-    if [ "$1" == "" ]; then
+    if [ "${gitpath}" == "" ]; then
       retval=1
       l_error "No path supplied to Git repo."
     fi
@@ -230,30 +246,30 @@ function doCheckCommit()
 
   if [ $retval -eq 0 ]; then
     l_verbose "  ...check path exists"
-    if [ ! -e "$1" ]; then
+    if [ ! -e "${gitpath}" ]; then
       retval=2
-      l_error "Path to Git repo does not exist '${1}'."
+      l_error "Path to Git repo does not exist '${gitpath}'."
     fi
   fi
 
   if [ $retval -eq 0 ]; then
     l_verbose "  ...check repo status"
-    R=$(git -C "${1}" status -s) ; Re=$?
+    R=$(git -C "${gitpath}" status -s) ; Re=$?
     if [ $Re -ne 0 ]; then
       retval=3
-      l_error "Failed calling 'status' on repo at '${1}'."
+      l_error "Failed calling 'status' on repo at '${gitpath}'."
     elif [ "${R}" != "" ]; then
       retval=4
-      l_warn "Path '${1}': failed code/env commit-check. Check in your code/env values."
+      l_warn "Path '${gitpath}}': failed code/env commit-check. Check in your code/env values."
       if [ $DOECHO -ge 2 ]; then
         l_verbose "*** git status : start ************************************************"
-        git -C "${1}" status
+        git -C "${gitpath}" status
         l_verbose "*** git status : end **************************************************"
       fi
     fi
   fi
 
-  if [ $retval -eq 0 ]; then l_verbose "SUCCESS: '${1}': wov-git-check commit code/env"; fi
+  if [ $retval -eq 0 ]; then l_verbose "SUCCESS: '${gitpath}': wov-git-check commit code/env"; fi
 
   return $retval
 }
@@ -261,10 +277,9 @@ function doCheckCommit()
 
 # ---------------------------------------------------------------------
 # Check local changes are pushed
-# NOTE: assume doCheckCommit already called which checks path
-# $1 - path
+# NOTE: assume cGit_CheckCommit already called which checks path
 # ---------------------------------------------------------------------
-function doCheckPush()
+function cGit_CheckPush()
 {
   local retval=0
   local R=
@@ -273,29 +288,30 @@ function doCheckPush()
   local R1e=
   local R2=
   local R2e=
+  local gitpath=$1
 
   l_verbose '  ...check upstream and head commits are the same.'
-  R1=$(git -C "${1}" rev-parse @{u} 2>&1 ) ; R1e=$?
-  R2=$(git -C "${1}" rev-parse HEAD 2>&1 ) ; R2e=$?
+  R1=$(git -C "${gitpath}" rev-parse @{u} 2>&1 ) ; R1e=$?
+  R2=$(git -C "${gitpath}" rev-parse HEAD 2>&1 ) ; R2e=$?
   if [ $R1e -ne 0 ] || [ $R2e -ne 0 ]; then
     echo "git: ${R1}"
-    l_error "Need to fully commit on directory: ${1}?"
+    l_error "Need to fully commit on directory: ${gitpath}?"
     exit 1
   fi
 
 
 
-  R=$(test "$(git -C "${1}" rev-parse @{u})" = "$(git -C "${1}" rev-parse HEAD)" ); Re=$?
+  R=$(test "$(git -C "${gitpath}" rev-parse @{u})" = "$(git -C "${gitpath}" rev-parse HEAD)" ); Re=$?
   if [ $Re -ne 0 ] || [ "$R" != "" ]; then
     retval=10
-    l_warn "'${1}': failed code/env push check. Push your archive."
+    l_warn "'${gitpath}': failed code/env push check. Push your archive."
     if [ $DOECHO -ge 2 ]; then
       l_verbose "*** git status : start ************************************************ "
-      git -C "${1}" status
+      git -C "${gitpath}" status
       l_verbose "*** git status : end ************************************************** "
     fi
   else
-    l_verbose "SUCCESS: '${1}': wov-push-check push code/env."
+    l_verbose "SUCCESS: '${gitpath}': wov-push-check push code/env."
   fi
 
   return $retval
@@ -358,5 +374,380 @@ function WovPathExt()
   esac
 
   echo "${Retval}"
+  return $retval
+}
+
+
+
+# ---------------------------------------------------------------------
+# Generates the JSON entry for a project that goes into ~/.wovtools.
+# ---------------------------------------------------------------------
+function GlobalConfig_GenProjectEntry()
+{
+  local retval=
+  local projshortcut="${1}"
+  local basedir="${2}"
+  local masterproject="${3}"
+  local project="${4}"
+  local msc="${5}"
+  local me="${6}"
+  local repoext="$([ "${7}" == "" ] && echo "$(WovPathExt pr "${masterproject}" "${project}" "${msc}")" || echo "${7}")"
+  local reposerver="${8}"   # WOV_CODEREPOARCHIVE
+  local seadir="${9}"       # Local Archive Dir location
+  local dbadir="${10}"      # Local Archive Dir location
+  local dsadir="${11}"      # Local Archive Dir location
+
+  read -r -d '' retval <<EOF
+{
+  "projects" : {
+    "${projshortcut}" : {
+      "dir"        : "${basedir}",
+      "repo"       : "${repoext}",
+      "reposerver" : "${reposerver}",
+      "sub"        : [
+        {
+          "atype"      : "se",
+          "dir"        : "${seadir}/$(WovPathExt la se ${masterproject})",
+          "repo"       : "$(WovPathExt ra se ${masterproject} ${project} ${me})",
+          "reposerver" : "${reposerver}",
+          "repobranch" : "master"
+        },
+        {
+          "atype"      : "db",
+          "dir"        : "${dbadir}/$(WovPathExt la db ${masterproject} ${project})",
+          "repo"       : "$(WovPathExt ra db ${masterproject} ${project} ${me})",
+          "reposerver" : "${reposerver}"
+        },
+        {
+          "atype"      : "ds",
+          "dir"        : "${dsadir}/$(WovPathExt la ds ${masterproject} ${project})",
+          "repo"       : "$(WovPathExt ra ds ${masterproject} ${project} ${me})",
+          "reposerver" : "${reposerver}"
+        }
+      ]
+    }
+  }
+}
+EOF
+
+  echo "$retval"
+  return 0
+}
+
+
+# --------------------------------------------------------------------- 
+# List all stages in this project (Kubernetes contexts)
+# --------------------------------------------------------------------- 
+function cStage_List()
+{
+  local retval=0
+  local cluster=$1
+  local project=$2
+  local R=
+  local Re=
+
+  # Find contexts in current Kubernets context
+  R=$(kubectl config get-contexts --no-headers=true -o name) ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "Failed listing Kubernetes stages."; retval=1; fi
+
+  if [ $retval -eq 0 ]; then
+
+    # Grep
+    R=$(echo "${R}" | grep "${cluster}-${project}-")
+
+    if [ "${R[@]}" == "" ]; then l_ "None"; fi
+
+    for s in ${R[@]}; do
+      local parts=( ${s//-/ } )
+      echo "${parts[5]}"
+    done
+  fi
+
+  return $retval
+}
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function cStage_Init()
+{
+  local origin="${1}"
+  local cluster="${2}"
+  local project="${3}"
+  local targetstage="${4}"
+  local retval=0
+  local R=
+  local Re=
+
+  if [ ${DOECHO} -ge 1 ]; then echo "  ... switching Kubernetes context to '${WOV_CLUSTER}-${WOV_PROJECT}-${1}'."; fi
+  R=$(kubectl config use-context ${cluster}-${project}-${targetstage}) ; Re=$?
+
+
+  return $retval
+}
+
+# --------------------------------------------------------------------- 
+# Test if a stage is valid or fix an invalid stage.
+# RETURN : Returns the FIRST failing code.
+# - 101 - unknown howto run.. tfi
+# - 102 - config error
+# - 103 - config missing secrets file
+# - 104 - config error
+# - 105 - fialed Kubernetes connection
+# - 106 - kubernetes namespace error
+# - 107 - kubernetes context error
+# - 108 - git checkin issue
+# - 109 - git can't make branch
+# - 110 - git can't set remote origin
+# --------------------------------------------------------------------- 
+function cStage_TestFixInteractive()
+{
+  local retval=0
+  local tfi="${1}"         # (t)est, (f)ix or (i)nteractive - how to run this
+  local origin="${2}"
+  local cluster="${3}"
+  local project="${4}"
+  local targetstage="${5}"
+  local basedir="${6}"
+  local domain="${7}"
+  local op_create_ns=${8}
+  local op_create_context=${9}
+  local R=
+  local Re=
+
+  # test params
+  case $tfi in
+    test) ;;
+    interactive) ;;
+    fix) l_error "Fix in cStage_TestFixInteractive not implemented."; return 101; ;;
+    *)   l_error "Unknown state for cStage_TestFixInteractive of '${tfi}'."; return 101; ;;
+  esac
+
+
+  l_ "...check that it can build env for a cluster for the stage it is shifting into"
+  R=$(wov-env-build --context "${origin}:${cluster}-${project}-${targetstage}" --config > /dev/null) ; Re=$?
+  if [ $Re -ne 0 ]; then
+    case $tfi in
+      test|interactive|fix)
+
+        l_warn "Can not build environment : '${origin}:${cluster}-${project}-${targetstage}'"
+        l_ "  : Try yourself with 'wov-env-build --context ${origin}:${cluster}-${project}-${targetstage} --config'"
+
+        if [ $Re -eq 102 ]; then
+
+          local devfiles=$(jq -r ".secrets.dev[]" "${basedir}/wovtools/config.json")
+          local mefiles=()
+          for devfile in ${devfiles[@]}; do
+            devfileis="${devfile/%_dev.json/_${targetstage}.json}"
+            mefiles+=( "\"${devfileis}\"" )
+          done
+
+          mefiles="$(IFS=,; echo "${mefiles[*]}")"    # join by comma
+
+          l_ "To fix, edit the wovtools/myconfig.json file and add a '.secrets.${targetstage}[]' entry."
+          l_ "Example JSON to merge in:\n"`
+          `"{\n"`
+          `"  \"secrets\" : {\n"`
+          `"    \"${targetstage}\" : [ ${mefiles} ]\n"`
+          `"  }\n"`
+          `"}"
+          if [ $retval -eq 0 ]; then retval=102; fi
+        elif [ $Re -eq 103 ]; then
+
+          l_ "Missing file so create the missing JSON file and retry."
+          if [ $retval -eq 0 ]; then retval=103; fi
+        else
+          l_ "Unspecific error in config. Code ${Re}."
+          if [ $retval -eq 0 ]; then retval=104; fi
+        fi
+
+        ;;
+    esac
+  fi
+  if [ $retval -ne 0 ] && [ "$tfi" == "interactive" ]; then return $retval; fi
+
+
+  l_ "...checking for Kubernetes Namespace '${WOV_PROJECT}-${targetstage}'."
+  while [ $retval -eq 0 ]; do
+    R=$(cNamespace_List "${project}" ) ; Re=$?
+    l_debug " R) '${R}'"
+    l_debug "Re) '${Re}'"
+    if [ $Re -ne 0 ]; then
+      l_error "Failed Kubernetes connection."
+      if [ $retval -eq 0 ]; then retval=105; fi
+    else
+      R=$(echo "${R}" | grep "${project}-${targetstage}")
+      case $tfi in
+        test)
+          if [ "${R}" == "" ]; then
+            l_warn "Stage '${targetstage}' does not have a Kubernetes namespace. Create one by 'kubectl create namespace ${project}-${targetstage}'."
+            if [ $retval -eq 0 ]; then retval=106; fi
+          fi
+          break;
+          ;;
+        interactive)
+          if [ "${R}" == "" ]; then
+            l_warn "Stage '${targetstage}' does not have a Kubernetes namespace. '${op_create_ns}:${op_create_context}'"
+            iKubernetes_InteractiveNamespace "${project}" "${targetstage}" ${op_create_ns} ; Re=$?
+            if [ $Re -ne 0 ]; then
+              if [ $retval -eq 0 ]; then retval=106; fi
+            fi
+          fi
+          break;
+          ;;
+      esac
+    fi
+  done
+  if [ $retval -ne 0 ] && [ "$tfi" == "interactive" ]; then return $retval; fi
+
+
+  l_ "...checking for Kubernetes Context '${cluster}-${project}-${targetstage}'."
+  while [ $retval -eq 0 ]; do
+    R=$(cStage_List "${cluster}" "${project}") ; Re=$?
+    if [ $Re -ne 0 ]; then
+      l_error "Failed Kubernetes connection."
+      if [ $retval -eq 0 ]; then retval=105; fi
+    else
+      R=$(echo "${R}" | grep "${targetstage}")
+      case $tfi in
+        test)
+          if [ "${R}" == "" ]; then
+            l_warn "Stage '${targetstage}' does not have a Kubernetes context. Create one in ~/.kube/config."
+            if [ $retval -eq 0 ]; then retval=107; fi
+          fi
+          break;
+          ;;
+        interactive|fix)
+          if [ "${R}" == "" ]; then
+            l_warn "Stage '${targetstage}' does not have a Kubernetes context."
+            iKubernetes_InteractiveContext "${cluster}" "${project}" "${targetstage}" "${domain}" ${op_create_context} ; Re=$?
+            if [ $Re -ne 0 ]; then
+              if [ $retval -eq 0 ]; then retval=107; fi
+            fi
+          fi
+          break;
+          ;;
+      esac
+    fi
+  done
+  if [ $retval -ne 0 ] && [ "$tfi" == "interactive" ]; then return $retval; fi
+
+
+  # --------------------------------------------------------------------- 
+  l_ "...check git repos for branch '${targetstage}' and that code is checked/pushed"
+  # --------------------------------------------------------------------- 
+
+  local gitreponames=( "Code" "Secrets Archive" "DataBase Archive" "DataSet Archive")
+  local gitrepodirs=( "${WOV_BASEDIR}" "${WOV_BASEDIR}/wovtools/secrets" "${WOV_BASEDIR}/wovtools/db/archive" "${WOV_BASEDIR}/wovtools/ds/const" )
+
+  for i in `seq 0 $((${#gitreponames[@]} -1))`; do
+    local gitname="${gitreponames[$i]}"
+    local gitdir="${gitrepodirs[$i]}"
+    local skipcheckin=0
+
+    l_ "  ...check Git repo '${gitname}' at path: '${gitdir}'" 
+
+    l_verbose "  ... checking for branch '${targetstage}'."
+    R=$(git -C ${gitdir} rev-parse --verify "${targetstage}" &> /dev/null) ; Re=$?
+    if [ ${Re} -ne 0 ]; then
+      case $tfi in
+        test)
+          l_warn "Git repo '${gitname}' ($gitdir} does not have a git branch '$targetstage'.\n"`
+                 `"   'git -C \"${gitdir}\" checkout -b $targetstage'                -> to create a branch\n"`
+                 `"   'git -C \"${gitdir}\" push --set-upstream origin $targetstage' -> places branch into Git repo"
+          l_error "NOTE: you need to check in all changes to your current branch first, before running above commands."
+          skipcheckin=1
+          if [ $retval -eq 0 ]; then retval=108; fi
+          ;;
+        interactive|fix)
+          l_ "    ...Branch not found. Checking if can create branch"
+          cGit_CheckFull "${gitdir}" ; Re=$?
+          if [ $Re -ne 0 ]; then 
+            l_ "    ...fix issues and try again. You're killing me smalls."
+            skipcheckin=1
+            if [ $retval -eq 0 ]; then retval=108; fi
+            if [ "$tfi" == "interactive" ]; then return $retval; fi
+          else
+            l_ "    ...creating branch '${targetstage}', pushing to origin";
+            git -C "${gitdir}" checkout -b "${targetstage}" ; Re=$?;
+            if [ $Re -ne 0 ]; then
+              skipcheckin=1
+              if [ $retval -eq 0 ]; then retval=109; fi
+              if [ "$tfi" == "interactive" ]; then return $retval; fi
+            else 
+              git -C "${gitdir}" push --set-upstream origin "${targetstage}"; Re=$?
+              if [ $Re -ne 0 ]; then
+                skipcheckin=1
+                if [ $retval -eq 0 ]; then retval=110; fi
+                if [ "$tfi" == "interactive" ]; then return $retval; fi
+              fi
+            fi
+          fi
+          ;;
+      esac
+
+    fi
+
+    if [ $skipcheckin -eq 0 ]; then
+      l_verbose "  ... checking for code checked in and pushed."
+      cGit_CheckFull "${gitdir}" ; Re=$?
+      l_debug "cGit_CheckFull Re: ${Re}"
+      if [ ${Re} -ne 0 ]; then
+        if [ ${Re} -eq 1 ]; then
+          l_warn "Changes in git repo need to be committed: '${gitdir}'"
+        elif [ ${Re} -eq 2 ]; then
+          l_warn "Changes in git repo need to be pushed: '${gitdir}'"
+        else
+          l_warn "Git repo has issues. Fix: '${gitdir}'"
+          # git -C "${gitdir}" status
+          # wov-git-check -v
+        fi
+        >&2 echo "   : If you want to carry over these changes to a new branch, use 'git stash'."
+        >&2 echo "   :   'git -C \"${gitdir}\" stash'       <-- to store changes temporarily"
+        >&2 echo "   :   'wov-stage X'     <-- which changes branch"
+        >&2 echo "   :   'git -C \"${gitdir}\" stash apply' <-- to apply previous modifications"
+        >&2 echo "   :   'git -C \"${gitdir}\" stash drop'  <-- to remove stash"
+        if [ $retval -eq 0 ]; then retval=108; fi
+        if [ "$tfi" == "interactive" ]; then return $retval; fi
+      fi
+    fi
+  done
+
+  # Output spew
+  if [ $retval -eq 0 ]; then l_ "  ... stage '${targetstage}' ready"
+  else                       l_ "  ... stage '${targetstage}' has error(s). Returning first code of ${retval}."; fi
+
+  return $retval
+}
+
+
+# List all namespaces in this project
+function cNamespace_List()
+{
+  local R=
+  local Re=
+  local retval=0
+  local project=$1
+
+  # Query kubernetes
+  l_debug 'cNamespace_list 1'
+  R=$(kubectl get namespaces --no-headers=true -o name) ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "Failed listing namespaces."; retval=1; fi
+  l_debug "cNamespace_list 2 Re '${Re}' retval '${retval}'"
+
+  if [ $retval -eq 0 ]; then
+    l_debug 'cNamespace_list 3'
+
+    # Grep
+    R=$(echo ${R} | grep "namespace/${project}-") 
+
+    if [ "${R[@]}" == "" ]; then echo "None"; fi
+
+    for s in ${R[@]}; do
+      local parts=( ${s//-/ } )
+      echo "${project}-${parts[1]}"
+    done
+  fi
+
   return $retval
 }
