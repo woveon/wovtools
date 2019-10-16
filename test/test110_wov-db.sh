@@ -3,7 +3,8 @@
 
 #tr_tests_off
 tr_vverbose
-PROJ=test1
+. test_common.sh
+tcUseTestingContext
 
 tr_h1 "wov-db"
 tr_comment "Tests the wov-db command. Assumes project test1 has been created."
@@ -56,27 +57,27 @@ tr_protectfile "wovtools/myconfig.json"
   tr_test 'clean up old Adb archive' "rm -Rf wovtools/db/archive/A*" 0 -1
 
   tr_test 'create a Wov database instance but missing values' \
-    'wov-db --context wov-aws-va-grape-fail-cw --wdb-createinstance Adb' 203 -1
+    "wov-db --context wov-aws-va-grape-fail-${TESTME} --wdb-createinstance Adb" 203 -1
 
   tr_test 'create a WovDataBase' "wov-init-wovdb Adb" 0 -1
 
   tr_test 'create a Wov database with correct context but bad DB' \
-    'wov-db --context wov-aws-va-grape-test1-cw --wdb-createinstance A' 203 -1
+    "wov-db --context wov-aws-va-grape-test1-${TESTME} --wdb-createinstance A" 203 -1
 
   tr_test 'stop any running db so we know it has correct user and password' \
     'wov-db --docker-postgres-stop' 0 -1
 
   tr_test 'start local postgres db' \
-    'wov-db --context wov-aws-va-grape-test1-cw --docker-postgres-start Adb' 0 -1
+    "wov-db --context wov-aws-va-grape-test1-${TESTME} --docker-postgres-start Adb" 0 -1
 
   tr_test 'create a Wov database with correct context' \
-    'wov-db --context here:wov-aws-va-grape-test1-cw --wdb-createinstance Adb' 0 -1
+    "wov-db --context here:wov-aws-va-grape-test1-${TESTME} --wdb-createinstance Adb" 0 -1
 
   tr_test 'info on db shows values (assumed db)' \
-    'wov-db --context wov-aws-va-grape-test1-cw --info' 0 -1
+    "wov-db --context wov-aws-va-grape-test1-${TESTME} --info" 0 -1
 
   tr_test 'info on db shows values' \
-    'wov-db --context wov-aws-va-grape-test1-cw Adb --info' 0 -1
+    "wov-db --context wov-aws-va-grape-test1-${TESTME} Adb --info" 0 -1
 
   tr_section '/wov-database-inst'
 }
@@ -87,12 +88,12 @@ tr_protectfile "wovtools/myconfig.json"
   tr_comment 'NOTE: requires a running local database from above section'
 
   tr_test 'Should be empty database' \
-    'wov-db --context wov-aws-va-grape-test1-cw Adb -c "\d"' 0 1 "No relations found."
+    "wov-db --context wov-aws-va-grape-test1-${TESTME} Adb -c \"\d\"" 0 1 "No relations found."
 
   tr_test_skip 'database server wait --dbs-wait'
 
   tr_test 'Create and init Wov database' \
-    'wov-db --context wov-aws-va-grape-test1-cw --wdb-init Adb' 0 -1
+    "wov-db --context wov-aws-va-grape-test1-${TESTME} --wdb-init Adb" 0 -1
   tr_section '/wov-db-create-and-init'
 }
 
@@ -109,10 +110,10 @@ tr_protectfile "wovtools/myconfig.json"
   tr_section 'wov-db-cmds'
 
   tr_test 'Schema gets returned' \
-    'wov-db --context wov-aws-va-grape-test1-cw Adb --schema | wc -l | tr -d "[:space:]"' 0 1 36
+    "wov-db --context wov-aws-va-grape-test1-${TESTME} Adb --schema | wc -l | tr -d \"[:space:]\"" 0 1 36
 
   tr_test 'Schema diff against 0 but no version' \
-    'wov-db --context wov-aws-va-grape-test1-cw Adb --schema-diff 0' 1 1 "ERROR: no schema for database 'Adb', schema version '0'."
+    "wov-db --context wov-aws-va-grape-test1-${TESTME} Adb --schema-diff 0" 1 1 "ERROR: no schema for database 'Adb', schema version '0'."
 
   tr_test_skip 'schema hash'
 

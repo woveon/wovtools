@@ -3,12 +3,15 @@
 
 #tr_tests_on
 #tr_vverbose
-tr_dir test1
 #tr_protectfile "wovtools/config.json"
 #tr_protectfile "wovtools/myconfig.json"
 
 tr_h1 "wov-push-db - $0"
 tr_comment "Tests the wov-push-db. Assumes test1 project and DB Archive have been created with 'test1.sh'."
+
+. test_common.sh
+tcUseTestingContext
+tr_dir test1
 
 
 {
@@ -29,11 +32,11 @@ tr_verbose
 
   tr_comment "ensure a database and delta exists"
   tr_run "shut down any local postgres server" \
-    "wov-db --context wov-aws-va-grape-test1-cw --docker-postgres-stop"
+    "wov-db --context wov-aws-va-grape-test1-${TESTME} --docker-postgres-stop"
   tr_run "bring up a local postgres server" \
-    "wov-db --context wov-aws-va-grape-test1-cw --docker-postgres-start Adb"
+    "wov-db --context wov-aws-va-grape-test1-${TESTME} --docker-postgres-start Adb"
   tr_test "create the database" \
-    "wov-db --context wov-aws-va-grape-test1-cw --wdb-createinstance Adb" 0 -1
+    "wov-db --context wov-aws-va-grape-test1-${TESTME} --wdb-createinstance Adb" 0 -1
 
   tr_test "wov-push-db push check fails because of deltas" \
     "wov-push-db --check" 1 -1

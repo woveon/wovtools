@@ -3,12 +3,15 @@
 
 #tr_tests_off
 #tr_vverbose
-tr_dir test1
-tr_protectfile "wovtools/config.json"
-tr_protectfile "wovtools/myconfig.json"
 
 tr_h1 "wov-push-k8s - $0"
 tr_comment "Tests the wov-push-k8s. Assumes test1 has been created."
+
+. test_common.sh
+tcUseTestingContext
+tr_dir test1
+tr_protectfile "wovtools/config.json"
+tr_protectfile "wovtools/myconfig.json"
 
 {
   tr_section 'wov-push-k8s-checks'
@@ -22,13 +25,13 @@ tr_comment "Tests the wov-push-k8s. Assumes test1 has been created."
     "ls wovtools/cache/clusters" 1 -1
 
   tr_test "call a check but with wrong origin, but still corrects" \
-    "wov-push-k8s --context local:wov-aws-va-grape-test1-cw --check" 0 -1
+    "wov-push-k8s --context local:wov-aws-va-grape-test1-${TESTME} --check" 0 -1
 
   tr_test "make sure cluster cache has 2 dirs now after cleared" \
-    "ls wovtools/cache/clusters" 0 2 "local__wov-aws-va-grape-test1-cw" "self__wov-aws-va-grape-test1-cw"
+    "ls wovtools/cache/clusters" 0 2 "local__wov-aws-va-grape-test1-${TESTME}" "self__wov-aws-va-grape-test1-${TESTME}"
 
   tr_test "call a check with self origin" \
-    "wov-push-k8s --context self:wov-aws-va-grape-test1-cw --check" 0 -1
+    "wov-push-k8s --context self:wov-aws-va-grape-test1-${TESTME} --check" 0 -1
   tr_section '/wov-push-k8s-checks'
 }
 
@@ -55,13 +58,13 @@ tr_comment "Tests the wov-push-k8s. Assumes test1 has been created."
     "wov-push-k8s --push" 0 -1
 
   tr_test "push with good origin so pass" \
-    "wov-push-k8s --context self:wov-aws-va-grape-test1-cw --push" 0 -1
+    "wov-push-k8s --context self:wov-aws-va-grape-test1-${TESTME} --push" 0 -1
 
   tr_test "push but unknown origin but still uses self" \
-    "wov-push-k8s --context wov-aws-va-grape-test1-cw --push" 0 -1
+    "wov-push-k8s --context wov-aws-va-grape-test1-${TESTME} --push" 0 -1
 
   tr_test "push but with bad origin but still uses self" \
-    "wov-push-k8s --context local:wov-aws-va-grape-test1-cw --push" 0 -1
+    "wov-push-k8s --context local:wov-aws-va-grape-test1-${TESTME} --push" 0 -1
 
   tr_section '/wov-push-k8s-push'
 }

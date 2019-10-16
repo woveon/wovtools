@@ -6,7 +6,8 @@
 
 ACTUAL_WOV_VERSION=3
 tr_h1 "wov-env commands : $0"
-PROJ=test1
+. test_common.sh
+tcUseTestingContext
 
 {
   tr_section 'initfortests'
@@ -37,7 +38,7 @@ tr_section 'wov-env NotInAProject'
     tr_comment 'Move into project and test again'
 
     tr_test "ensure test1 directory where simple wovtools projec texists" \
-      '[ -e test1 ]' 0 1 ''
+      '[ -e test1 ]' 0 -1
     tr_dir test1
 
     tr_run 'set origin to local since test013 sets it to "here"' 'wov-env --set-origin local'
@@ -63,33 +64,33 @@ tr_section 'context-tests'
 {
 
   tr_test "simple context" \
-    'wov-env --context wov-aws-va-grape-test1-cw --var WOV_VERSION ; wov-env --context wov-aws-va-grape-test1-cw --var WOV_SVER' \
+    "wov-env --context wov-aws-va-grape-test1-${TESTME} --var WOV_VERSION ; wov-env --context wov-aws-va-grape-test1-${TESTME} --var WOV_SVER" \
     0 2 \
     '3' '[ "${result}" != "" ]'
 
   tr_test "context set test" \
-    'wov-env --context wov-aws-va-grape-test1-cw --var WOV_CONTEXT' \
-    0 1 'wov-aws-va-grape-test1-cw'
+    "wov-env --context wov-aws-va-grape-test1-${TESTME} --var WOV_CONTEXT" \
+    0 1 "wov-aws-va-grape-test1-${TESTME}"
 
   tr_test "workingcontext test" \
-    'wov-env --context local:wov-aws-va-grape-test1-cw --var WOV_CONTEXT --var WOV_ORIGIN' \
-    0 2 'wov-aws-va-grape-test1-cw' 'local'
+    "wov-env --context local:wov-aws-va-grape-test1-${TESTME} --var WOV_CONTEXT --var WOV_ORIGIN" \
+    0 2 "wov-aws-va-grape-test1-${TESTME}" 'local'
 
   tr_test "workingcontext and origin cmdline conflict, cmdline wins" \
-    'wov-env --context local:wov-aws-va-grape-test1-cw --origin ll --var WOV_CONTEXT --var WOV_ORIGIN --var WOV_WORKINGCONTEXT' \
-    0 3 'wov-aws-va-grape-test1-cw' 'll' 'll:wov-aws-va-grape-test1-cw'
+    "wov-env --context local:wov-aws-va-grape-test1-${TESTME} --origin ll --var WOV_CONTEXT --var WOV_ORIGIN --var WOV_WORKINGCONTEXT" \
+    0 3 "wov-aws-va-grape-test1-${TESTME}" 'll' "ll:wov-aws-va-grape-test1-${TESTME}"
 
   tr_test "origin from file" \
-    'wov-env --context wov-aws-va-grape-alywan-cw  --var WOV_ORIGIN --var WOV_CONTEXT --var WOV_WORKINGCONTEXT' \
-    0 3 "local" "wov-aws-va-grape-alywan-cw" "local:wov-aws-va-grape-alywan-cw"
+    "wov-env --context wov-aws-va-grape-alywan-${TESTME}  --var WOV_ORIGIN --var WOV_CONTEXT --var WOV_WORKINGCONTEXT" \
+    0 3 "local" "wov-aws-va-grape-alywan-${TESTME}" "local:wov-aws-va-grape-alywan-${TESTME}"
 
   tr_test "origin from context" \
-    'wov-env --context ll:wov-aws-va-grape-alywan-cw --var WOV_ORIGIN --var WOV_CONTEXT --var WOV_WORKINGCONTEXT' \
-    0 3 "ll" "wov-aws-va-grape-alywan-cw" "ll:wov-aws-va-grape-alywan-cw"
+    "wov-env --context ll:wov-aws-va-grape-alywan-${TESTME} --var WOV_ORIGIN --var WOV_CONTEXT --var WOV_WORKINGCONTEXT" \
+    0 3 "ll" "wov-aws-va-grape-alywan-${TESTME}" "ll:wov-aws-va-grape-alywan-${TESTME}"
 
   tr_test "origin from cmdline switch" \
-    'wov-env --context wov-aws-va-grape-alywan-cw --origin LL --var WOV_ORIGIN --var WOV_CONTEXT --var WOV_WORKINGCONTEXT' \
-    0 3 "LL" "wov-aws-va-grape-alywan-cw" "LL:wov-aws-va-grape-alywan-cw"
+    "wov-env --context wov-aws-va-grape-alywan-${TESTME} --origin LL --var WOV_ORIGIN --var WOV_CONTEXT --var WOV_WORKINGCONTEXT" \
+    0 3 "LL" "wov-aws-va-grape-alywan-${TESTME}" "LL:wov-aws-va-grape-alywan-${TESTME}"
 
   tr_section '/context-tests'
 }
@@ -108,12 +109,12 @@ tr_h2 'wov-env'
 
   tr_doctest "in wov-env, provide a full context and check origin, context and working context"
   tr_test "wov-env origin from file" \
-    'wov-env --context wov-aws-va-grape-alywan-cw --var WOV_ORIGIN --var WOV_CONTEXT --var WOV_WORKINGCONTEXT' \
-    0 3 "local" "wov-aws-va-grape-alywan-cw" "local:wov-aws-va-grape-alywan-cw"
+    "wov-env --context wov-aws-va-grape-alywan-${TESTME} --var WOV_ORIGIN --var WOV_CONTEXT --var WOV_WORKINGCONTEXT" \
+    0 3 "local" "wov-aws-va-grape-alywan-${TESTME}" "local:wov-aws-va-grape-alywan-${TESTME}"
 
   tr_test "wov-env origin from context" \
-    'wov-env --context ll:wov-aws-va-grape-alywan-cw --var WOV_ORIGIN --var WOV_CONTEXT --var WOV_WORKINGCONTEXT' \
-    0 3 "ll" "wov-aws-va-grape-alywan-cw" "ll:wov-aws-va-grape-alywan-cw"
+    "wov-env --context ll:wov-aws-va-grape-alywan-${TESTME} --var WOV_ORIGIN --var WOV_CONTEXT --var WOV_WORKINGCONTEXT" \
+    0 3 "ll" "wov-aws-va-grape-alywan-${TESTME}" "ll:wov-aws-va-grape-alywan-${TESTME}"
 
 
   tr_test "Version" 'wov-env --version' 0 1 "${ACTUAL_WOV_VERSION}"
@@ -127,15 +128,15 @@ tr_h2 'wov-env'
     0 1 "$(. wov-env ; echo "${#ECHOVARS[@]}")"
 
   tr_test "-e echos correct values like context" \
-    'wov-env --context ll:wov-aws-va-grape-alywan-cw -e | grep WOV_CONTEXT' \
-    0 1 "WOV_CONTEXT='wov-aws-va-grape-alywan-cw'"
+    "wov-env --context ll:wov-aws-va-grape-alywan-${TESTME} -e | grep WOV_CONTEXT" \
+    0 1 "WOV_CONTEXT='wov-aws-va-grape-alywan-${TESTME}'"
 
   tr_test "-e echos correct values like context" \
-    'wov-env --origin LL --context ll:wov-aws-va-grape-alywan-cw -e | grep WOV_CONTEXT' \
-    0 1 "WOV_CONTEXT='wov-aws-va-grape-alywan-cw'"
+    "wov-env --origin LL --context ll:wov-aws-va-grape-alywan-${TESTME} -e | grep WOV_CONTEXT" \
+    0 1 "WOV_CONTEXT='wov-aws-va-grape-alywan-${TESTME}'"
 
   tr_test "-e echos correct values like context" \
-    'wov-env --origin LL --context ll:wov-aws-va-grape-alywan-cw -e | grep WOV_ORIGIN' \
+    "wov-env --origin LL --context ll:wov-aws-va-grape-alywan-${TESTME} -e | grep WOV_ORIGIN" \
     0 1 "WOV_ORIGIN='LL'"
 
   tr_test "-E is 0 lines" \
@@ -151,25 +152,25 @@ tr_h2 'wov-env'
     0 1 'WOV_ORIGIN'
 
 
-  tr_test "Test ConfigurationMap of a Microservice : local cw" \
-    'wov-env --context local:wov-aws-va-grape-test1-cw --cm test1X | grep -e "WOV_ME=" -e "WOV_test1X_port=" -e "WOV_test1X_ver=" -e "WOV_www_api_url=" | sort' \
-    0 4 'WOV_ME=cw' 'WOV_test1X_port=75643' 'WOV_test1X_ver=v1' 'WOV_www_api_url=localhost'
+  tr_test "Test ConfigurationMap of a Microservice : local ${TESTME}" \
+    "wov-env --context local:wov-aws-va-grape-test1-${TESTME} --cm test1X | \grep -e \"WOV_ME=\" -e \"WOV_test1X_port=\" -e \"WOV_test1X_ver=\" -e \"WOV_www_api_url=\" | sort" \
+    0 4 "WOV_ME=${TESTME}" 'WOV_test1X_port=75643' 'WOV_test1X_ver=v1' 'WOV_www_api_url=localhost'
 
-  tr_test "Test ConfigurationMap of a Microservice : remote cw" \
-    'wov-env --context remote:wov-aws-va-grape-test1-cw --cm test1X | grep -e "WOV_ME=" -e "WOV_test1X_port=" -e "WOV_test1X_ver=" -e "WOV_www_api_url=" | sort' \
-    0 4 'WOV_ME=cw' 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' 'WOV_www_api_url=api-cw.woveon.com'
+  tr_test "Test ConfigurationMap of a Microservice : remote ${TESTME}" \
+    "wov-env --context remote:wov-aws-va-grape-test1-${TESTME} --cm test1X | \grep -e \"WOV_ME=\" -e \"WOV_test1X_port=\" -e \"WOV_test1X_ver=\" -e \"WOV_www_api_url=\" | sort" \
+    0 4 "WOV_ME=${TESTME}" 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' "WOV_www_api_url=api-${TESTME}.alywan.com"
 
-  tr_test "Test ConfigurationMap of a Microservice: self cw" \
-    'wov-env --context wov-aws-va-grape-test1-cw --origin self --cm test1X | grep -e "WOV_ME=" -e "WOV_test1X_port=" -e "WOV_test1X_ver=" -e "WOV_www_api_url=" | sort' \
-    0 4 'WOV_ME=cw' 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' 'WOV_www_api_url=api-cw.woveon.com'
+  tr_test "Test ConfigurationMap of a Microservice: self ${TESTME}" \
+    "wov-env --context wov-aws-va-grape-test1-${TESTME} --origin self --cm test1X | \grep -e \"WOV_ME=\" -e \"WOV_test1X_port=\" -e \"WOV_test1X_ver=\" -e \"WOV_www_api_url=\" | sort" \
+    0 4 "WOV_ME=${TESTME}" 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' "WOV_www_api_url=api-${TESTME}.alywan.com"
 
   tr_test "Test ConfigurationMap of a Microservice: remote dev" \
-    'wov-env --context wov-aws-va-grape-test1-dev --origin remote --cm test1X | grep -e "WOV_ME=" -e "WOV_STAGE=" -e "WOV_test1X_port=" -e "WOV_test1X_ver=" -e "WOV_www_api_url=" | sort' \
-    0 5 'WOV_ME=cw' 'WOV_STAGE=dev' 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' 'WOV_www_api_url=api-dev.woveon.com'
+    'wov-env --context wov-aws-va-grape-test1-dev --origin remote --cm test1X | \grep -e "WOV_ME=" -e "WOV_STAGE=" -e "WOV_test1X_port=" -e "WOV_test1X_ver=" -e "WOV_www_api_url=" | sort' \
+    0 5 "WOV_ME=${TESTME}" 'WOV_STAGE=dev' 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' 'WOV_www_api_url=api-dev.alywan.com'
 
 # TODO: secrets
-#  tr_test "Test Secrets of a Microservice : local cw" \
-#    'wov-env --context local:wov-aws-va-grape-test1-cw --se test1X | grep -oh -e "WOV_test1db_password=" | sort' \
+#  tr_test "Test Secrets of a Microservice : local ${TESTME}" \
+#    "wov-env --context local:wov-aws-va-grape-test1-${TESTME} --se test1X | grep -oh -e \"WOV_test1db_password=\" | sort" \
 #    0 1 'WOV_test1db_password='
 
   tr_test 'Provider Returns 3 values' \
@@ -205,7 +206,7 @@ tr_h2 'wov-env'
     0 1 "75643"
 
   tr_test "--var" \
-    'wov-env --var WOV_STAGE' 0 1 'cw'
+    'wov-env --var WOV_STAGE' 0 1 "${TESTME}"
   tr_test "--var" \
     'wov-env --context wov-aws-va-grape-test1-dev --var WOV_STAGE' 0 1 'dev'
 
@@ -241,26 +242,26 @@ tr_vverbose
   tr_test 'Clean cluster directory' \
     'ls wovtools/cache/clusters | wc -l | tr -d "[:space:]" ' 0 1 0 
   tr_test 'Build a Configuration' \
-    'wov-env-build --context self:wov-aws-va-grape-test1-cw --config' 0 -1 ''
+    "wov-env-build --context self:wov-aws-va-grape-test1-${TESTME} --config" 0 -1 ''
   tr_test 'One cluster configuration should exist' \
-    'ls wovtools/cache/clusters ' 0 1 'self__wov-aws-va-grape-test1-cw'
+    'ls wovtools/cache/clusters ' 0 1 "self__wov-aws-va-grape-test1-${TESTME}"
   tr_test 'One file config.json should exist' \
-    'ls wovtools/cache/clusters/self__wov-aws-va-grape-test1-cw | wc -l | tr -d "[:space:]"' 0 1 '1'
+    "ls wovtools/cache/clusters/self__wov-aws-va-grape-test1-${TESTME} | wc -l | tr -d \"[:space:]\"" 0 1 '1'
 
 tr_tests_on
   wov-env-build --clean
   tr_test 'Clean cluster directory again' \
     'ls wovtools/cache/clusters | wc -l | tr -d "[:space:]" ' 0 1 0 
   tr_test 'Build Cluster Config' \
-    'wov-env-build --context self:wov-aws-va-grape-test1-cw --cluster' 0 -1 ''
+    "wov-env-build --context self:wov-aws-va-grape-test1-${TESTME} --cluster" 0 -1 ''
   tr_test '4 dirs and config.json should exist' \
-    'cd wovtools/cache/clusters/self__wov-aws-va-grape-test1-cw ; ls' 0 4 'cm' 'config.json' 'k8s' 'se'
+    "cd wovtools/cache/clusters/self__wov-aws-va-grape-test1-${TESTME} ; ls" 0 4 'cm' 'config.json' 'k8s' 'se'
   tr_test 'cm/test1X should have WOV_test1X_port=' \
-    'grep -oh "WOV_test1X_port=" wovtools/cache/clusters/self__wov-aws-va-grape-test1-cw/cm/test1X' \
+    "grep -oh \"WOV_test1X_port=\" wovtools/cache/clusters/self__wov-aws-va-grape-test1-${TESTME}/cm/test1X" \
     0 1 'WOV_test1X_port='
   # TODO - for secrets
 #  tr_test 'se/test1X should have WOV_test1X_password=' \
-#    'grep -oh "WOV_test1X_password=" wovtools/cache/clusters/self__wov-aws-va-grape-test1-cw/se/test1X' \
+#    "grep -oh "WOV_test1X_password=" wovtools/cache/clusters/self__wov-aws-va-grape-test1-${TESTME}/se/test1X" \
 #    0 1 'WOV_test1X_password='
 
   tr_section '/wov-env-build'

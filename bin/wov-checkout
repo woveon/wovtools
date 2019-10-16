@@ -8,10 +8,10 @@ export PATH=$PATH:/usr/local/bin/wovlib
 
 # ---------------------------------------------------------------------
 # Define and init all used variables
-VARDEPS=( 'GLOBALDIR'  'WOV_MASTERPROJECT' 'WOV_PROJECT' \
-          'MSCODE'     'REPODIR' 'REPOEXT'           'WOV_BASEDIR' \
-          'WOV_SEADIR' 'WOV_DBADIR'        'WOV_DSADIR' 'PROJSHORTCUT' \
-          'WOV_CODEREPOARCHIVE' )
+VARDEPS=( 'GLOBALDIR'    'WOV_MASTERPROJECT' 'WOV_PROJECT' \
+          'MSCODE'       'REPODIR' 'REPOEXT' 'WOV_BASEDIR' \
+          'WOV_LOCALARCHIVEBASE' \
+          'PROJSHORTCUT' 'WOV_CODEREPOARCHIVE' )
 for f in "${VARDEPS[@]}"; do eval "${f}="; done
 
 
@@ -83,13 +83,20 @@ function doShowCheckoutEnvs()
 
 # --------------------------------------------------------------------
 # Create and Validate if not exists
-iGlobalConfig_CreateIfNotExists || exit 1
+if [ ! -e "${HOME}/.wovtools" ]; then
+  iGlobalConfig_CreateIfNotExists || exit 1
+fi
 iGlobalConfig_Validate || exit 1
 
 # --------------------------------------------------------------------
 # Read in (so can overwrite below)
 iGlobalConfig_ReadIn || exit 1
 
+
+# --------------------------------------------------------------------
+WOV_SEADIR="${WOV_LOCALARCHIVEBASE}/searchive"
+WOV_DBADIR="${WOV_LOCALARCHIVEBASE}/dbarchive"
+WOV_DSADIR="${WOV_LOCALARCHIVEBASE}/dsarchive"
 
 
 COMMAND='checkout'
@@ -113,9 +120,13 @@ while [[ $1 =~ ^- ]]; do
   # ---------------------------------------------------------------------
   elif [ "$1" == "--local-archives" ]; then
     shift
-    WOV_SEADIR="$(realpath "$1/searchive")"
-    WOV_DBADIR="$(realpath "$1/dbarchive")"
-    WOV_DSADIR="$(realpath "$1/dsarchive")"
+    WOV_LOCALARCHIVEBASE="${1}"
+    WOV_SEADIR="${WOV_LOCALARCHIVEBASE}/searchive"
+    WOV_DBADIR="${WOV_LOCALARCHIVEBASE}/dbarchive"
+    WOV_DSADIR="${WOV_LOCALARCHIVEBASE}/dsarchive"
+#    WOV_SEADIR="$(realpath "$1/searchive")"
+#    WOV_DBADIR="$(realpath "$1/dbarchive")"
+#    WOV_DSADIR="$(realpath "$1/dsarchive")"
     shift
 
   elif [ "$1" == "--searchive" ]; then

@@ -21,6 +21,9 @@ if [ "${WOV_ENV_COMMONCMDS}" != "1" ]; then
     # --- many scripts have a default behavior. if a comman like '--version' is
     #     called, then turn off the default command of the script
 
+  #WOV_LOCALARCHIVEBASE="${HOME}/wovtools"
+    # --- default location for wovtools to place local archives. Overwritten by .wovtools entry.
+
   WOV_METAARGS=
     # --- Used to pass wov-env-ops commands to other wov- commands
   shift

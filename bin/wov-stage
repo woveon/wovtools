@@ -262,12 +262,17 @@ function doSetStage()
     if [ $? -ne 0 ]; then l_error "Namespace issue"; exit 1; fi
 
     # echo "WARNING: if needed, remember to 'git merge ${OLDSTAGE}'."
-    l_ "... merging git repo '${OLDSTAGE}' into '${NEWSTAGE}'."
-    R=$(git merge ${OLDSTAGE}) ; Re=$?
-    if [ $Re -ne 0 ]; then
-      l_error "git merge error"
-      retval=1
-      echo "$R"
+    git rev-parse --verify --quiet ${OLDSTAGE} ; Re=$?
+    if [ $Re -eq 0 ]; then
+      l_ "... merging git repo '${OLDSTAGE}' into '${NEWSTAGE}'."
+      R=$(git merge ${OLDSTAGE}) ; Re=$?
+      if [ $Re -ne 0 ]; then
+        l_error "git merge error"
+        retval=1
+        echo "$R"
+      fi
+    else
+      l_warn "...no branch '${OLDSTAGE}' in git repo. No automatic merge made."
     fi
 
   fi

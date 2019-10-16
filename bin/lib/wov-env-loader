@@ -146,6 +146,9 @@ function getWovProjectVars()
     printf "  - This is a unique code in this project, to represent yourself. Try using your initials (assuming they are unique to your team).\n\n"
     exit 1
   fi
+  l_debug "cat .wovtools for WOV_ME : '${WOV_ME}'"
+  l_debug "WOV_CONTEXT '${WOV_CONTEXT}'"
+
 
   # --------------------------------------------------------------------- 
   # vars from merged config files
@@ -171,6 +174,7 @@ function getWovProjectVars()
   else
     l_debug "... merged cached config is current"
   fi
+  l_debug "WOV_CONTEXT '${WOV_CONTEXT}'"
 
 
   # --------------------------------------------------------------------- 
@@ -203,6 +207,7 @@ function getWovProjectVars()
   # vars from Kubernetes
   # --------------------------------------------------------------------- 
   # l_ "vars from kubernetes : ${WOV_CONTEXT}"
+  l_debug "WOV_CONTEXT '${WOV_CONTEXT}'"
   if [ "${WOV_CONTEXT}" == "" ]; then 
     WOV_CONTEXT="$(kubectl config current-context 2> /dev/null )" ; Re=$?
     if [ $Re -ne 0 ]; then
@@ -211,6 +216,8 @@ function getWovProjectVars()
     fi
     export WOV_CONTEXT
   fi
+  l_debug "WOV_CONTEXT '${WOV_CONTEXT}'"
+
 
   array=( ${WOV_CONTEXT//-/ } )
   if [ "${#array[@]}" != "6" ]; then
@@ -271,6 +278,7 @@ function getWovProjectVars()
   # vars computed from above
   # --------------------------------------------------------------------- 
   # export WOV_CLUSTERDIR="${WOV_CACHEDIR}/clusters/${WOV_ORIGIN}__${WOV_CONTEXT}"
+  l_debug "WOV_ME '${WOV_ME}': WOV_getClusterConfigDir ${WOV_ORIGIN} ${WOV_CONTEXT}"
   export WOV_CLUSTERDIR="$(WOV_getClusterConfigDir ${WOV_ORIGIN} ${WOV_CONTEXT})"
   # mkdir -m 700 -p ${WOV_SECRETFILE_path}
   export WOV_SECRETFILE=${WOV_CLUSTERDIR}/config.json
@@ -280,3 +288,4 @@ function getWovProjectVars()
 
 # if it is set to 0, skip, and all other cases load it up
 if [ "${ISWOVPROJECT}" == "0" ]; then ISWOVPROJECT=${ISWOVPROJECT}; else getWovProjectVars; fi
+

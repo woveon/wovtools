@@ -10,14 +10,18 @@ tr_protectdir  "test1" del
 
 tr_h1 "wov-checkout - $0"
 tr_comment "Tests the wov-checkout command. Assumes test1 project has been created with 'test011_init.sh'."
+. test_common.sh
+tcUseTestingContext
+
+export PATH=$PATH:/usr/local/bin/wovlib
+. wov-env-common
+
 
 MTESTDIR="$(realpath .)"
-
-MASTER="$(basename $MTESTDIR)"
-PROJ=test1
 MSC=X
-
-TESTDIR="${MTESTDIR}/${PROJ}"
+#MASTER="$(basename $MTESTDIR)"
+#PROJ=test1
+#TESTDIR="${MTESTDIR}/${PROJ}"
 
 {
   tr_section 'init'
@@ -26,7 +30,7 @@ TESTDIR="${MTESTDIR}/${PROJ}"
 
 
 tr_tests_on
-tr_tests_off
+#tr_tests_off
 
 
 tr_vverbose
@@ -34,7 +38,15 @@ D=.delme
 {
   tr_section 'checkenvs'
 
-  wov-checkout --envs test1 X > $D
+  echo "LADIR: ${LADIR}"
+  wov-checkout --local-archives ${LADIR} --envs test1 X > $D <<EOF
+Y
+Y
+Y
+Y
+EOF
+  tr_comment "D:" ; cat "$D"
+
   tr_test "GLOBALDIR is repo location" \
     "cat $D | grep GLOBALDIR" \
     0 1 "GLOBALDIR=`pwd`"
@@ -53,24 +65,28 @@ D=.delme
 
   tr_test "check REPODIR" \
     "cat $D | sed -n -e 's/^REPODIR=//p'" \
-    0 1 "test/test1-test1X"
+    0 1 "test/test1_test1X"
   tr_test "check REPOEXT" \
     "cat $D | sed -n -e 's/^REPOEXT=//p'" \
-    0 1 "test/test1-test1X"
+    0 1 "test_test1_test1X"
 
   tr_test "check WOV_BASEDIR" \
     "cat $D | sed -n -e 's/^WOV_BASEDIR=//p'" \
-    0 1 "`pwd`/test1-test1X"
+    0 1 "`pwd`/test1_test1X"
 
-  tr_test "check WOV_SEADIR" \
-    "cat $D | sed -n -e 's/^WOV_SEADIR=//p'" \
-    0 1 "`jq -r '.local.searchives.dir' ~/.wovtools`"
-  tr_test "check WOV_DBADIR" \
-    "cat $D | sed -n -e 's/^WOV_DBADIR=//p'" \
-    0 1 "`jq -r '.local.dbarchives.dir' ~/.wovtools`"
-  tr_test "check WOV_DSADIR" \
-    "cat $D | sed -n -e 's/^WOV_DSADIR=//p'" \
-    0 1 "`jq -r '.local.dsarchives.dir' ~/.wovtools`"
+  tr_test "check WOV_LOCALARCHIVEBASE" \
+    "cat $D | sed -n -e 's/^WOV_LOCALARCHIVEBASE=//p'" \
+    0 1 "${LADIR}"
+
+#  tr_test "check WOV_SEADIR" \
+#    "cat $D | sed -n -e 's/^WOV_SEADIR=//p'" \
+#    0 1 "`jq -r '.local.searchives.dir' ~/.wovtools`"
+#  tr_test "check WOV_DBADIR" \
+#    "cat $D | sed -n -e 's/^WOV_DBADIR=//p'" \
+#    0 1 "`jq -r '.local.dbarchives.dir' ~/.wovtools`"
+#  tr_test "check WOV_DSADIR" \
+#    "cat $D | sed -n -e 's/^WOV_DSADIR=//p'" \
+#    0 1 "`jq -r '.local.dsarchives.dir' ~/.wovtools`"
 
   tr_test "check PROJSHORTCUT" \
     "cat $D | sed -n -e 's/^PROJSHORTCUT=//p'" \
@@ -87,7 +103,8 @@ D1=.delme1
 {
   tr_section 'checkjson'
 
-  wov-checkout --config-only test1 X > $D1
+  
+  wov-checkout --local-archives ${LADIR} --config-only test1 X > $D1
   cat $D
   cat $D1
 
@@ -95,18 +112,22 @@ D1=.delme1
     "cat $D | sed -n -e 's/^WOV_BASEDIR=//p'" \
     0 1 "`jq -r '.projects.test1X.dir' ${D1}`"
   tr_test "check .projects.test1X.repo" \
-    "cat $D | sed -n -e 's/^REPODIR=//p'" \
+    "cat $D | sed -n -e 's/^REPOEXT=//p'" \
     0 1 "`jq -r '.projects.test1X.repo' ${D1}`"
   tr_test "check .projects.test1X.reposerver" \
     "cat $D | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" \
     0 1 "`jq -r '.projects.test1X.reposerver' ${D1}`"
 
   # Secrets Local Archive
+  echo "LADIR: ${LADIR}"
+  echo "se path: $(WovPathExt la se ${MASTER} ${PROJ})"
+  echo "jq : $(jq -r '.projects.test1X.sub[0].dir' ${D1})"
   tr_test "check .projects.test1X.sub[0].dir" \
-    "cat $D | sed -n -e 's/^WOV_SEADIR=//p'" \
-    0 1 "`jq -r '.projects.test1X.sub[0].dir' ${D1}`"
+    "jq -r '.projects.test1X.sub[0].dir' ${D1}" 0 1  \
+    "${LADIR}/searchive/$(WovPathExt la se ${MASTER} ${PROJ})"
+
   tr_test "check .projects.test1X.sub[0].repo" \
-    "echo 'test-sea'" \
+    "echo 'test_sea_${TESTME}'" \
     0 1 "`jq -r '.projects.test1X.sub[0].repo' ${D1}`"
   tr_test "check .projects.test1X.sub[0].reposerver" \
     "cat $D | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" \
@@ -114,10 +135,10 @@ D1=.delme1
 
   # DataBase Local Archive
   tr_test "check .projects.test1X.sub[1].dir" \
-    "cat $D | sed -n -e 's/^WOV_DBADIR=//p'" \
-    0 1 "`jq -r '.projects.test1X.sub[1].dir' ${D1}`"
+  "jq -r '.projects.test1X.sub[1].dir' ${D1}" 0 1 \
+    "${LADIR}/dbarchive/$(WovPathExt la db ${MASTER} ${PROJ})"
   tr_test "check .projects.test1X.sub[1].repo" \
-    "echo 'test/test1-test1X-dba'" \
+    "echo 'test_test1_dba'" \
     0 1 "`jq -r '.projects.test1X.sub[1].repo' ${D1}`"
   tr_test "check .projects.test1X.sub[1].reposerver" \
     "cat $D | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" \
@@ -125,10 +146,10 @@ D1=.delme1
 
   # DataSet Local Archive
   tr_test "check .projects.test1X.sub[2].dir" \
-    "cat $D | sed -n -e 's/^WOV_DSADIR=//p'" \
-    0 1 "`jq -r '.projects.test1X.sub[2].dir' ${D1}`"
+    "jq -r '.projects.test1X.sub[2].dir' ${D1}" 0 1 \
+    "${LADIR}/dsarchive/$(WovPathExt la ds ${MASTER} ${PROJ})"
   tr_test "check .projects.test1X.sub[2].repo" \
-    "echo 'test/test1-test1X-dsa'" \
+    "echo 'test_dsa'" \
     0 1 "`jq -r '.projects.test1X.sub[2].repo' ${D1}`"
   tr_test "check .projects.test1X.sub[2].reposerver" \
     "cat $D | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" \
@@ -148,12 +169,14 @@ D2=.delme2
   tr_test "check WOV_MASTERPROJECT" "cat $D2 | sed -n -e 's/^WOV_MASTERPROJECT=//p'" 0 1 "MASTER"
   tr_test "check WOV_PROJECT" "cat $D2 | sed -n -e 's/^WOV_PROJECT=//p'" 0 1 "test1"
   tr_test "check MSCODE" "cat $D2 | sed -n -e 's/^MSCODE=//p'" 0 1 "X"
-  tr_test "check REPODIR" "cat $D2 | sed -n -e 's/^REPODIR=//p'" 0 1 "MASTER/test1-test1X"
-  tr_test "check REPOEXT" "cat $D2 | sed -n -e 's/^REPOEXT=//p'" 0 1 "MASTER/test1-test1X"
-  tr_test "check WOV_BASEDIR" "cat $D2 | sed -n -e 's/^WOV_BASEDIR=//p'" 0 1 "$(cd .. ; pwd)/MASTER/test1-test1X"
-  tr_test "check WOV_SEADIR" "cat $D2 | sed -n -e 's/^WOV_SEADIR=//p'" 0 1 "`jq -r '.local.searchives.dir' ~/.wovtools`"
-  tr_test "check WOV_DBADIR" "cat $D2 | sed -n -e 's/^WOV_DBADIR=//p'" 0 1 "`jq -r '.local.dbarchives.dir' ~/.wovtools`"
-  tr_test "check WOV_DSADIR" "cat $D2 | sed -n -e 's/^WOV_DSADIR=//p'" 0 1 "`jq -r '.local.dsarchives.dir' ~/.wovtools`"
+  tr_test "check REPODIR" "cat $D2 | sed -n -e 's/^REPODIR=//p'" 0 1 "MASTER/test1_test1X"
+  tr_test "check REPOEXT" "cat $D2 | sed -n -e 's/^REPOEXT=//p'" 0 1 "MASTER_test1_test1X"
+  tr_test "check WOV_BASEDIR" "cat $D2 | sed -n -e 's/^WOV_BASEDIR=//p'" 0 1 "$(cd .. ; pwd)/MASTER/test1_test1X"
+
+  tr_test "check WOV_LOCALARCHIVEBASE" "cat $D2 | sed -n -e 's/^WOV_LOCALARCHIVEBASE=//p'" 0 1 "`jq -r '.archives.localbase' ~/.wovtools`"
+#  tr_test "check WOV_SEADIR" "cat $D2 | sed -n -e 's/^WOV_SEADIR=//p'" 0 1 "`jq -r '.local.searchives.dir' ~/.wovtools`"
+#  tr_test "check WOV_DBADIR" "cat $D2 | sed -n -e 's/^WOV_DBADIR=//p'" 0 1 "`jq -r '.local.dbarchives.dir' ~/.wovtools`"
+#  tr_test "check WOV_DSADIR" "cat $D2 | sed -n -e 's/^WOV_DSADIR=//p'" 0 1 "`jq -r '.local.dsarchives.dir' ~/.wovtools`"
   tr_test "check PROJSHORTCUT" "cat $D2 | sed -n -e 's/^PROJSHORTCUT=//p'" 0 1 "test1X"
   tr_test "check WOV_CODEREPOARCHIVE" "cat $D2 | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" 0 1 "`jq -r '.archives.coderepo' ~/.wovtools`"
 
@@ -168,12 +191,13 @@ D2=.delme2
   tr_test "check WOV_MASTERPROJECT" "cat $D2 | sed -n -e 's/^WOV_MASTERPROJECT=//p'" 0 1 "test"
   tr_test "check WOV_PROJECT" "cat $D2 | sed -n -e 's/^WOV_PROJECT=//p'" 0 1 "test1"
   tr_test "check MSCODE" "cat $D2 | sed -n -e 's/^MSCODE=//p'" 0 1 "X"
-  tr_test "check REPODIR" "cat $D2 | sed -n -e 's/^REPODIR=//p'" 0 1 "test/test1-test1X"
-  tr_test "check REPOEXT" "cat $D2 | sed -n -e 's/^REPOEXT=//p'" 0 1 "test/test1-test1X"
-  tr_test "check WOV_BASEDIR" "cat $D2 | sed -n -e 's/^WOV_BASEDIR=//p'" 0 1 "$(cd .. ; pwd)/test/test1-test1X"
-  tr_test "check WOV_SEADIR" "cat $D2 | sed -n -e 's/^WOV_SEADIR=//p'" 0 1 "`jq -r '.local.searchives.dir' ~/.wovtools`"
-  tr_test "check WOV_DBADIR" "cat $D2 | sed -n -e 's/^WOV_DBADIR=//p'" 0 1 "`jq -r '.local.dbarchives.dir' ~/.wovtools`"
-  tr_test "check WOV_DSADIR" "cat $D2 | sed -n -e 's/^WOV_DSADIR=//p'" 0 1 "`jq -r '.local.dsarchives.dir' ~/.wovtools`"
+  tr_test "check REPODIR" "cat $D2 | sed -n -e 's/^REPODIR=//p'" 0 1 "test/test1_test1X"
+  tr_test "check REPOEXT" "cat $D2 | sed -n -e 's/^REPOEXT=//p'" 0 1 "test_test1_test1X"
+  tr_test "check WOV_BASEDIR" "cat $D2 | sed -n -e 's/^WOV_BASEDIR=//p'" 0 1 "$(cd .. ; pwd)/test/test1_test1X"
+  tr_test "check WOV_LOCALARCHIVEBASE" "cat $D2 | sed -n -e 's/^WOV_LOCALARCHIVEBASE=//p'" 0 1 "`jq -r '.archives.localbase' ~/.wovtools`"
+  # tr_test "check WOV_SEADIR" "cat $D2 | sed -n -e 's/^WOV_SEADIR=//p'" 0 1 "`jq -r '.local.searchives.dir' ~/.wovtools`"
+  # tr_test "check WOV_DBADIR" "cat $D2 | sed -n -e 's/^WOV_DBADIR=//p'" 0 1 "`jq -r '.local.dbarchives.dir' ~/.wovtools`"
+  # tr_test "check WOV_DSADIR" "cat $D2 | sed -n -e 's/^WOV_DSADIR=//p'" 0 1 "`jq -r '.local.dsarchives.dir' ~/.wovtools`"
   tr_test "check PROJSHORTCUT" "cat $D2 | sed -n -e 's/^PROJSHORTCUT=//p'" 0 1 "SHORT"
   tr_test "check WOV_CODEREPOARCHIVE" "cat $D2 | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" 0 1 "`jq -r '.archives.coderepo' ~/.wovtools`"
 
@@ -188,12 +212,13 @@ D2=.delme2
   tr_test "check WOV_MASTERPROJECT" "cat $D2 | sed -n -e 's/^WOV_MASTERPROJECT=//p'" 0 1 "test"
   tr_test "check WOV_PROJECT" "cat $D2 | sed -n -e 's/^WOV_PROJECT=//p'" 0 1 "test1"
   tr_test "check MSCODE" "cat $D2 | sed -n -e 's/^MSCODE=//p'" 0 1 "X"
-  tr_test "check REPODIR" "cat $D2 | sed -n -e 's/^REPODIR=//p'" 0 1 "test/test1-test1X"
+  tr_test "check REPODIR" "cat $D2 | sed -n -e 's/^REPODIR=//p'" 0 1 "test/test1_test1X"
   tr_test "check REPOEXT" "cat $D2 | sed -n -e 's/^REPOEXT=//p'" 0 1 "REPO"
-  tr_test "check WOV_BASEDIR" "cat $D2 | sed -n -e 's/^WOV_BASEDIR=//p'" 0 1 "$(cd .. ; pwd)/test/test1-test1X"
-  tr_test "check WOV_SEADIR" "cat $D2 | sed -n -e 's/^WOV_SEADIR=//p'" 0 1 "`jq -r '.local.searchives.dir' ~/.wovtools`"
-  tr_test "check WOV_DBADIR" "cat $D2 | sed -n -e 's/^WOV_DBADIR=//p'" 0 1 "`jq -r '.local.dbarchives.dir' ~/.wovtools`"
-  tr_test "check WOV_DSADIR" "cat $D2 | sed -n -e 's/^WOV_DSADIR=//p'" 0 1 "`jq -r '.local.dsarchives.dir' ~/.wovtools`"
+  tr_test "check WOV_BASEDIR" "cat $D2 | sed -n -e 's/^WOV_BASEDIR=//p'" 0 1 "$(cd .. ; pwd)/test/test1_test1X"
+  tr_test "check WOV_LOCALARCHIVEBASE" "cat $D2 | sed -n -e 's/^WOV_LOCALARCHIVEBASE=//p'" 0 1 "`jq -r '.archives.localbase' ~/.wovtools`"
+  # tr_test "check WOV_SEADIR" "cat $D2 | sed -n -e 's/^WOV_SEADIR=//p'" 0 1 "`jq -r '.local.searchives.dir' ~/.wovtools`"
+  # tr_test "check WOV_DBADIR" "cat $D2 | sed -n -e 's/^WOV_DBADIR=//p'" 0 1 "`jq -r '.local.dbarchives.dir' ~/.wovtools`"
+  # tr_test "check WOV_DSADIR" "cat $D2 | sed -n -e 's/^WOV_DSADIR=//p'" 0 1 "`jq -r '.local.dsarchives.dir' ~/.wovtools`"
   tr_test "check PROJSHORTCUT" "cat $D2 | sed -n -e 's/^PROJSHORTCUT=//p'" 0 1 "test1X"
   tr_test "check WOV_CODEREPOARCHIVE" "cat $D2 | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" 0 1 "`jq -r '.archives.coderepo' ~/.wovtools`"
 
@@ -203,19 +228,20 @@ D2=.delme2
 {
   tr_section 'overridereposerver'
 
-  tr_test "override shortcut" "wov-checkout --envs --reposerver REPOSERVER test1 X > $D2" 0 -1
+  tr_test "override shortcut" "wov-checkout --envs --reposerver \"/REPOSERVER\" test1 X > $D2" 0 -1
   tr_test "GLOBALDIR is repo location" "cat $D2 | sed -n -e 's/^GLOBALDIR=//p'" 0 1 "`pwd`"
   tr_test "check WOV_MASTERPROJECT" "cat $D2 | sed -n -e 's/^WOV_MASTERPROJECT=//p'" 0 1 "test"
   tr_test "check WOV_PROJECT" "cat $D2 | sed -n -e 's/^WOV_PROJECT=//p'" 0 1 "test1"
   tr_test "check MSCODE" "cat $D2 | sed -n -e 's/^MSCODE=//p'" 0 1 "X"
-  tr_test "check REPODIR" "cat $D2 | sed -n -e 's/^REPODIR=//p'" 0 1 "test/test1-test1X"
-  tr_test "check REPOEXT" "cat $D2 | sed -n -e 's/^REPOEXT=//p'" 0 1 "test/test1-test1X"
-  tr_test "check WOV_BASEDIR" "cat $D2 | sed -n -e 's/^WOV_BASEDIR=//p'" 0 1 "$(cd .. ; pwd)/test/test1-test1X"
-  tr_test "check WOV_SEADIR" "cat $D2 | sed -n -e 's/^WOV_SEADIR=//p'" 0 1 "`jq -r '.local.searchives.dir' ~/.wovtools`"
-  tr_test "check WOV_DBADIR" "cat $D2 | sed -n -e 's/^WOV_DBADIR=//p'" 0 1 "`jq -r '.local.dbarchives.dir' ~/.wovtools`"
-  tr_test "check WOV_DSADIR" "cat $D2 | sed -n -e 's/^WOV_DSADIR=//p'" 0 1 "`jq -r '.local.dsarchives.dir' ~/.wovtools`"
+  tr_test "check REPODIR" "cat $D2 | sed -n -e 's/^REPODIR=//p'" 0 1 "test/test1_test1X"
+  tr_test "check REPOEXT" "cat $D2 | sed -n -e 's/^REPOEXT=//p'" 0 1 "test_test1_test1X"
+  tr_test "check WOV_BASEDIR" "cat $D2 | sed -n -e 's/^WOV_BASEDIR=//p'" 0 1 "$(cd .. ; pwd)/test/test1_test1X"
+  tr_test "check WOV_LOCALARCHIVEBASE" "cat $D2 | sed -n -e 's/^WOV_LOCALARCHIVEBASE=//p'" 0 1 "`jq -r '.archives.localbase' ~/.wovtools`"
+  # tr_test "check WOV_SEADIR" "cat $D2 | sed -n -e 's/^WOV_SEADIR=//p'" 0 1 "`jq -r '.local.searchives.dir' ~/.wovtools`"
+  # tr_test "check WOV_DBADIR" "cat $D2 | sed -n -e 's/^WOV_DBADIR=//p'" 0 1 "`jq -r '.local.dbarchives.dir' ~/.wovtools`"
+  # tr_test "check WOV_DSADIR" "cat $D2 | sed -n -e 's/^WOV_DSADIR=//p'" 0 1 "`jq -r '.local.dsarchives.dir' ~/.wovtools`"
   tr_test "check PROJSHORTCUT" "cat $D2 | sed -n -e 's/^PROJSHORTCUT=//p'" 0 1 "test1X"
-  tr_test "check WOV_CODEREPOARCHIVE" "cat $D2 | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" 0 1 "REPOSERVER"
+  tr_test "check WOV_CODEREPOARCHIVE" "cat $D2 | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" 0 1 "/REPOSERVER"
 
   tr_section '/overridereposerver'
 }

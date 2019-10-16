@@ -639,28 +639,30 @@ function cStage_TestFixInteractive()
 
   local gitreponames=( "Code" "Secrets Archive" "DataBase Archive" "DataSet Archive")
   local gitrepodirs=( "${WOV_BASEDIR}" "${WOV_BASEDIR}/wovtools/secrets" "${WOV_BASEDIR}/wovtools/db/archive" "${WOV_BASEDIR}/wovtools/ds/const" )
+  local gitrepobranches=( "${targetstage}" "master" "${targetstage}" "${targetstage}" )
 
   for i in `seq 0 $((${#gitreponames[@]} -1))`; do
     local gitname="${gitreponames[$i]}"
     local gitdir="${gitrepodirs[$i]}"
+    local gitbranch="${gitrepobranches[$i]}"
     local skipcheckin=0
 
     l_ "  ...check Git repo '${gitname}' at path: '${gitdir}'" 
 
-    l_verbose "  ... checking for branch '${targetstage}'."
-    R=$(git -C ${gitdir} rev-parse --verify "${targetstage}" &> /dev/null) ; Re=$?
+    l_verbose "  ... checking for branch '${gitbranch}'."
+    R=$(git -C ${gitdir} rev-parse --verify "${gitbranch}" &> /dev/null) ; Re=$?
     if [ ${Re} -ne 0 ]; then
       case $tfi in
         test)
-          l_warn "Git repo '${gitname}' ($gitdir} does not have a git branch '$targetstage'.\n"`
-                 `"   'git -C \"${gitdir}\" checkout -b $targetstage'                -> to create a branch\n"`
-                 `"   'git -C \"${gitdir}\" push --set-upstream origin $targetstage' -> places branch into Git repo"
+          l_warn "Git repo '${gitname}' ($gitdir} does not have a git branch '${gitbranch}'.\n"`
+                 `"   'git -C \"${gitdir}\" checkout -b ${gitbranch}'                -> to create a branch\n"`
+                 `"   'git -C \"${gitdir}\" push --set-upstream origin ${gitbranch}' -> places branch into Git repo"
           l_error "NOTE: you need to check in all changes to your current branch first, before running above commands."
           skipcheckin=1
           if [ $retval -eq 0 ]; then retval=108; fi
           ;;
         interactive|fix)
-          l_ "    ...Branch not found. Checking if can create branch"
+          l_ "    ...Branch '${gitbranch}' not found. Checking if can create branch"
           cGit_CheckFull "${gitdir}" ; Re=$?
           if [ $Re -ne 0 ]; then 
             l_ "    ...fix issues and try again. You're killing me smalls."
@@ -668,14 +670,14 @@ function cStage_TestFixInteractive()
             if [ $retval -eq 0 ]; then retval=108; fi
             if [ "$tfi" == "interactive" ]; then return $retval; fi
           else
-            l_ "    ...creating branch '${targetstage}', pushing to origin";
-            git -C "${gitdir}" checkout -b "${targetstage}" ; Re=$?;
+            l_ "    ...creating branch '${gitbranch}', pushing to origin";
+            git -C "${gitdir}" checkout -b "${gitbranch}" ; Re=$?;
             if [ $Re -ne 0 ]; then
               skipcheckin=1
               if [ $retval -eq 0 ]; then retval=109; fi
               if [ "$tfi" == "interactive" ]; then return $retval; fi
             else 
-              git -C "${gitdir}" push --set-upstream origin "${targetstage}"; Re=$?
+              git -C "${gitdir}" push --set-upstream origin "${gitbranch}"; Re=$?
               if [ $Re -ne 0 ]; then
                 skipcheckin=1
                 if [ $retval -eq 0 ]; then retval=110; fi

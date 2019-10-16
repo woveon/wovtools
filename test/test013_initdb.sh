@@ -3,9 +3,10 @@
 
 #tr_vverbose
 tr_h1 "Init WovDataBase"
+. test_common.sh
 
-PROJ=test1
-ME=$(cat ${HOME}/.wovtools | jq -r '.me')
+#PROJ=test1
+#ME=$(cat ${HOME}/.wovtools | jq -r '.me')
 
 {
   tr_section 'initfortests'
@@ -16,6 +17,7 @@ ME=$(cat ${HOME}/.wovtools | jq -r '.me')
   tr_run 'set origin to here' 'wov-env --set-origin here'
   rm -Rf wovtools/secrets/A*db.json
   rm -Rf wovtools/db/archive/A*
+  tcUseTestingContext
   tr_section '/initfortests'
 }
 
@@ -40,7 +42,7 @@ ME=$(cat ${HOME}/.wovtools | jq -r '.me')
   tr_run "remove entries from config for database in prod" \
     "jq -r 'del( .secrets.prod[] | select( . == \"Adb.json\" or . == \"Adb_prod.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
   tr_run "remove entries from myconfig for database in prod" \
-    "jq -r 'del( .secrets.${ME}[] | select( . == \"Adb.json\" or . == \"Adb_${ME}.json\" ) )' wovtools/myconfig.json > wovtools/myconfig.json.1 ; mv wovtools/myconfig.json.1 wovtools/myconfig.json"
+    "jq -r 'del( .secrets.${TESTME}[] | select( . == \"Adb.json\" or . == \"Adb_${TESTME}.json\" ) )' wovtools/myconfig.json > wovtools/myconfig.json.1 ; mv wovtools/myconfig.json.1 wovtools/myconfig.json"
 
   # tr_run "now it is: " "cat wovtools/config.json"
   tr_test "ensure wovdb not in dev secrets"  "jq -r '.secrets.dev[]' wovtools/config.json | grep Adb.json " 1 -1 
@@ -55,6 +57,22 @@ ME=$(cat ${HOME}/.wovtools | jq -r '.me')
 
 
   tr_section '/initdb'
+}
+
+{
+  tr_section "dbcheckins"
+
+  tr_run "secrets checkin" \
+    "git -C wovtools/secrets add 'Adb.json' 'Adb_${TESTME}.json' 'Adb_dev.json' 'Adb_prod.json'; "`
+   `"git -C wovtools/secrets commit -a -m 'test013 db secrets'; "`
+   `"git -C wovtools/secrets push"
+
+  tr_run "dba checkin" \
+    "git -C wovtools/db/archive add 'Adb.json'; "`
+   `"git -C wovtools/db/archive commit -a -m 'test013 db wovdb def'; "`
+   `"git -C wovtools/db/archive push"
+
+  tr_section "/dbcheckins"
 }
 
 tr_popdir

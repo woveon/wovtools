@@ -9,9 +9,8 @@
 
 . wov-env-common
 
-DEFAULT_SEADIR=~/.wovtools_sea
-DEFAULT_DBADIR=~/.wovtools_dba
-DEFAULT_DSADIR=~/.wovtools_dsa
+DEFAULT_LOCALARCHIVEBASE="${HOME}/wovtools"
+  # --- defaults to when creating global settings
 
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
@@ -23,8 +22,8 @@ function iGlobalConfig_CreateIfNotExists()
     l_warn "no ~/.wovtools file. Creating..."
     echo "{}" > ~/.wovtools
     chmod 700 ~/.wovtools
-    iGlobalConfig_InteractiveUpdate
   fi
+  iGlobalConfig_InteractiveUpdate $1
   return $retval
 }
 
@@ -34,6 +33,9 @@ function iGlobalConfig_InteractiveUpdate()
 {
   local retval=0
   local A=
+  WOV_LOCALARCHIVEBASE="${DEFAULT_LOCALARCHIVEBASE}"
+  if [ "${1}" != "" ]; then WOW_LOCALARCHIVEBASE="$1"; fi
+
 
   # Validate it just to make sure we can continue
   iGlobalConfig_Validate ; retval=$?
@@ -49,20 +51,20 @@ function iGlobalConfig_InteractiveUpdate()
   if [ $retval -eq 0 ]; then
     if [ "${WOV_ME}" == "" ];      then WOV_ME=`whoami`; WOV_ME=${WOV_ME::2}; fi
     if [ "${WOV_PROJECT}" == "" ]; then WOV_PROJECT=$(basename $(pwd)); fi
-    if [ "${WOV_SEADIR}" == "" ];  then WOV_SEADIR="${DEFAULT_SEADIR}"; fi
-    if [ "${WOV_DBADIR}" == "" ];  then WOV_DBADIR="${DEFAULT_DBADIR}"; fi
-    if [ "${WOV_DSADIR}" == "" ];  then WOV_DSADIR="${DEFAULT_DSADIR}"; fi
+#    if [ "${WOV_SEADIR}" == "" ];  then WOV_SEADIR="${labase}/searchive"; fi
+#    if [ "${WOV_DBADIR}" == "" ];  then WOV_DBADIR="${labase}/dbarchive"; fi
+#    if [ "${WOV_DSADIR}" == "" ];  then WOV_DSADIR="${labase}/dsarchive"; fi
     if [ "${WOV_K8SARCHIVE}" == "" ]; then WOV_K8SARCHIVE="s3://wovtools.DOMAIN/archive"; fi
     if [ "${WOV_CONTAINERARCHIVE}" == "" ]; then
       WOV_CONTAINERARCHIVE="$(aws sts get-caller-identity --output text --query 'Account').dkr.ecr.$(aws configure get region).amazonaws.com"
     fi
-    if [ "${WOV_CODEREPOARCHIVE}" == "" ]; then WOV_CODEREPOARCHIVE="git-codecommit.$(aws configure get region).amazonaws.com"; fi
+    if [ "${WOV_CODEREPOARCHIVE}" == "" ]; then WOV_CODEREPOARCHIVE="ssh://git-codecommit.$(aws configure get region).amazonaws.com/v1/repos"; fi
   fi
 
   if [ $retval -eq 0 ]; then
     echo ""
     echo "---"
-    l_ "Create user's global Wovtools config: ~/.wovtools"
+    l_ "User's global Wovtools config: ~/.wovtools"
 
 
     l_verbose " - WOV_ME"
@@ -87,154 +89,152 @@ function iGlobalConfig_InteractiveUpdate()
     done
     echo "  ... WOV_ME: ${WOV_ME}"
 
-    l_verbose " - WOV_SEADIR"
-    while true; do
-      echo ""
-      read -r -p "Default location for WovTools Secrets Archives:  (\"${WOV_SEADIR}\") ... Correct? [Y/n] " A
-      case $A in
-        ""|[Yy][Ee][Ss]|[Yy])
-          break
-          ;;
-        [Nn][Oo]|[Nn])
-          read -r -p "ok, enter new location: " B
-          if [ -e ${B} ]; then WOV_SEADIR="${B}"; break;
-          else l_warn "Bad. Directory '${B}' does not exist."; fi
-          ;;
-        *)
-          echo "Invalid input... (${A})"
-          ;;
-      esac
-    done
-    echo "  ... WOV_SEADIR : ${WOV_SEADIR}"
+#    l_verbose " - WOV_SEADIR"
+#    while true; do
+#      echo ""
+#      read -r -p "Default location for WovTools Secrets Archives:  (\"${WOV_SEADIR}\") ... Correct? [Y/n] " A
+#      case $A in
+#        ""|[Yy][Ee][Ss]|[Yy])
+#          break
+#          ;;
+#        [Nn][Oo]|[Nn])
+#          read -r -p "ok, enter new location: " B
+#          if [ -e ${B} ]; then WOV_SEADIR="${B}"; break;
+#          else l_warn "Bad. Directory '${B}' does not exist."; fi
+#          ;;
+#        *)
+#          echo "Invalid input... (${A})"
+#          ;;
+#      esac
+#    done
+#    echo "  ... WOV_SEADIR : ${WOV_SEADIR}"
+#
+#    l_verbose " - WOV_DBADIR"
+#    while true; do
+#      echo ""
+#      read -r -p "Default location for WovTools Database Archives:  (\"${WOV_DBADIR}\") ... Correct? [Y/n] " A
+#      case $A in
+#        ""|[Yy][Ee][Ss]|[Yy])
+#          break
+#          ;;
+#        [Nn][Oo]|[Nn])
+#          read -r -p "ok, enter new location: " B
+#          if [ -e ${B} ]; then WOV_DBADIR="${B}"; break;
+#          else l_warn "Bad. Directory '${B}' does not exist."; fi
+#          ;;
+#        *)
+#          echo "Invalid input... (${A})"
+#          ;;
+#      esac
+#    done
+#    echo "  ... WOV_DBADIR : ${WOV_DBADIR}"
+#
+#    l_verbose " - WOV_DSADIR"
+#    while true; do
+#      echo ""
+#      read -r -p "Default location for WovTools DataSet Archives:  (\"${WOV_DSADIR}\") ... Correct? [Y/n] " A
+#      case $A in
+#        ""|[Yy][Ee][Ss]|[Yy])
+#          break
+#          ;;
+#        [Nn][Oo]|[Nn])
+#          read -r -p "ok, enter new location: " B
+#          if [ -e ${B} ]; then WOV_DSADIR="${B}"; break;
+#          else l_warn "Bad. Directory '${B}' does not exist."; fi
+#          ;;
+#        *)
+#          echo "Invalid input... (${A})"
+#          ;;
+#      esac
+#    done
+#    echo "  ... WOV_DSADIR : ${WOV_DSADIR}"
 
-    l_verbose " - WOV_DBADIR"
-    while true; do
-      echo ""
-      read -r -p "Default location for WovTools Database Archives:  (\"${WOV_DBADIR}\") ... Correct? [Y/n] " A
-      case $A in
-        ""|[Yy][Ee][Ss]|[Yy])
-          break
-          ;;
-        [Nn][Oo]|[Nn])
-          read -r -p "ok, enter new location: " B
-          if [ -e ${B} ]; then WOV_DBADIR="${B}"; break;
-          else l_warn "Bad. Directory '${B}' does not exist."; fi
-          ;;
-        *)
-          echo "Invalid input... (${A})"
-          ;;
-      esac
-    done
-    echo "  ... WOV_DBADIR : ${WOV_DBADIR}"
 
-    l_verbose " - WOV_DSADIR"
+    l_verbose " - WOV_K8SARCHIVE"
+    echo 
+    l_ "Default Kubernetes Archive (remote file server):"
+    l_ "  Currently, only AWS S3 is supported. (ex. s3://wovtools.MYCOMPANY.com/archive)."
     while true; do
       echo ""
-      read -r -p "Default location for WovTools DataSet Archives:  (\"${WOV_DSADIR}\") ... Correct? [Y/n] " A
+      read -r -p "  Kubernetes Archive: (\"${WOV_K8SARCHIVE}\") ... Correct? [Y/n] " A
       case $A in
         ""|[Yy][Ee][Ss]|[Yy])
           break
           ;;
         [Nn][Oo]|[Nn])
-          read -r -p "ok, enter new location: " B
-          if [ -e ${B} ]; then WOV_DSADIR="${B}"; break;
-          else l_warn "Bad. Directory '${B}' does not exist."; fi
+          read -e -p "  ok, enter name: " -i "${WOV_K8SARCHIVE}" WOV_K8SARCHIVE
           ;;
         *)
-          echo "Invalid input... (${A})"
+          l_warn "Invalid input... (${A})"
           ;;
       esac
     done
-    echo "  ... WOV_DSADIR : ${WOV_DSADIR}"
+
+
+    l_verbose " - WOV_CONTAINERARCHIVE"
+    echo
+    l_ "Default Container Archive (remote Docker Repository):"
+    l_ "  This is where your containers will be pushed and deployed from. Enter the root URL of this repo."
+    l_ "  ex. AWS ECR is [aws_account_id].dkr.ecr.[region].amazonaws.com."
+    l_ "      AWS get account number: \"aws sts get-caller-identity --output text --query 'Account'\"."
+    l_ "      AWS get default region: \"aws configure get region\"."
+    while true; do
+      echo ""
+      read -r -p "  Container Archive: (\"${WOV_CONTAINERARCHIVE}\") ... Correct? [Y/n] " A
+
+      case $A in
+        ""|[Yy][Ee][Ss]|[Yy])
+          break
+          ;;
+        [Nn][Oo]|[Nn])
+          read -e -p "  ok, enter name: " -i "${WOV_CONTAINERARCHIVE}" WOV_CONTAINERARCHIVE
+          ;;
+        *)
+          l_warn "Invalid input... (${A})"
+          ;;
+      esac
+    done
+
+
+    l_verbose " - WOV_CODEREPOARCHIVE"
+    echo
+    l_ "Code Repositories Archive (Git repo server)"
+    l_ "  This is where your git repositories will be hosted."
+    l_ "   ex. "
+    while true; do
+      echo ""
+      read -r -p "  Code Repository Archive: (\"${WOV_CODEREPOARCHIVE}\") ... Correct? [Y/n] " A
+
+      case $A in
+        ""|[Yy][Ee][Ss]|[Yy])
+          break
+          ;;
+        [Nn][Oo]|[Nn])
+          read -e -p "  ok, enter name: " -i "${WOV_CODEREPOARCHIVE}" WOV_CODEREPOARCHIVE
+          ;;
+        *)
+          l_warn "Invalid input... (${A})"
+          ;;
+      esac
+    done
   fi
-
-
-  l_verbose " - WOV_K8SARCHIVE"
-  echo 
-  l_ "Default Kubernetes Archive (remote file server):"
-  l_ "  Currently, only AWS S3 is supported. (ex. s3://wovtools.MYCOMPANY.com/archive)."
-  while true; do
-    echo ""
-    read -r -p "  Kubernetes Archive: (\"${WOV_K8SARCHIVE}\") ... Correct? [Y/n] " A
-    case $A in
-      ""|[Yy][Ee][Ss]|[Yy])
-        break
-        ;;
-      [Nn][Oo]|[Nn])
-        read -r -p "  ok, enter name: " WOV_K8SARCHIVE
-        ;;
-      *)
-        l_warn "Invalid input... (${A})"
-        ;;
-    esac
-  done
-
-
-  l_verbose " - WOV_CONTAINERARCHIVE"
-  echo
-  l_ "Default Container Archive (remote Docker Repository):"
-  l_ "  This is where your containers will be pushed and deployed from. Enter the root URL of this repo."
-  l_ "  ex. AWS ECR is [aws_account_id].dkr.ecr.[region].amazonaws.com."
-  l_ "      AWS get account number: \"aws sts get-caller-identity --output text --query 'Account'\"."
-  l_ "      AWS get default region: \"aws configure get region\"."
-  while true; do
-    echo ""
-    read -r -p "  Container Archive: (\"${WOV_CONTAINERARCHIVE}\") ... Correct? [Y/n] " A
-
-    case $A in
-      ""|[Yy][Ee][Ss]|[Yy])
-        break
-        ;;
-      [Nn][Oo]|[Nn])
-        read -r -p "  ok, enter name: " WOV_CONTAINERARCHIVE
-        ;;
-      *)
-        l_warn "Invalid input... (${A})"
-        ;;
-    esac
-  done
-
-
-  l_verbose " - WOV_CODEREPOARCHIVE"
-  echo
-  l_ "Code Repositories Archive (Git repo server)"
-  l_ "  This is where your git repositories will be hosted."
-  l_ "   ex. "
-  while true; do
-    echo ""
-    read -r -p "  Code Repository Archive: (\"${WOV_CODEREPOARCHIVE}\") ... Correct? [Y/n] " A
-
-    case $A in
-      ""|[Yy][Ee][Ss]|[Yy])
-        break
-        ;;
-      [Nn][Oo]|[Nn])
-        read -r -p "  ok, enter name: " WOV_CODEREPOARCHIVE
-        ;;
-      *)
-        l_warn "Invalid input... (${A})"
-        ;;
-    esac
-  done
-
 
 
   # Create directories before writing
   if [ $retval -eq 0 ]; then
-    mkdir -p -m 700 "${WOV_SEADIR}" || retval=1
-    mkdir -p -m 700 "${WOV_DBADIR}" || retval=1
-    mkdir -p -m 700 "${WOV_DSADIR}" || retval=1
+    mkdir -p -m 700 "${WOW_LOCALARCHIVEBASE}" || retval=1
+#    mkdir -p -m 700 "${WOV_SEADIR}" || retval=1
+#    mkdir -p -m 700 "${WOV_DBADIR}" || retval=1
+#    mkdir -p -m 700 "${WOV_DSADIR}" || retval=1
   fi
 
 
   if [ $retval -eq 0 ]; then
-    jq ' .me="'"${WOV_ME}"'" | '`
+    jq '.me="'"${WOV_ME}"'" | '`
       `'.archives.k8s="'"${WOV_K8SARCHIVE}"'" | '`
-      `' .archives.container="'"${WOV_CONTAINERARCHIVE}"'" | '`
-      `' .archives.coderepo="'"${WOV_CODEREPOARCHIVE}"'" | '`
-      `' .local.searchives.dir="'"${WOV_SEADIR}"'" | '`
-      `' .local.dbarchives.dir="'"${WOV_DBADIR}"'" | '`
-      `' .local.dsarchives.dir="'"${WOV_DSADIR}"'" ' \
+      `'.archives.container="'"${WOV_CONTAINERARCHIVE}"'" | '`
+      `'.archives.coderepo="'"${WOV_CODEREPOARCHIVE}"'" | '`
+      `'.archives.localbase="'"${WOW_LOCALARCHIVEBASE}"'" ' \
         ~/.wovtools  \
       > "${HOME}/.wovtools.1"
     if [ $? -ne 0 ]; then
@@ -256,17 +256,19 @@ function iGlobalConfig_InteractiveUpdate()
 function iGlobalConfig_ReadIn()
 {
   local data=()
+
+  cat "${HOME}/.wovtools" | jq -r "." > /dev/null
+  if [ $? -ne 0 ]; then l_error "Failed parsing ~/.wovtools file."; exit 1; fi
+
   while read d; do
     data+=( "$d" )
-  done <<<$(cat "${HOME}/.wovtools" | jq -r ".me, .archives.k8s, .archives.container, .archives.coderepo, .local.searchives.dir, .local.dbarchives.dir, .local.dsarchives.dir" )
+  done <<<$(cat "${HOME}/.wovtools" | jq -r ".me, .archives.k8s, .archives.container, .archives.coderepo, .archives.localbase" )
 
   WOV_ME=$(              [ "${data[0]}" == "null" ] && echo "" || echo "${data[0]}" )
   WOV_K8SARCHIVE=$(      [ "${data[1]}" == "null" ] && echo "" || echo "${data[1]}" )
   WOV_CONTAINERARCHIVE=$([ "${data[2]}" == "null" ] && echo "" || echo "${data[2]}" )
   WOV_CODEREPOARCHIVE=$( [ "${data[3]}" == "null" ] && echo "" || echo "${data[3]}" )
-  WOV_SEADIR=$(          [ "${data[4]}" == "null" ] && echo "" || echo "${data[4]}" )
-  WOV_DBADIR=$(          [ "${data[5]}" == "null" ] && echo "" || echo "${data[5]}" )
-  WOV_DSADIR=$(          [ "${data[6]}" == "null" ] && echo "" || echo "${data[6]}" )
+  WOV_LOCALARCHIVEBASE=$([ "${data[4]}" == "null" ] && echo "" || echo "${data[4]}" )
 }
 
 
@@ -763,7 +765,7 @@ function iProjRepo_InteractiveNaming()
   unset wov_REPO_TYPE wov_REPO_EXT wov_REPO_MSCODE
   iProjRepo_Naming "$1" "$2" "$3" "$4" ; Re=$?
 
-  >&2 printf "AFTER: $?:${wov_REPO_TYPE}:${wov_REPO_EXT}:${wov_REPO_MSCODE}\n"
+  # >&2 printf "AFTER: $?:${wov_REPO_TYPE}:${wov_REPO_EXT}:${wov_REPO_MSCODE}\n"
 
   l_debug "  ... ask to stop and fix directory structure if problem."
   if [ $Re != 0 ]; then
@@ -900,7 +902,6 @@ function iProjRepo_InteractiveNaming()
 # ---------------------------------------------------------------------
 function iProjRepo_Naming()
 {
-  remote this too?
   local retval=0
   local MP="$1"    # WOV_MASTERPROJECT
   local P="$2"     # WOV_PROJECT
@@ -1603,6 +1604,8 @@ EOF
 EOF
   fi
 
+  l_ "MASTER_ME.json is: (should have www.STAGEME.api... "
+  cat ${BASEDIR}/wovtools/secrets/${MASTERPROJECT}_${ME}.json
   if [ ! -e "${BASEDIR}/wovtools/secrets/${MASTERPROJECT}_${ME}.json" ]; then
     cat <<EOF > "${BASEDIR}/wovtools/secrets/${MASTERPROJECT}_${ME}.json"
   {
@@ -1723,11 +1726,13 @@ function iProjLocalArchives_InteractiveUpdate()
   local dir=
   local A=
   local B=
-  local labase="$1"
-
+  local op_labase="$1"
   local dirnames=( "Secrets" "Databases" "DataSets" )
   local dirs=( "${2}" "${3}" "${4}" )
   local varnames=( "WOV_SEADIR" "WOV_DBADIR" "WOV_DSADIR" )
+
+  # use option base if provided, otherwise
+  local labase="$([ "${op_labase}" == "" ] && echo "${WOV_LOCALARCHIVEBASE}" || echo "${op_labase}")"
 
   # overwrite if base provided
   if [ "${labase}" != "" ]; then
@@ -2105,8 +2110,8 @@ function iKubernetes_InteractiveContext()
   return $retval
 }
 
-  # /////////////////////////////////////////////////////////////////////
-  # Kubernetes Funcs
+# /////////////////////////////////////////////////////////////////////
+# Kubernetes Funcs
 # /////////////////////////////////////////////////////////////////////
 
 

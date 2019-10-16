@@ -26,13 +26,14 @@ Options:
   --skip-global              - validate and readIn the ~/.wovtools file but don't create if it does not exist.
   --skip-project-config      - do not create the wovtools/config.json file
   --skip-project-myconfig    - do not create the wovtools/myconfig.json file
-  --local-archive-default X  - uses X as the default directory to use for Local Archives (overrides the global location)
+  --local-archive-base X     - uses X as the default directory to use for Local Archives (overrides the global location)
   --proj-coderepo-default X  - uses X as the default location for code (overrides teh global directory)
   --wov-db-name X            - sets the database name to use when creating a WovDataBase
   --cluster-hostedzone X     - sets the default value for a cluster's Hosted Zone
   --cluster-name X           - sets the default cluster to use
   --cluster-domain X         - sets teh default Domain name of the cluster
   --cluster-force-build      - forces the initialization of a cluster
+  --usercode X               - overrides the user code in ~/.wovtools:.me
   --wovdb-question X         - should this question to create a WovDataBase? (default is yes)
 
   -h : this help
@@ -58,13 +59,14 @@ if [ ${WOV_DODEFAULTCOMMAND} -eq 0 ]; then exit 0; fi
 OP_SKIPGLOBALCONFIG=0       # --skip-global - validate and readIn but don't CreateIfNotExists
 OP_SKIPWOVTOOLSCONFIG=0     # --skip-project-config
 OP_SKIPWOVTOOLSMYCONFIG=0   # --skip-project-myconfig
-OP_LOCALARCHIVEDEFAULT=     # --local-archive-default X
+OP_LOCALARCHIVEBASE=        # --local-archive-base X
 OP_PROJ_CODEREPOARCHIVE=    # --proj-coderepo-default X
 OP_WOVDBNAME=               # --wov-db-name
 OP_CLUSTER_HOSTEDZONE=      # --cluster-hostedzone X
 OP_CLUSTER_NAME=            # --cluster-name X
 OP_CLUSTER_DOMAIN=          # --cluster-domain X
 OP_CLUSTER_FORCEBUILD=0     # --cluster-force-build
+OP_USERCODE=                # --usercode X
 OP_WOVDB_QUESTION=1         # --wovdb-question X  - on by default
 
 # ---------------------------------------------------------------------
@@ -82,9 +84,9 @@ while [[ $1 =~ ^- ]]; do
     shift
     OP_WOVDB_QUESTION=$1
 
-  elif [ "$1" == "--local-archive-default" ]; then
+  elif [ "$1" == "--local-archive-base" ]; then
     shift
-    OP_LOCALARCHIVEDEFAULT=$1
+    OP_LOCALARCHIVEBASE=$1
     shift
 
   elif [ "$1" == "--proj-coderepo-default" ]; then
@@ -115,6 +117,12 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--cluster-force-build" ]; then
     OP_CLUSTER_FORCEBUILD=1
     shift
+
+  elif [ "$1" == "--usercode" ]; then
+    shift
+    OP_USERCODE=$1
+    shift
+
 
   else
     l_error "***ERROR: unknown option '$1'."
@@ -179,10 +187,14 @@ fi
 if [ ${OP_SKIPGLOBALCONFIG} -eq 1 ]; then
   l_ "  ...skipping"
 else
-  iGlobalConfig_CreateIfNotExists || exit 1
+  iGlobalConfig_CreateIfNotExists "${OP_LOCALARCHIVEBASE}" || exit 1
   iGlobalConfig_Validate || exit 1
 fi
 iGlobalConfig_ReadIn
+if [ "${OP_USERCODE}" != "" ]; then 
+  l_ "overriding WOV_ME with '${OP_USERCODE}' (was '${WOV_ME}')"
+  WOV_ME="${OP_USERCODE}"
+fi
 
 
 # ---------------------------------------------------------------------
@@ -250,7 +262,7 @@ iProjDir_Init "${WOV_BASEDIR}" || exit 1
 l_subtitle "Project Local Archives"
 l_         "Your local archives store data and configuration used by all projects in your master project. Here, we ask for LocalArchives variables for this Project, using the global values as defaults. If you just set global values, this might feel redundant."
 # ---------------------------------------------------------------------
-iProjLocalArchives_InteractiveUpdate "${OP_LOCALARCHIVEDEFAULT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" ; Re=$?
+iProjLocalArchives_InteractiveUpdate "${OP_LOCALARCHIVEBASE}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" ; Re=$?
 
 
 ## ---------------------------------------------------------------------
@@ -266,11 +278,12 @@ l_ "...ensure SECRETS local archive"
 l_ "             WOV_SEADIR: ${WOV_SEADIR}"
 l_ "                 rabase: ${rabase}" 
 l_ "                     ra: ${ra}" 
-l_ " OP_LOCALARCHIVEDEFAULT: ${OP_LOCALARCHIVEDEFAULT}"
+l_ "    OP_LOCALARCHIVEBASE: ${OP_LOCALARCHIVEBASE}"
+l_ "                 WOV_ME: $WOV_ME"
 
-iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${OP_LOCALARCHIVEDEFAULT}/searchive" "se" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
-iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${OP_LOCALARCHIVEDEFAULT}/dbarchive" "db" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
-iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${OP_LOCALARCHIVEDEFAULT}/dsarchive" "ds" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
+iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${OP_LOCALARCHIVEBASE}/searchive" "se" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
+iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${OP_LOCALARCHIVEBASE}/dbarchive" "db" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
+iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${OP_LOCALARCHIVEBASE}/dsarchive" "ds" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
 
 # "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_USERNAME}" "${WOV_USEREMAIL}" "${WOV_ME}" "${WOV_SEADIR}" "${WOV_CODEREPOARCHIVE}" "${rabase}"
 

@@ -2,23 +2,28 @@
 . /usr/local/bin/wtrunner
 
 
-WOV_DEBUGMODE=1
-DOECHO=2
-TESTDIR=`pwd`
-MASTER=$(basename ${TESTDIR})
-TEST=test1
-PROJ="${TEST}"
-LADIR="${TESTDIR}/${MASTER}localarchives"
-TESTREPODIR="${TESTDIR}/testremoterepo"
-mkdir -p "${TESTREPODIR}"
-PROJDIR="${TESTDIR}/${TEST}"
-ME=$(cat ${HOME}/.wovtools | jq -r '.me')
-PID=$$
+#WOV_DEBUGMODE=1
+#DOECHO=2
 
-tr_h1      "Test ${0}"
+tr_h1 "Test ${0}"
+. test_common.sh
+tcUseTestingContext
+
+
+#TESTDIR=`pwd`
+#MASTER=$(basename ${TESTDIR})
+#TEST=test1
+#PROJ="${TEST}"
+#LADIR="${TESTDIR}/${MASTER}localarchives"
+#TESTREPODIR="${TESTDIR}/testremoterepo"
+#mkdir -p "${TESTREPODIR}"
+#PROJDIR="${TESTDIR}/${TEST}"
+#ME=$(cat ${HOME}/.wovtools | jq -r '.me')
+PID=$$
+  # --- used as a unique number below
+
 
 #tr_protectfile "${HOME}/.wovtools"
-. test_common.sh
 
 #if [ "${KOPS_CLUSTER_NAME}" == "" ]; then
 #  tr_comment "KOPS_CLUSTER_NAME is not set. See your available clusters with 'kops get clusters'."
@@ -52,7 +57,7 @@ if [ $_tr_testson -eq 1 ]; then
   cat "${HOME}/.wovtools" | jq -r "del(.projects.${PROJ})"  > ~/.wovtools.$$
   mv ~/.wovtools.$$ ~/.wovtools
 
-#  tr_test "set current kubernetes context just in case" "kubectl config use-context ${USECLUSTER}-${PROJ}-${ME}" 0 -1
+#  tr_test "set current kubernetes context just in case" "kubectl config use-context ${USECLUSTER}-${PROJ}-${TESTME}" 0 -1
 
   tr_section '/clean-proj'
 fi
@@ -66,13 +71,13 @@ if [ $_tr_testson -eq 1 ]; then
   # make dirs for "Remote" Git Repositories
   mkdir -p "${TESTDIR}/${PROJ}"
   mkdir -p "${TESTREPODIR}/${MASTER}_${PROJ}.git"
-  mkdir -p "${TESTREPODIR}/${MASTER}_sea_${ME}.git"
+  mkdir -p "${TESTREPODIR}/${MASTER}_sea_${TESTME}.git"
   mkdir -p "${TESTREPODIR}/${MASTER}_${PROJ}_dba.git"
   mkdir -p "${TESTREPODIR}/${MASTER}_dsa.git"
 
   # init "Remote" Git Repositories
   git -C "${TESTREPODIR}/${MASTER}_${PROJ}.git" init --bare
-  git -C "${TESTREPODIR}/${MASTER}_sea_${ME}.git" init --bare
+  git -C "${TESTREPODIR}/${MASTER}_sea_${TESTME}.git" init --bare
   git -C "${TESTREPODIR}/${MASTER}_${PROJ}_dba.git" init --bare
   git -C "${TESTREPODIR}/${MASTER}_dsa.git" init --bare
 
@@ -85,27 +90,27 @@ if [ $_tr_testson -eq 1 ]; then
   tr_dir "${TESTDIR}/${PROJ}"
 
 #  wov-init -vv --debugmode \
-#              --local-archive-default "${LADIR}"  \
+#              --local-archive-base "${LADIR}"  \
 #              --proj-coderepo-default "${TESTREPODIR}" \
 #              --cluster-force-build \
 #              --cluster-name "${USECLUSTER}" \
 #              --cluster-domain "${USEDOMAIN}" \
 #              --cluster-hostedzone "${USEHOSTEDZONE}" \
+#              --usercode "${TESTME}" \
 #              --wovdb-question 0
 #exit 1
-
-
 
   tr_comment '...starting wov-init'
   tr_vverbose
   tr_test    "start init" \
     "wov-init -vv --debugmode "`
-             `"--local-archive-default \"${LADIR}\" "` 
+             `"--local-archive-base \"${LADIR}\" "` 
              `"--proj-coderepo-default \"${TESTREPODIR}\" "` 
              `"--cluster-force-build  "`
              `"--cluster-name \"${USECLUSTER}\" "`
              `"--cluster-domain \"${USEDOMAIN}\" "`
              `"--cluster-hostedzone \"${USEHOSTEDZONE}\" "`
+             `"--usercode \"${TESTME}\" "`
              `"--wovdb-question 0 > /dev/null ; echo $? " 0 1 0  <<EOF
 Y
 Y
@@ -159,7 +164,7 @@ fi
 
   tr_test "Local Archive Secrets to Remote Repo" \
     "git -C \"${LADIR}/searchive/${MASTER}_sea\" config --get remote.origin.url"  \
-    0 1 "${TESTREPODIR}/${MASTER}_sea_${ME}"
+    0 1 "${TESTREPODIR}/${MASTER}_sea_${TESTME}"
 
   tr_test "Local Archive DBA to Remote Repo" \
     "git -C \"${LADIR}/dbarchive/${MASTER}_${PROJ}_dba\" config --get remote.origin.url"  \
@@ -189,7 +194,7 @@ fi
   tr_test "git push"   "git push" 0 -1
 
   tr_h3 "Secrets Repo Git"
-  tr_test "add files" "git -C wovtools/secrets add cluster_mymanaged.json ii repositories.json test.json test_${ME}.json test_dev.json test_prod.json" 0 -1
+  tr_test "add files" "git -C wovtools/secrets add cluster_mymanaged.json ii repositories.json test.json test_${TESTME}.json test_dev.json test_prod.json" 0 -1
   tr_test "git commit" "git -C wovtools/secrets commit -a -m 'after init'" 0 -1
   tr_test "git push"   "git -C wovtools/secrets push"                      0 -1
 
@@ -216,6 +221,14 @@ fi
   tr_test "test wov-env runs" "wov-env --envs > /dev/null ; echo $?" 0 1 0
 
   tr_section '/wov-env'
+}
+
+{
+  tr_section "checkins"
+  git -C wovtools/secrets add "test.json"
+  git -C wovtools/secrets commit -a -m "test011 secrets"
+  git -C wovtools/secrets push
+  tr_section "/checkins"
 }
 
 
