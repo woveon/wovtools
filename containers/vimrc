@@ -1,0 +1,91 @@
+version 5.0
+filetype indent on
+
+
+set mouse=
+set nocompatible
+set cindent
+set ruler
+" set shiftwidth=4
+" set tabstop=4
+set shiftwidth=2
+set tabstop=2
+set expandtab
+if has("terminfo")
+  set t_Co=8
+	set t_Sf=<Esc>[3%p1%dm
+	set t_Sb=<Esc>[4%p1%dm
+else
+	set t_Co=8
+	set t_Sf=<Esc>[3%dm
+	set t_Sb=<Esc>[4%dm
+endif
+syntax on
+hi Comment ctermfg=Cyan
+" Below are functions for writing c++... a long time ago useful...
+"command -nargs=+ Nobj :r! newobj <args>
+"command -nargs=+ Nfor :r! newfor <args>
+"command -nargs=+ Nbool :r! newbool <args>
+"command -nargs=1 Ninc :r! newinc <args>
+"command -nargs=1 Nincc :r! newincc <args>
+"command -nargs=+ Nref :r! newref <args>
+
+" use html syntax highlighting for .ejs files 
+au BufNewFile,BufRead *.ejs set filetype=html
+
+" used for pathogen plugin... for jshint
+execute pathogen#infect()
+
+" Folds
+autocmd Syntax xml,html setlocal foldmethod=indent
+
+" Makefile remove tab expands
+autocmd FileType make set noexpandtab
+autocmd Syntax xml,html normal zR
+"set foldmethod=indent
+"set foldlevelstart=20 " basically, keep all open when starting
+
+
+" Vundle 
+set nocompatible              " be iMproved, required
+filetype off                  " required
+
+" set the runtime path to include Vundle and initialize
+set rtp+=~/.vim/bundle/Vundle.vim
+call vundle#begin()
+
+" let Vundle manage Vundle, required
+Plugin 'VundleVim/Vundle.vim'
+
+" install jsbeautify
+Plugin 'maksimr/vim-jsbeautify'
+
+" mustache and handlebars
+Plugin 'mustache/vim-mustache-handlebars'
+
+" yaml formatter
+Plugin 'tarekbecker/vim-yaml-formatter'
+
+" JSBeautify
+autocmd FileType javascript vnoremap <buffer>  <c-f> :call RangeJsBeautify()<cr>
+autocmd FileType json vnoremap <buffer> <c-f> :call RangeJsonBeautify()<cr>
+autocmd FileType jsx vnoremap <buffer> <c-f> :call RangeJsxBeautify()<cr>
+autocmd FileType html vnoremap <buffer> <c-f> :call RangeHtmlBeautify()<cr>
+autocmd FileType css vnoremap <buffer> <c-f> :call RangeCSSBeautify()<cr>
+
+
+" All of your Plugins must be added before the following line
+call vundle#end()            " required
+filetype plugin indent on    " required
+
+" Syntastic
+" Plugin 'vim-syntastic/syntastic'
+" set statusline+=%#warningmsg#
+" set statusline+=%{SyntasticStatuslineFlag()}
+" set statusline+=%*
+" let g:syntastic_always_populate_loc_list = 1
+" let g:syntastic_auto_loc_list = 1
+" let g:syntastic_check_on_open = 1
+" let g:syntastic_check_on_wq = 0
+" let g:syntastic_javascript_checkers = ['eslint']
+" let g:syntastic_javascript_eslint_exe = 'npm run lint --'

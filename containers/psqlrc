@@ -1,0 +1,5 @@
+\set QUIET 1
+
+\pset pager off
+
+\set QUIET 0

@@ -103,7 +103,7 @@ export WOV_CONFIGFILE_MERGED="${WOV_CACHEDIR}/.merged.json"
 # export WOV_SEADIR="${WOV_BASEDIR}/secrets"
 # export WOV_DBADIR="${WOV_BASEDIR}/db/archive"
 #export WOV_DSADIR="${WOV_BASEDIR}/secrets"
-SED=`which gsed`
+#SED=`which gsed`
 
 # --------------------------------------------------------------------- 
 # Used for generating paths to Cluster Configurations that include 

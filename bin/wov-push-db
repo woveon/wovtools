@@ -279,7 +279,7 @@ function doPushCheck()
       if [ "${chk_5}" == "T" ] ; then
         l_ "BLOCK: wovtools/db/archive has changes to check into git. Do this manually.\n"
         l_ "  : git status -> "
-        git -C ${WOV_BASEDIR}/wovtools/db/archive status | gsed 's/^/    : /g'
+        git -C ${WOV_BASEDIR}/wovtools/db/archive status | ${SED} 's/^/    : /g'
       fi
     fi
 

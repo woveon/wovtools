@@ -14,7 +14,7 @@ WOV_BASEDIR=$(git rev-parse --show-toplevel)
 
 
 SED=sed
-if [ "`uname`" == "Darwin" ]; then
+if [ "$(uname)" == "Darwin" ]; then
   SED=`which gsed`
   if [ $? -ne 0 ]; then
     echo 

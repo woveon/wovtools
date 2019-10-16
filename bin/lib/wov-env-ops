@@ -30,6 +30,18 @@ if [ "${WOV_ENV_COMMONCMDS}" != "1" ]; then
 
   newparams=()
 
+  SED=sed
+  if [ "$(uname)" == "Darwin" ]; then
+    SED=`which gsed`
+    if [ $? -ne 0 ]; then
+      echo
+      echo "ERROR: gsed needs to be installed with Homebrew as MacOS's sed is non-standard."
+      echo
+      echo "  `brew install gnu-sed`"
+      echo
+    fi
+  fi
+
   . wov-env-logging
 
   # ---------------------------------------------------------------------
