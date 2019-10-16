@@ -2,7 +2,7 @@
 
 BINS-INIT=wov wov-init wov-init-ms wov-init-cluster wov-init-wovdb wov-init-coderepoaccess wov-checkout wov-init-stage
 BINS-INIT-LIB=provider-wov-env-aws wov-env-common wov-env-loader wov-env-logging wov-init-common
-BINS-ENV=wov-env-ops wov-env-build wov-env wov-cluster wov-kops wov-cluster-createdb wov-cluster-configdbnet wov-env-val wov_stage-select wov-git-check wov-env-provider-common
+BINS-ENV=wov-start wov-env-ops wov-env-build wov-env wov-cluster wov-kops wov-cluster-createdb wov-cluster-configdbnet wov-env-val wov_stage-select wov-git-check wov-env-provider-common
 BINS-CLI=wov-aws wov-cd wov-bastion wov-bastion-connection wov-cmd wov-ed wov-ls wov-ns wov-db-common wov-db wov-db-cloud wov-p wov-plog \
 	       wov-hash wov-enc wov-dec wov-log wov-context wov-compile wov-hbs wov-stage wov-ns-check
 BINS-VH=wov-vh wov-vh-pushgit wov-vh-pulldir
@@ -33,10 +33,23 @@ test:
 
 install : 
 
+
+# ---------------------------------------------------------------------
+# Cross-platform
+# ---------------------------------------------------------------------
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+wtautocomplete : /usr/share/bash-completion/bash_completion
+endif
+ifeq ($(UNAME_S),Darwin)
+wtautocomplete : /usr/local/etc/bash_completion.d/wovtools
+endif
+
+
 # ---------------------------------------------------------------------
 # Install scripts
 # ---------------------------------------------------------------------
-install : preinstall /usr/local/etc/bash_completion.d/wovtools
+install : preinstall wtautocomplete
 	@echo "- $(@) --------------------------------------------------------------"
 	@echo "  ... install bins in /usr/local/bin, via ln"
 	@for b in $(BINS); do \
@@ -73,6 +86,21 @@ install : preinstall /usr/local/etc/bash_completion.d/wovtools
 #		done
 
 
+# Ubuntu
+/usr/share/bash-completion/bash_completion : completion/wovtools
+	@echo "...LINUX: checking for bash_completion"
+	@if [ ! -e /usr/share/bash-completion/bash_completion ]; then \
+    echo "  ...installing"; \
+    apt install bash-completion; \
+    echo '[[ "$$(uname)" == "Linux" && $${PS1} && -f /usr/share/bash-completion ]] && . /usr/share/bash-completion/bash_completion' >> ${HOME}/.bash_profile; \
+    echo "  ... NOTE: source ~/.bash_profile to enable bash-completion"; \
+  else \
+    echo "  ...exists"; \
+		fi
+	ln -f -s $(CURDIR)/completion/wovtools /etc/profile.d/wovtools
+
+
+# MacOS
 /usr/local/etc/bash_completion.d/wovtools : completion/wovtools
 	@echo "...checking for bash_completion"
 	@if [ ! -e $(shell brew --prefix)/etc/bash_completion ]; then \
