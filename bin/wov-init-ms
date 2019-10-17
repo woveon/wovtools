@@ -312,7 +312,6 @@ EOF
   # create the file in secrets or append to it
   l_debug 'create the file in secrets'
   l_debug " msentry : ${msentry}"
-    set -x
   if [ ! -e "${f}" ]; then
     echo $msentry > "${f}"
 
@@ -325,7 +324,6 @@ EOF
     if [ $? -eq 0 ]; then mv "${f}.1" "${f}"; 
     else l_error "Failed adding to '${WOV_MASTERPROJECT}.json' file in secrets."; exit 1; fi
   fi
-    set +x
 
 #  # TODO - when append to exising msname.json file, these lines are not needed
 #  l_ "  ...add MS json file to myconfig if not in it"
