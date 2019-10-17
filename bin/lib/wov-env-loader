@@ -138,16 +138,16 @@ function getWovProjectVars()
 
 
   # --------------------------------------------------------------------- 
-  # global .wovtools file
+  # global config file and dir
   # --------------------------------------------------------------------- 
-  export WOV_ME=$(cat ${HOME}/.wovtools | jq -r '.me')
+  export WOVCONFIGF="${HOME}/.wovtools/config"
+  export WOVCONFIGDIR="${HOME}/.wovtools"
+  export WOV_ME=$(cat ${WOVCONFIGF} | jq -r '.me')
   if [ "${WOV_ME}" == "null" ] ; then
     printf "\n\nERROR: You need to set 'me' in the ${WOV_CONFIGFILE_MINE} file.\n"
     printf "  - This is a unique code in this project, to represent yourself. Try using your initials (assuming they are unique to your team).\n\n"
     exit 1
   fi
-  l_debug "cat .wovtools for WOV_ME : '${WOV_ME}'"
-  l_debug "WOV_CONTEXT '${WOV_CONTEXT}'"
 
 
   # --------------------------------------------------------------------- 
@@ -198,7 +198,7 @@ function getWovProjectVars()
   export WOV_PROJECTTITLE="${MERGEDVARS[4]}"
   export WOV_PROJECTDESCRIPTION="${MERGEDVARS[5]}"
 
-  # mimic from ~/.wovtools
+  # mimic from WOVCONFIGF
   export WOV_CONTAINERARCHIVE="${MERGEDVARS[6]}"
   export WOV_K8SARCHIVE="${MERGEDVARS[7]}"
   export WOV_CODEREPOARCHIVE="${MERGEDVARS[8]}"

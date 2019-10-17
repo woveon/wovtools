@@ -30,21 +30,21 @@ Usage: `basename $0` (options) [project] (mscode)
 
 Checks out a WovTools project and connects it to WovTools resources.
 
-Checks out using ~/.wovtools settings for Git repository and using either:
+Checks out using '${WOVCONFIGF}' settings for Git repository and using either:
   many   microservice project : [REPOSITORY]/[MASTERPROJECT]-[TEAMPROJECT]
   single microservice project : [REPOSITORY]/[MASTERPROJECT]-[TEAMPROJECT]-[TEAMPROJECT][MSCODE]
 
   -h/--help - help
 
-  --config-only   : generates the configuration entry for insertion into ~/.wovtools
+  --config-only   : generates the configuration entry for insertion into '${WOVCONFIGF}'
 
   --master MASTER : Overrides the master project. (DEFAULT: parent directory name)
-  --shortcut X    : Overrides the project shortcut used in ~/.wovtools:.projects. (DEFAULT: [PROJECT] or [PROJECT][MSCODE]
+  --shortcut X    : Overrides the project shortcut used in ${WOVCONFIGF}:.projects. (DEFAULT: [PROJECT] or [PROJECT][MSCODE]
 
-  --ref PROJECT   : crossreferences another project X in (~/.wovtools:.projects)
+  --ref PROJECT   : crossreferences another project X in ('${WOVCONFIGF}':.projects)
   --repo REPOEXT  : override the repository extention name
   --reposerver WOV_CODEREPOARCHIVE :
-                  : override the global configuration's Code Repository Archive (~/.wovtools:.archives.coderepo)
+                  : override the global configuration's Code Repository Archive (${WOVCONFIGF}:.archives.coderepo)
 
   Local Archive settings: (override each other in order of left to right)
   --local-archives X : base archive for Secrets, DataBases and DataSets
@@ -55,7 +55,7 @@ Checks out using ~/.wovtools settings for Git repository and using either:
 Exit Codes
 101 - Not in master project directory 
 102 - Exising directory. Use --purpose-code to checkout a repo for an alternate purpose."
-103 - Failed reading from ~/.wovtools. Does it exist?
+103 - Failed reading from ${WOVCONFIGF}. Does it exist?
 104 - Differences in project definition. Warnings given. Exiting.
 105 - remote repository does not exist to clone from.
 106 - Linking Local Archives failed.
@@ -83,7 +83,7 @@ function doShowCheckoutEnvs()
 
 # --------------------------------------------------------------------
 # Create and Validate if not exists
-if [ ! -e "${HOME}/.wovtools" ]; then
+if [ ! -e "${WOVCONFIGF}" ]; then
   iGlobalConfig_CreateIfNotExists || exit 1
 fi
 iGlobalConfig_Validate || exit 1
@@ -226,9 +226,9 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
     fi
 
     l_debug "Find any existing entry for this project : ${PROJSHORTCUT}"
-    cat ~/.wovtools
-    PROJENTRY="$(jq -r ".projects.${PROJSHORTCUT}" ~/.wovtools)"; Re=$?
-    if [ $Re -ne 0 ]; then l_error "Failed reading from ~/.wovtools. Does it exist?"; exit 103; fi
+    cat "${WOVCONFIGF}"
+    PROJENTRY="$(jq -r ".projects.${PROJSHORTCUT}" "${WOVCONFIGF}")"; Re=$?
+    if [ $Re -ne 0 ]; then l_error "Failed reading from '${WOVCONFIGF}'. Does it exist?"; exit 103; fi
 
     if [ "${PROJENTRY}" == "null" ]; then
       l_ "No current entry. Generating project structure."
@@ -264,7 +264,7 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
     # l_debug "Generate what this project's global entry will look like"
     # NEWPROJENTRY="$(GlobalConfig_GenProjectEntry "${PROJSHORTCUT}" "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${MSCODE}" "${WOV_ME}" "${REPOEXT}" "${WOV_CODEREPOARCHIVE}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}")"
 
-    #l_debug  "if existing project entry in ~/.wovtools .projects, then test a bunch of things"
+    #l_debug  "if existing project entry in ${WOVCONFIGF} .projects, then test a bunch of things"
     #if [ "${CURPROJENTRY}" != "null" ]; then
     #  HASDIFFS=0
 #
@@ -295,7 +295,7 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
 
 
 
-    # if existing project entry in ~/.wovtools .projects
+    # if existing project entry in ${WOVCONFIGF} .projects
     #   see if in correct directory (because they are checking out a duplicate)
     #   if not in correct directory, 
     #     warn and ask if they want to proceed checking out in a new location
@@ -330,8 +330,8 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
     # Spew and Checks
 
 
-#    if [ "${WOV_DBADIR}" == "null" ] || [ "${WOV_DBADIR}" == "" ]; then l_error "~/.wovtools .wovtools.dbarchives entry is missing. Run wov-init-global"; exit 1; fi
-#    if [ "${WOV_DSADIR}" == "null" ] || [ "${WOV_DSADIR}" == "" ]; then l_error "~/.wovtools .wovtools.dsarchives entry is missing. Run wov-init-global"; exit 1; fi
+#    if [ "${WOV_DBADIR}" == "null" ] || [ "${WOV_DBADIR}" == "" ]; then l_error "'${WOVCONFIGF}' .wovtools.dbarchives entry is missing. Run wov-init-global"; exit 1; fi
+#    if [ "${WOV_DSADIR}" == "null" ] || [ "${WOV_DSADIR}" == "" ]; then l_error "'${WOVCONFIGF}' .wovtools.dsarchives entry is missing. Run wov-init-global"; exit 1; fi
 
 
     # ---------------------------------------------------------------------
@@ -381,15 +381,15 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
 #    iLocalArchives_CheckDirs "${WOV_MASTERPROJECT}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}" ; Re=$?
 #    if [ $Re -ne 0 ]; then exit 1; fi
 #
-#    l_verbose "... make sure Git base repository is set in ~/.wovtools"
+#    l_verbose "... make sure Git base repository is set in ${WOVCONFIGF}"
 #    if [ "${TARGETREPO}" == "" ]; then
-#        l_error "Git repository not set. In ~/.wovtools, set the .archives.coderepo or .projects.${WOV_PROJECT}.repobase"
+#        l_error "Git repository not set. In ${WOVCONFIGF}, set the .archives.coderepo or .projects.${WOV_PROJECT}.repobase"
 #        exit 1
 #    fi
 #
 #    l_verbose "--- ensure in project directory"
 #    if [ "${WOV_BASEDIR}" != "${PROJECTDIR}" ]; then
-#        l_warn "Checking out into '${WOV_BASEDIR}', when project directory is '${PROJECTDIR}' (from ~/.wovtools file)."
+#        l_warn "Checking out into '${WOV_BASEDIR}', when project directory is '${PROJECTDIR}' (from ${WOVCONFIGF} file)."
 #          read -r -p "Not in project directory '${PROJECTDIR}'. Will just build a copy here. Continue? [Y/n] " $A
 #        case $A in 
 #          ""|[Yy][Ee][Ss]|[Yy])

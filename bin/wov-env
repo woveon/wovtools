@@ -15,7 +15,7 @@ Export the context as variables for scripts or export specific variables.
 
 This pulls config data from:
  - Wovtools project config (./${WOV_CONFIGFILE_MAIN})
- - Wovtools global config ($HOME/.wovtools)
+ - Wovtools global config (${WOVCONFIGF})
  - K8s config
  - git
 
@@ -784,7 +784,7 @@ while [[ $1 =~ ^- ]]; do
     iProjRepo_Naming "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_BASEDIR}" "${WOV_BASEDIR}/.."
 
   elif [ "$1" == "--repo-p" ]; then
-    jq -r ".projects.${WOV_PROJECT}" ~/.wovtools
+    jq -r ".projects.${WOV_PROJECT}" "${WOVCONFIGF}"
 
   elif [ "$1" == "--rcAWS" ]; then
     shift

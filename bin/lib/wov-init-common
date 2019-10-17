@@ -3,25 +3,22 @@
 
 # =====================================================================
 # =====================================================================
-# Global Config (~/.wovtools)
+# Global Config (WOVCONFIGF)
 # =====================================================================
 # =====================================================================
 
 . wov-env-common
-
-DEFAULT_LOCALARCHIVEBASE="${HOME}/wovtools"
-  # --- defaults to when creating global settings
 
 # --------------------------------------------------------------------- 
 # --------------------------------------------------------------------- 
 function iGlobalConfig_CreateIfNotExists()
 {
   local retval=0
-  # --- Ensure ~/.wovtools file
-  if [ ! -e "${HOME}/.wovtools" ]; then
-    l_warn "no ~/.wovtools file. Creating..."
-    echo "{}" > ~/.wovtools
-    chmod 700 ~/.wovtools
+  # --- Ensure WOVCONFIGF file
+  if [ ! -e "${WOVCONFIGF}" ]; then
+    l_warn "no ${WOVCONFIGF} file. Creating..."
+    echo "{}" > "${WOVCONFIGF}"
+    chmod 700 "${WOVCONFIGF}"
   fi
   iGlobalConfig_InteractiveUpdate $1
   return $retval
@@ -33,7 +30,7 @@ function iGlobalConfig_InteractiveUpdate()
 {
   local retval=0
   local A=
-  WOV_LOCALARCHIVEBASE="${DEFAULT_LOCALARCHIVEBASE}"
+  WOV_LOCALARCHIVEBASE="${WOVCONFIGDIR}"
   if [ "${1}" != "" ]; then WOW_LOCALARCHIVEBASE="$1"; fi
 
 
@@ -42,7 +39,7 @@ function iGlobalConfig_InteractiveUpdate()
 
   # take first 2 letters of username
 
-  # Read what we can from ~/.wovtools
+  # Read what we can from WOVCONFIGF
   if [ $retval -eq 0 ]; then
     iGlobalConfig_ReadIn ; reatval=$?
   fi
@@ -64,7 +61,7 @@ function iGlobalConfig_InteractiveUpdate()
   if [ $retval -eq 0 ]; then
     echo ""
     echo "---"
-    l_ "User's global Wovtools config: ~/.wovtools"
+    l_ "User's global Wovtools config: '${WOVCONFIGF}'"
 
 
     l_verbose " - WOV_ME"
@@ -235,13 +232,13 @@ function iGlobalConfig_InteractiveUpdate()
       `'.archives.container="'"${WOV_CONTAINERARCHIVE}"'" | '`
       `'.archives.coderepo="'"${WOV_CODEREPOARCHIVE}"'" | '`
       `'.archives.localbase="'"${WOW_LOCALARCHIVEBASE}"'" ' \
-        ~/.wovtools  \
-      > "${HOME}/.wovtools.1"
+        "${WOVCONFIGF}"  \
+      > "${WOVCONFIGF}.1"
     if [ $? -ne 0 ]; then
       retval=1
-      rm ~/.wovtools.1
+      rm "${WOVCONFIGF}.1"
     else
-      mv ~/.wovtools.1 ~/.wovtools
+      mv "${WOVCONFIGF}.1" "${WOVCONFIGF}"
     fi
        
   fi
@@ -251,18 +248,18 @@ function iGlobalConfig_InteractiveUpdate()
 
 
 # --------------------------------------------------------------------- 
-# Sets global vars from ~/.wovtools file.
+# Sets global vars from WOVCONFIGF file.
 # --------------------------------------------------------------------- 
 function iGlobalConfig_ReadIn()
 {
   local data=()
 
-  cat "${HOME}/.wovtools" | jq -r "." > /dev/null
-  if [ $? -ne 0 ]; then l_error "Failed parsing ~/.wovtools file."; exit 1; fi
+  cat "${WOVCONFIGF}" | jq -r "." > /dev/null
+  if [ $? -ne 0 ]; then l_error "Failed parsing '${WOVCONFIGF}' file."; exit 1; fi
 
   while read d; do
     data+=( "$d" )
-  done <<<$(cat "${HOME}/.wovtools" | jq -r ".me, .archives.k8s, .archives.container, .archives.coderepo, .archives.localbase" )
+  done <<<$(cat "${WOVCONFIGF}" | jq -r ".me, .archives.k8s, .archives.container, .archives.coderepo, .archives.localbase" )
 
   WOV_ME=$(              [ "${data[0]}" == "null" ] && echo "" || echo "${data[0]}" )
   WOV_K8SARCHIVE=$(      [ "${data[1]}" == "null" ] && echo "" || echo "${data[1]}" )
@@ -275,7 +272,7 @@ function iGlobalConfig_ReadIn()
 
 
 ## --------------------------------------------------------------------- 
-## Returns project vars from ~/.wovtools for: dir, repo, repobase.
+## Returns project vars from WOVCONFIGF for: dir, repo, repobase.
 ## $1 - Team Project Name
 ## --------------------------------------------------------------------- 
 #function iGlobalConfig_ProjectReadIn()
@@ -286,7 +283,7 @@ function iGlobalConfig_ReadIn()
 #    retval=0
 #    while read d; do
 #      data+=( "$d" )
-#    done <<<$(cat "${HOME}/.wovtools" | jq -r ".projects.$1.dir, .projects.$1.repo, .projects.$1.repobase" )
+#    done <<<$(cat "${WOVCONFIGF}" | jq -r ".projects.$1.dir, .projects.$1.repo, .projects.$1.repobase" )
 #
 #    echo
 #
@@ -309,10 +306,10 @@ function iGlobalConfig_ReadIn()
 function iGlobalConfig_Validate()
 {
   local retval=0
-  # --- Ensure formatting of ~/.wovtools
-  local JQTEST=$(jq -r "." "${HOME}/.wovtools" 2>&1 ); Re=$?
+  # --- Ensure formatting of WOVCONFIGF
+  local JQTEST=$(jq -r "." "${WOVCONFIGF}" 2>&1 ); Re=$?
   if [ "${Re}" != 0 ]; then
-    l_error "JSON format error in ~/.wovtools file."
+    l_error "JSON format error in '${WOVCONFIGF}' file."
     l_ "  : ${JQTEST}"
     retval=1
   fi

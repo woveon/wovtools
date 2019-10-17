@@ -23,7 +23,7 @@ Initialize this directory as a new WovTools project. This assumes the parent dir
 
 Options:
 ---
-  --skip-global              - validate and readIn the ~/.wovtools file but don't create if it does not exist.
+  --skip-global              - validate and readIn the WOVCONFIGF file but don't create if it does not exist.
   --skip-project-config      - do not create the wovtools/config.json file
   --skip-project-myconfig    - do not create the wovtools/myconfig.json file
   --local-archive-base X     - uses X as the default directory to use for Local Archives (overrides the global location)
@@ -33,7 +33,7 @@ Options:
   --cluster-name X           - sets the default cluster to use
   --cluster-domain X         - sets teh default Domain name of the cluster
   --cluster-force-build      - forces the initialization of a cluster
-  --usercode X               - overrides the user code in ~/.wovtools:.me
+  --usercode X               - overrides the user code in WOVCONFIGF:.me
   --wovdb-question X         - should this question to create a WovDataBase? (default is yes)
 
   -h : this help
@@ -173,10 +173,10 @@ l_verbose "  ... WOV_BASEDIR : ${WOV_BASEDIR}"
 
 # --------------------------------------------------------------------- 
 l_subtitle "Global Woveon File"
-l_block    "Configure the Global Woveon File : ~/.wovtools"
+l_block    "Configure the Global Woveon File : '${WOVCONFIGF}'"
 # --------------------------------------------------------------------- 
-if [ -e "${HOME}/.wovtools" ] && [ "$(iGlobalConfig_Validate ; echo $?)" == "0" ]; then
-  read -r -p "~/.wovtools exists and is valid. Skip? [Y/n] " A
+if [ -e "${WOVCONFIGF}" ] && [ "$(iGlobalConfig_Validate ; echo $?)" == "0" ]; then
+  read -r -p "'${WOVCONFIGF}' exists and is valid. Skip? [Y/n] " A
   case $A in
     ""|[Yy][Ee][Ss]|[Yy])
       OP_SKIPGLOBALCONFIG=1
@@ -580,26 +580,25 @@ fi
 
 
 # --------------------------------------------------------------------- 
-l_block "Add entry to ~/.wovtools file"
+l_block "Add entry to ${WOVCONFIGF} file"
 # --------------------------------------------------------------------- 
 PE="$(GlobalConfig_GenProjectEntry "${WOV_PROJECT}" "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${wov_REPO_MSCODE}" "${WOV_ME}" "${wov_REPO_EXT}" "${WOV_CODEREPOARCHIVE}" "${WOV_SEADIR}" "${WOV_DBADIR}" "${WOV_DSADIR}")"
 l_ "PE : ${PE}"
 l_h1 "BEFORE"
-cat ~/.wovtools
+cat "${WOVCONFIGF}"
 
-jq -s -S '.[0] * .[1]' <(echo "${PE}") ~/.wovtools > ~/.wovtools.$$ ; Re=$?
-# jq ".= '${PE}'" ~/.wovtools > ~/.wovtools.$$ ; Re=$?
+jq -s -S '.[0] * .[1]' <(echo "${PE}") "${WOVCONFIGF}" > "${WOVCONFIGF}.$$" ; Re=$?
 if [ $Re -ne 0 ]; then 
-  l_error "Failed merging project into ~/.wovtools file."
-  rm ~/.wovtools.$$
+  l_error "Failed merging project into '${WOVCONFIGF}' file."
+  rm "${WOVCONFIGF}.$$"
   exit 1
 else
-  mv ~/.wovtools.$$ ~/.wovtools
+  mv "${WOVCONFIGF}.$$" "${WOVCONFIGF}"
 fi
 
 
 l_h1 "AFTER"
-cat ~/.wovtools
+cat "${WOVCONFIGF}"
 
 # For some reason, the merged file is bad here so delete it and it will be rebuilt
 rm ${WOV_BASEDIR}/wovtools/cache/.merged.json
@@ -675,7 +674,7 @@ exit 0
 #
 ##  # ---------------------------------------------------------------------
 ##  # Select user code
-##  if [ "${WOV_ME}" == "" ]; then WOV_ME=$(cat ~/.wovtools | jq -r ".me"); fi
+##  if [ "${WOV_ME}" == "" ]; then WOV_ME=$(cat ${WOVCONFIGF} | jq -r ".me"); fi
 ##  printf "Enter your developer code (\"${WOV_ME}\"): "
 ##  read A
 ##  if [ "${A}" != "" ]; then WOV_ME="${A}"; fi
@@ -859,7 +858,7 @@ exit 0
 #  SECRETSDIR -> SEADIR
 #  # pull location from global file, make sure directory exists, is chmodded and make our project secrets directory there
 #  SECRETSDIR="`wov-cd -e secrets`"
-#  if [ "${SECRETSDIR}" == "" ]; then echo "ERROR: Unknown secrets dir. Add an entry to ~/.wovtools, for : dirs.secrets.dir."; exit 1; fi
+#  if [ "${SECRETSDIR}" == "" ]; then echo "ERROR: Unknown secrets dir. Add an entry to ${WOVCONFIGF}, for : dirs.secrets.dir."; exit 1; fi
 #  if [ ! -e "${SECRETSDIR}" ]; then mkdir -p "${SECRETSDIR}"; chmod 700 "${SECRETSDIR}"; fi
 #  if [ ! -e "${SECRETSDIR}/${WOV_PROJECT}_secrets" ]; then mkdir -p "${SECRETSDIR}/${WOV_PROJECT}_secrets"; chmod 700 "${SECRETSDIR}/${WOV_PROJECT}_secrets"; fi
 #
@@ -1132,10 +1131,10 @@ read A
 if [ "${A}" != "" ]; then WOV_PROJECTDESCRIPTION=${A}; fi
 
 
-# get from config.json or ~/.wovtools or best guess
+# get from config.json or ${WOVCONFIGF} or best guess
 WOV_CONTAINERARCHIVE=$(cat ${WOV_CONFIGFILE_MAIN} | jq -r '.archive.repository')
 if [ "${WOV_CONTAINERARCHIVE}" == "null" ] || [ "${WOV_CONTAINERARCHIVE}" == "" ]; then
-  WOV_CONTAINERARCHIVE=$(cat ${HOME}/.wovtools | jq -r '.archive.repository')
+  WOV_CONTAINERARCHIVE=$(cat "${WOVCONFIGF}" | jq -r '.archive.repository')
 fi
 if [ "${WOV_CONTAINERARCHIVE}" == "null" ] || [ "${WOV_CONTAINERARCHIVE}" == "" ]; then
   WOV_CONTAINERARCHIVE="$(aws sts get-caller-identity --output text --query 'Account').dkr.ecr.$(aws configure get region).amazonaws.com"
@@ -1166,10 +1165,10 @@ done
 
 
 
-# get from config.json or ~/.wovtools or make best guess
+# get from config.json or WOVCONFIGF or make best guess
 WOV_K8SARCHIVE=$(cat ${WOV_CONFIGFILE_MAIN} | jq -r '.archive.env')
 if [ "${WOV_K8SARCHIVE}" == "null" ] || [  "${WOV_K8SARCHIVE}" == "" ]; then
-  WOV_K8SARCHIVE=$(cat ${HOME}/.wovtools | jq -r '.archive.env')
+  WOV_K8SARCHIVE=$(cat "${WOVCONFIGF}" | jq -r '.archive.env')
 fi
 if [ "${WOV_K8SARCHIVE}" == "null" ] || [  "${WOV_K8SARCHIVE}" == "" ]; then
   if [ "${COMPANYDOMAIN}" != "" ]; then
@@ -1209,13 +1208,13 @@ rm ${WOV_BASEDIR}/wovtools/.config.json.*
 
 
 # update global if null
-if [ "$(cat ${HOME}/.wovtools | jq -r '.archive.repository')" == "null" ]; then
+if [ "$(cat "${WOVCONFIGF}" | jq -r '.archive.repository')" == "null" ]; then
   l_ "  ...updating global archive.repository as well."
-  jq ' .archive.repository="'"${WOV_CONTAINERARCHIVE}"'"' "${HOME}/.wovtools" > ${HOME}/.wovtools.$$ && mv ${HOME}/.wovtools.$$ ${HOME}/.wovtools
+  jq ' .archive.repository="'"${WOV_CONTAINERARCHIVE}"'"' "${WOVCONFIGF}" > "${WOVCONFIGF}.$$" && mv "${WOVCONFIGF}.$$" "${WOVCONFIGF}"
 fi
-if [ "$(cat ${HOME}/.wovtools | jq -r '.archive.env')" == "null" ]; then
+if [ "$(cat "${WOVCONFIGF}" | jq -r '.archive.env')" == "null" ]; then
   l_ "  ...updating global archive.env as well."
-  jq ' .archive.env="'"${WOV_K8SARCHIVE}"'"'  "${HOME}/.wovtools" > ${HOME}/.wovtools.$$ && mv ${HOME}/.wovtools.$$ ${HOME}/.wovtools
+  jq ' .archive.env="'"${WOV_K8SARCHIVE}"'"'  "${WOVCONFIGF}" > "${WOVCONFIGF}.$$" && mv "${WOVCONFIGF}.$$" "${WOVCONFIGF}"
 fi
 
 

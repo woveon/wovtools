@@ -16,17 +16,17 @@ usage: . `basename $0` {options} [project]
 
 Changes directory to the *project* directory. These projects are defined in the wovtools file, found in your HOME directory.
 
-NOTE: $HOME/.wovtools is a JSON file with .projects.{}, where each entry in .projects has a '.dir' entry, corresponding to the project directory.
+NOTE: '${WOVCONFIGF}' is a JSON file with .projects.{}, where each entry in .projects has a '.dir' entry, corresponding to the project directory.
 
 NOTE2: Call with the '.' in front, or set a line in your .bash_profile :
   function wcd() {
     . wov-cd $*
   }
 
-ex. $HOME/.wovtools: { "projects" : { "myproject" : { "dir" : "/path/to/project" } } }
+ex. '${WOVCONFIGF}': { "projects" : { "myproject" : { "dir" : "/path/to/project" } } }
 
   -q : quiet output
-  -e X : echo WovTools directory (from ~/.wovtools:.wovtools.X)
+  -e X : echo WovTools directory (from ${WOVCONFIGF}:.wovtools.X)
   -v : verbose output
   -h/--help : this help
   -k : current context
@@ -40,14 +40,14 @@ EOF
 # ---------------------------------------------------------------------
 function doListProjects()
 {
-  jq -r ".projects" ${HOME}/.wovtools
+  jq -r ".projects" "${WOVCONFIGF}"
 }
 
 
 function doGetDir()
 {
   P=$(echo $1 | cut -d'/' -f1)
-  D=$(jq -r ".wovtools.$P.dir" ${HOME}/.wovtools 2> /dev/null)
+  D=$(jq -r ".wovtools.$P.dir" "${WOVCONFIGF}" 2> /dev/null)
   echo "$D"
 }
 
@@ -107,18 +107,18 @@ done
 
 
 
-if [ ! -e ${HOME}/.wovtools ]; then 
-  printf "\n\nERROR: no .wovtools file in home directory.\n" 1>&2
+if [ ! -e "${WOVCONFIGF}" ]; then 
+  l_error "No global wovtools config file at '${WOVCONFIGF}'."
   ONEXIT=1
 fi
 
 if [ "$#" == 1 ]; then
 
   P=$(echo $1 | cut -d'/' -f1)
-  D=$(jq -r ".projects.$P.dir" ${HOME}/.wovtools 2> /dev/null)
+  D=$(jq -r ".projects.$P.dir" "${WOVCONFIGF}" 2> /dev/null)
   if [ "$?" != "0" ]; then
-    printf "\nERROR: json related error. Check your ~/.wovtools file.\n" 1>&2
-    printf " - $(jq -r ".projects.$P.dir" ${HOME}/.wovtools 2>&1)\n" 1>&2
+    printf "\nERROR: json related error. Check your '${WOVCONFIGF}' file.\n" 1>&2
+    printf " - $(jq -r ".projects.$P.dir" "${WOVCONFIGF}" 2>&1)\n" 1>&2
     ONEXIT=1
   else
     if [ "$D" == "null" ]; then 

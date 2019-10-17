@@ -6,17 +6,17 @@ DOECHO=1
 FOLD=$(tput cols)
 RETVAL=0
 
-if [ ! -e ${HOME}/.wovtools ]; then
-  printf "\n\nERROR: no .wovtools file in home directory.\n" 1>&2
+if [ ! -e "${WOVCONFIGF}" ]; then
+  printf "\n\nERROR: no '${WOVCONFIGF}' file in home directory.\n" 1>&2
 fi
 
 if [ "$#" == 1 ]; then
 
   P=$(echo $1 | cut -d'/' -f1)
-  D=$(jq -r ".projects.$P.dir" ${HOME}/.wovtools 2> /dev/null)
+  D=$(jq -r ".projects.$P.dir" "${WOVCONFIGF}" 2> /dev/null)
   if [ "$?" != "0" ]; then
-    printf "\nERROR: json related error. Check your ~/.wovtools file.\n" 1>&2
-    printf " - $(jq -r ".projects.$P.dir" ${HOME}/.wovtools 2>&1)\n" 1>&2
+    printf "\nERROR: json related error. Check your ${WOVCONFIGF} file.\n" 1>&2
+    printf " - $(jq -r ".projects.$P.dir" "${WOVCONFIGF}" 2>&1)\n" 1>&2
     RETVAL=1
   else
     if [ "$D" == "null" ]; then

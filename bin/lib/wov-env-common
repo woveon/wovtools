@@ -166,7 +166,7 @@ function doResName()
 
 ## Return the git repo for a project/ms
 ##
-##  - If $3 $4 WOV_CODEREPOARCHIVE are "", it will fetch them from ~/.wovtools
+##  - If $3 $4 WOV_CODEREPOARCHIVE are "", it will fetch them from WOVCONFIGF
 ##  - If $3 or $4 are null, it assumes they were already fetched and are null
 ##
 ## $1 - team project name
@@ -183,11 +183,11 @@ function doResName()
 #  local repoext=$3         # REPOEXT=$3
 #  local repobase=$4        # REPOBASE=$4
 #
-#  # if missing vars passed in, load from ~/.wovtools
+#  # if missing vars passed in, load from WOVCONFIGF
 #  if [ "${repoext}" == "" ] || [ "${repobase}" == "" ] || [ "${WOV_CODEREPOARCHIVE}" == "" ]; then
 #    while read f; do
 #      _TMP+=( "$f" )
-#    done <<<$(cat "${HOME}/.wovtools" | jq -r ".archives.coderepo, .projects.${projectname}.repo, .projects.${projectname}.repobase")
+#    done <<<$(cat "${WOVCONFIGF}" | jq -r ".archives.coderepo, .projects.${projectname}.repo, .projects.${projectname}.repobase")
 #    #>&2 echo "TMP : ${_TMP[@]}"
 #    WOV_CODEREPOARCHIVE=$([ "${_TMP[0]}" == "null" ] && echo "" || echo "${_TMP[0]}" )
 #    repoext=$(           [ "${_TMP[1]}" == "null" ] && echo "" || echo "${_TMP[1]}" )
@@ -380,7 +380,7 @@ function WovPathExt()
 
 
 # ---------------------------------------------------------------------
-# Generates the JSON entry for a project that goes into ~/.wovtools.
+# Generates the JSON entry for a project that goes into WOVCONFIGF
 # ---------------------------------------------------------------------
 function GlobalConfig_GenProjectEntry()
 {
