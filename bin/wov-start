@@ -1,19 +1,53 @@
 #!/usr/bin/env bash
   
+DVOL_kube='wovtools_wovbase_kube'
 
-docker volume create wovbase-kube
+# See if it exists, create it otherwise
+docker volume list | grep "${DVOL_kube}" > /dev/null
+if [ $? -ne 0 ]; then
+  echo "...creating volume: '${DVOL_kube}'"
+  docker volume create "${DVOL_kube}"
 
-docker container create --name dummy -v wovbase-kube:/root/.kube alpine
-docker cp ${HOME}/.kube/config dummy:/root/.kube/config
-docker rm dummy
+  # Spawn a container to put information into
+  docker container create --name dummy -v "${DVOL_kube}:/root/.kube" alpine
+  docker cp ${HOME}/.kube/config dummy:/root/.kube/config
+  docker rm dummy
+fi
 
-docker run -it --rm \
-  -v ${HOME}/.gitconfig:/root/.gitconfig:ro \
-  -v ${HOME}/.aws:/root/.aws:ro \
-  -v ${HOME}/.ssh:/root/.ssh:ro \
-  --mount source=wovbase-kube,target=/root/.kube \
-  -e KOPS_STATE_STORE=${KOPS_STATE_STORE} \
-         wovtools/wovbase:3 \
-         /bin/bash
 
-#  -v ${HOME}/.kube:/root/.kube:ro \
+# Start our container
+# docker run -it --rm 
+
+docker ps | grep "wovtools" > /dev/null
+if [ $? -ne 0 ]; then
+  echo "...starting container 'wovtools'"
+  docker run -t -d  \
+    --name wovtools \
+    -v ${HOME}/.gitconfig:/root/.gitconfig:ro \
+    -v ${HOME}/.aws:/root/.aws:ro \
+    -v ${HOME}/.ssh:/root/.ssh:ro \
+    -v ${HOME}/.wovtools:/root/.wovtools \
+    --mount source=wovbase-kube,target=/root/.kube \
+    -e KOPS_STATE_STORE=${KOPS_STATE_STORE} \
+    -e KOPS_CLUSTER_NAME="wov-aws-va-grape.alywan.com" \
+    wovtools/wovbase:3
+fi
+
+
+function _onFinish()
+{
+  echo "tell app \"Terminal\" to set current settings of first window to settings set \"${ORIGINALPROFILE}\" " | osascript
+}
+
+ORIGINALPROFILE=$(osascript <<EOF
+tell application "Terminal"
+  set bb to name of current settings of selected tab of front window
+  return bb
+end tell
+EOF
+)
+
+trap _onFinish EXIT
+
+echo 'tell app "Terminal" to set current settings of first window to settings set "Ocean" ' | osascript
+docker exec -it wovtools /bin/bash
