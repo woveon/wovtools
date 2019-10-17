@@ -251,6 +251,7 @@ EOFF
     jqrule=".license=\"UNLICENSED\" | .version=\"0.0.1\" | .main=\"src/index.js\" | .scripts.start=\"node src\" "
     jq -r "${jqrule}" "${MSDIR}/package.json" > "${MSDIR}/package.json_" ; \
       mv "${MSDIR}/package.json_" "${MSDIR}/package.json"
+    cd ${MSDIR} ; yarn add woveon-service
 
     # Add to git
     git add "${f}"
