@@ -30,19 +30,14 @@ tr_protectdir  "${HOME}/wovtools" del
 {
   tr_section "Global-Config-Testing"
 
-  tr_comment  "Run iGlobalConfig_CraeteIfNotExists"
-  mkdir -p -m 700 ${LADIR}/searchive
-  mkdir -p -m 700 ${LADIR}/dsarchive
-  mkdir -p -m 700 ${LADIR}/dbarchive
+  tr_comment  "Run iGlobalConfig_CreateIfNotExists"
+#  mkdir -p -m 700 ${LADIR}/searchive
+#  mkdir -p -m 700 ${LADIR}/dsarchive
+#  mkdir -p -m 700 ${LADIR}/dbarchive
+#  tr_h1 "LADIR: ${LADIR}"
   iGlobalConfig_CreateIfNotExists '/tmp/foo' <<EOF
 n
 ${TESTME}
-n
-${LADIR}/searchive
-n
-${LADIR}/dbarchive
-n
-${LADIR}/dsarchive
 n
 K8S
 Y
@@ -55,9 +50,9 @@ Y
 EOF
 
 
-  tr_test "secrets archives should exist" "[ -e ${LADIR}/searchive ] && echo '1'" 0 1 '1'
-  tr_test "DB archives should exist"      "[ -e ${LADIR}/dbarchive ] && echo '1'" 0 1 '1'
-  tr_test "DS archives should exist"      "[ -e ${LADIR}/dsarchive ] && echo '1'" 0 1 '1'
+#  tr_test "secrets archives should exist" "[ -e ${LADIR}/searchive ] && echo '1'" 0 1 '1'
+#  tr_test "DB archives should exist"      "[ -e ${LADIR}/dbarchive ] && echo '1'" 0 1 '1'
+#  tr_test "DS archives should exist"      "[ -e ${LADIR}/dsarchive ] && echo '1'" 0 1 '1'
   tr_test "test .me" "[ `jq -r .me ~/.wovtools` == '${TESTME}' ] && echo 1" 0 1 '1' 
   tr_test "test .archives.k8s K8S"      "[ `jq -r .archives.k8s ~/.wovtools` == 'K8S' ] && echo 1" 0 1 '1'
   tr_test "test .archives.container CA" "[ `jq -r .archives.container ~/.wovtools` == 'CA' ] && echo 1" 0 1 '1'
@@ -96,7 +91,7 @@ tr_tests_on
 #    'doGetProjectRepoName "PROJECTNAME" "EXT"' 0 1 'CR/EXT'
 
   tr_comment "add to ~/.wovtools the .projects.PROJECTNAME.[dir|repo|repoext]"
-  cat ~/.wovtools | jq -r '.projects.PROJECTNAME={dir : "DIR", repo : "REPO", repobase: "REPOBASE"}' > ~/.wovtools.1 && mv ~/.wovtools.1 ~/.wovtools
+  cat ~/.wovtools | jq -r '.projects.PROJECTNAME={dir : "DIR", repo : "REPO", repobase: "REPOBASE"}' > ~/.wovtools.1 && cp ~/.wovtools.1 ~/.wovtools && rm ~/.wovtools.1
 
 #  tr_test "Project Repo Name : Master: User Provided" \
 #    'doGetProjectRepoName "PROJECTNAME" "USERPROVIDED" "MSREPO" "MSREPOBASE"' 0 1 'MSREPOBASE/USERPROVIDED'
