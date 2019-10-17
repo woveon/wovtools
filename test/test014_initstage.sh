@@ -62,6 +62,8 @@ tr_protectfile "wovtools/myconfig.json"
     if [ $? -ne 0 ]; then "Failed to set. Exiting."; exit 1; fi
   done
 
+  tr_run "show kubernetes context" "kubectl config current-context"
+
   tr_section "/k8scontext"
 }
 
@@ -76,12 +78,15 @@ tr_protectfile "wovtools/myconfig.json"
   tr_run "remote .secrets.testme from wovtools/myconfig.json" \
     "cat wovtools/myconfig.json | jq -r 'del( .secrets.testme)' > wovtools/myconfig.json.1 ; mv wovtools/myconfig.json.1 wovtools/myconfig.json"
 
-  #tr_run "remove test_${TESTME}.json secret" "rm -f wovtools/secrets/test_${TESTME}.json"
-  tr_run "move test_${TESTME}.json secret so can test that case" "mv wovtools/secrets/test_${TESTME}.json /tmp/test_${TESTME}.json.${PID}"
-  # remove from repo
-  git -C wovtools/secrets rm test_${TESTME}.json
-  git -C wovtools/secrets commit -a -m "removed test_${TESTME}.json"
-  git -C wovtools/secrets push
+  if [ -e "wovtools/secrets/test_${TESTME}.json" ]; then
+    tr_run "move test_${TESTME}.json secret so can test that case" \
+      "mv wovtools/secrets/test_${TESTME}.json /tmp/test_${TESTME}.json.${PID}"
+
+    # remove from repo
+    git -C wovtools/secrets rm test_${TESTME}.json
+    git -C wovtools/secrets commit -a -m "removed test_${TESTME}.json"
+    git -C wovtools/secrets push
+  fi
 
 
   tr_section '/initstage'
@@ -106,23 +111,31 @@ EOF
 
   tr_test "fails with missing secrets file" "wov-init-stage ${TESTME}" 103 -1
 
-  tr_run "move test_${TESTME}.json secret back" "mv /tmp/test_${TESTME}.json.${PID} wovtools/secrets/${MASTER}_${TESTME}.json"
-  #tr_run "add missing file" "echo '{}' > wovtools/secrets/test_${TESTME}.json"
-
+  tr_run "move test_${TESTME}.json secret back" \
+    "mv /tmp/test_${TESTME}.json.${PID} wovtools/secrets/${MASTER}_${TESTME}.json"
 
   tr_test "fails namespace checks" "wov-init-stage -vv --debugmode --test ${TESTME}" 106 -1
 
 
-  tr_comment "For Debugging, K8s contexts"
-  kubectl config get-contexts 
+  # tr_comment "For Debugging, K8s contexts"
+  # kubectl config get-contexts 
 
   tr_test "creates namespace, fails context checks" "wov-init-stage -vv --debugmode --create-ns --no-create-context ${TESTME}" 107 -1
+
+  tr_run "show all contexts now" "kubectl config get-contexts"
+  tr_run "show kubernetes context" "kubectl config current-context"
 
   tr_test "creates context, fails git because added file not added/checked in" \
     "wov-init-stage -vv --debugmode --create-context ${TESTME}" 108 -1
 
+  tr_run "show all contexts now" "kubectl config get-contexts"
+  tr_run "show current kubernetes context" "kubectl config current-context"
+
+  tr_vverbose
   tr_run "git add/commit/push" \
     "git -C wovtools/secrets add ${MASTER}_${TESTME}.json; git -C wovtools/secrets commit -a -m 'added ${MASTER}_${TESTME}.json'; git -C wovtools/secrets push"
+
+  tr_run "show kubernetes" "kubectl config current-context"
 
   tr_test "passes finally" "wov-init-stage ${TESTME}" 0 -1
 

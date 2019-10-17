@@ -171,6 +171,16 @@ EOFF
     if [ $? -ne 0 ]; then l_error "Could not add 'package.json' to git."; exit 1; fi
   fi
 
+  local base=$(git rev-parse --show-toplevel)
+  l_debug "add in to gitignore : ${base}/.gitignore : NOTE: could be .gitignore or ../.gitignore, depending on 'single/many' project type"
+  if [ ! -e "${base}/.gitignore" ]; then echo "ERROR: " ; exit 11; fi
+  touch "${base}/.gitignore"
+  GITLINES=( "node_modules" "yarn.lock" )
+  for f in "${GITLINES[@]}"; do
+    l_debug "  ... adding to .gitignore: $f"
+    if ! grep -qF "${f}" "${base}/.gitignore" ; then echo "${f}" >> "${base}/.gitignore" ; fi
+  done
+
   doBuildMicroservice_base $mscode
 }
 
@@ -257,6 +267,16 @@ EOFF
     git add "${f}"
     if [ $? -ne 0 ]; then l_error "Could not add 'package.json' to git."; exit 1; fi
   fi
+
+  local base=$(git rev-parse --show-toplevel)
+  l_debug "add in to gitignore : ${base}/.gitignore : NOTE: could be .gitignore or ../.gitignore, depending on 'single/many' project type"
+  if [ ! -e "${base}/.gitignore" ]; then echo "ERROR: " ; exit 11; fi
+  touch "${base}/.gitignore"
+  GITLINES=( "node_modules" "yarn.lock" )
+  for f in "${GITLINES[@]}"; do
+    l_debug "  ... adding to .gitignore: $f"
+    if ! grep -qF "${f}" "${base}/.gitignore" ; then echo "${f}" >> "${base}/.gitignore" ; fi
+  done
 
   doBuildMicroservice_base $mscode
 }
