@@ -129,11 +129,11 @@ vh : $(shell find vh -type f)
 	@echo "  ... success"
 
 # Creates the base Docker image for others
-wovbase : $(shell find wovbase -type f)
+wovbase : 
 	@docker build -f ./containers/Dockerfile_wovbase -t wovbase .
 	@echo "  ... tagging container   : wovtools/wovbase:$(shell wov-env --version)"
 	@docker tag wovbase "wovtools/wovbase:$(shell wov-env --version)"
-	# @echo "  ... push to DockerHub: wovtools/wovbase"
-	# @docker push wovtools/wovbase || \
-		#  ( echo "Hmm, did you 'docker login'?" && docker login -u wovtools && docker push wovtools/wovbase )
+# @echo "  ... push to DockerHub: wovtools/wovbase"
+# @docker push wovtools/wovbase || \
+#  ( echo "Hmm, did you 'docker login'?" && docker login -u wovtools && docker push wovtools/wovbase )
 	@echo "  ... success"

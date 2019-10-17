@@ -1,45 +1,115 @@
 #!/usr/bin/env bash
   
-DVOL_kube='wovtools_wovbase_kube'
-
-# See if it exists, create it otherwise
-docker volume list | grep "${DVOL_kube}" > /dev/null
-if [ $? -ne 0 ]; then
-  echo "...creating volume: '${DVOL_kube}'"
-  docker volume create "${DVOL_kube}"
-
-  # Spawn a container to put information into
-  docker container create --name dummy -v "${DVOL_kube}:/root/.kube" alpine
-  docker cp ${HOME}/.kube/config dummy:/root/.kube/config
-  docker rm dummy
-fi
+FOLD=$(tput cols)
+#DVOL_kube='wovtoolsvol_kube'
+ORIGINALPROFILE=
+  # --- set when entering a container
 
 
-# Start our container
-# docker run -it --rm 
-
-docker ps | grep "wovtools" > /dev/null
-if [ $? -ne 0 ]; then
-  echo "...starting container 'wovtools'"
-  docker run -t -d  \
-    --name wovtools \
-    -v ${HOME}/.gitconfig:/root/.gitconfig:ro \
-    -v ${HOME}/.aws:/root/.aws:ro \
-    -v ${HOME}/.ssh:/root/.ssh:ro \
-    -v ${HOME}/.wovtools:/root/.wovtools \
-    --mount source=wovbase-kube,target=/root/.kube \
-    -e KOPS_STATE_STORE=${KOPS_STATE_STORE} \
-    -e KOPS_CLUSTER_NAME="wov-aws-va-grape.alywan.com" \
-    wovtools/wovbase:3
-fi
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
 
 
+usage: `basename $0`
+
+--start/-s    : starts the wovtools container
+--stop/-S     : stops the wovtools container
+--test/-t     : tests if the wovtools container is running
+--enter/-e    : enters the container (bash shell)
+
+EOF
+}
+
+
+
+
+#function doCreateVolume()
+##{
+## See if it exists, create it otherwise
+#docker volume list | grep "${DVOL_kube}" > /dev/null
+#if [ $? -ne 0 ]; then
+#  echo "...creating volume: '${DVOL_kube}'"
+#  docker volume create "${DVOL_kube}"
+#
+#  # Spawn a container to put information into
+#  docker container create --name dummy -v "${DVOL_kube}:/root/.kube" alpine
+#  docker cp ${HOME}/.kube/config dummy:/root/.kube/config
+#  docker rm dummy
+#fi
+#}
+
+
+# --------------------------------------------------------------------- 
+# RETURNS bool, so 1 for true/yes, 0 for false/no
+# --------------------------------------------------------------------- 
+function isWovContainerRunning() 
+{
+  local retval=0
+  local R=
+  local Re=
+
+  R=$(>&2 docker inspect wovtools > /dev/null ) ; Re=$?
+  if [ $Re -eq 0 ]; then retval=1; fi
+
+  return $retval
+}
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function doStopWovContainer()
+{
+  local retval=
+  docker stop wovtools ; retval=$?
+  if [ $retval -ne 0 ]; then l_error "Failed to stop wovtools container."; fi
+
+  return $retval
+}
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function doStartWovContainer()
+{
+  local R=
+  local Re=
+  
+  isWovContainerRunning
+  if [ $? -eq 0 ]; then
+    echo "...starting container 'wovtools'"
+    docker run -t -d  \
+      --name wovtools \
+      -v ${HOME}/.gitconfig:/root/.gitconfig:ro \
+      -v ${HOME}/.aws:/root/.aws:ro \
+      -v ${HOME}/.ssh:/root/.ssh:ro \
+      -v ${HOME}/.wovtools:/root/.wovtools \
+      -v ${HOME}/.kube:/root/.kube \
+      -e KOPS_STATE_STORE=${KOPS_STATE_STORE} \
+      -e KOPS_CLUSTER_NAME="wov-aws-va-grape.alywan.com" \
+      wovtools/wovbase:3
+
+#      --mount source=wovbase-kube,target=/root/.kube 
+  fi
+}
+
+
+# --------------------------------------------------------------------- 
+# Called when exiting the WovContainer to restore terminal settings
+# --------------------------------------------------------------------- 
 function _onFinish()
 {
   echo "tell app \"Terminal\" to set current settings of first window to settings set \"${ORIGINALPROFILE}\" " | osascript
 }
 
-ORIGINALPROFILE=$(osascript <<EOF
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function doEnterWovContainer()
+{
+  ORIGINALPROFILE=$(osascript <<EOF
 tell application "Terminal"
   set bb to name of current settings of selected tab of front window
   return bb
@@ -47,7 +117,51 @@ end tell
 EOF
 )
 
-trap _onFinish EXIT
+  trap _onFinish EXIT
+  echo 'tell app "Terminal" to set current settings of first window to settings set "Ocean" ' | osascript
+  docker exec -it wovtools /bin/bash
+  _onFinish
+  trap - EXIT
+}
 
-echo 'tell app "Terminal" to set current settings of first window to settings set "Ocean" ' | osascript
-docker exec -it wovtools /bin/bash
+
+
+
+
+
+# ---------------------------------------------------------------------
+# Handle Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [[ "$1" == "--help" || "${1}" == "-h" ]]; then
+    shift
+    fDisplayOptions
+    WOV_DODEFAULTCOMMAND=1
+    exit 0
+
+  elif [[ "$1" == "--test" || "$1" == "-t" ]]; then
+    shift
+    isWovContainerRunning ; echo $?
+
+  elif [[ "$1" == "--enter" || "$1" == "-e" ]]; then
+    shift
+    doEnterWovContainer
+
+  elif [[ "$1" == "--start" || "$1" == "-s" ]]; then
+    shift
+    doStartWovContainer
+
+  elif [[ "$1" == "--stop" || "$1" == "-S" ]]; then
+    shift
+    doStopWovContainer
+
+  else
+    echo
+    echo "***ERROR: unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
+

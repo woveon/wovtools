@@ -98,7 +98,10 @@ WORKDIR /root
 # --------------------------------------------------------------------- 
 # TODO: Move to specifc instance later
 # --------------------------------------------------------------------- 
-RUN mkdir -p /root/code
+
+# User code volume (Docker Volume so not destroyed)
+# --------------------------------------------------------------------- 
+# RUN mkdir -p /root/code
 
 # JQ
 # --------------------------------------------------------------------- 
@@ -107,29 +110,33 @@ RUN curl -L https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 -
 RUN chmod +x ./jq
 RUN mv ./jq /usr/local/bin/jq
 
+# WovTools dir
+# --------------------------------------------------------------------- 
+RUN mkdir -p /root/wt
+
 # WTRunner
 # --------------------------------------------------------------------- 
-RUN cd /root/code ; git clone https://github.com/cwingrav/wtrunner.git
-RUN cd /root/code/wtrunner ; make install
+RUN cd /root/wt; git clone https://github.com/cwingrav/wtrunner.git
+RUN cd /root/wt/wtrunner ; make install
 
 # WoveonService
 # --------------------------------------------------------------------- 
-RUN cd /root/code ; git clone https://github.com/woveon/woveon-service.git
+RUN cd /root/wt; git clone https://github.com/woveon/woveon-service.git
 
 # WovTools
 # --------------------------------------------------------------------- 
-#RUN mkdir -p /root/code/wovtools
-#COPY bin /root/code/wovtools/bin
-#COPY Makefile /root/code/wovtools
-#COPY completion /root/code/wovtools/completion
-#COPY package.json /root/code/wovtools
+#RUN mkdir -p /root/wt/wovtools
+#COPY bin /root/wt/wovtools/bin
+#COPY Makefile /root/wt/wovtools
+#COPY completion /root/wt/wovtools/completion
+#COPY package.json /root/wt/wovtools
 #COPY test /root/code/wovtools/test
-#RUN cd /root/code/wovtools ; make install
-RUN echo "git -C /root/code clone git@github.com:woveon/wovtools.git" > /root/code/wtinstall.sh
-RUN echo "git -C /root/code/wovtools checkout cw" >> /root/code/wtinstall.sh
-#RUN echo "export KOPS_CLUSTER_NAME=wov-aws-va-grape.alywan.com" >> /root/code/wtinstall.sh
-RUN echo "kubectl config use-context wov-aws-va-grape-test1-testme" >> /root/code/wtinstall.sh
-RUN echo "cd /root/code/wovtools ; make install" >> /root/code/wtinstall.sh
-RUN chmod +x /root/code/wtinstall.sh
+#RUN cd /root/wt/wovtools ; make install
+RUN echo "git -C /root/wt clone git@github.com:woveon/wovtools.git" > /root/wt/wtinstall.sh
+RUN echo "git -C /root/wt/wovtools checkout cw" >> /root/wt/wtinstall.sh
+#RUN echo "export KOPS_CLUSTER_NAME=wov-aws-va-grape.alywan.com" >> /root/wt/wtinstall.sh
+RUN echo "kubectl config use-context wov-aws-va-grape-test1-testme" >> /root/wt/wtinstall.sh
+RUN echo "cd /root/wt/wovtools ; make install" >> /root/wt/wtinstall.sh
+RUN chmod +x /root/wt/wtinstall.sh
 
 
