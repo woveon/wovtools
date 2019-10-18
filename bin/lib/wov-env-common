@@ -335,9 +335,9 @@ function WovPathExt()
       local atype=$2
       local masterp=$3
       local project=$4
-      local me=$5
+      local stage=$5
 
-        if [ "$atype" == "se" ]; then Retval="${masterp}_sea_${me}";
+        if [ "$atype" == "se" ]; then Retval="${masterp}_sea_${stage}";
       elif [ "$atype" == "db" ]; then Retval="${masterp}_${project}_dba";
       elif [ "$atype" == "ds" ]; then Retval="${masterp}_dsa";
       else l_error "Unknown local archive type of '${atype}'."; retval=1; fi
@@ -390,7 +390,7 @@ function GlobalConfig_GenProjectEntry()
   local masterproject="${3}"
   local project="${4}"
   local msc="${5}"
-  local me="${6}"
+  local stage="${6}"
   local repoext="$([ "${7}" == "" ] && echo "$(WovPathExt pr "${masterproject}" "${project}" "${msc}")" || echo "${7}")"
   local reposerver="${8}"   # WOV_CODEREPOARCHIVE
   local seadir="${9}"       # Local Archive Dir location
@@ -408,20 +408,20 @@ function GlobalConfig_GenProjectEntry()
         {
           "atype"      : "se",
           "dir"        : "${seadir}/$(WovPathExt la se ${masterproject})",
-          "repo"       : "$(WovPathExt ra se ${masterproject} ${project} ${me})",
+          "repo"       : "$(WovPathExt ra se ${masterproject} ${project} ${stage})",
           "reposerver" : "${reposerver}",
           "repobranch" : "master"
         },
         {
           "atype"      : "db",
           "dir"        : "${dbadir}/$(WovPathExt la db ${masterproject} ${project})",
-          "repo"       : "$(WovPathExt ra db ${masterproject} ${project} ${me})",
+          "repo"       : "$(WovPathExt ra db ${masterproject} ${project} ${stage})",
           "reposerver" : "${reposerver}"
         },
         {
           "atype"      : "ds",
           "dir"        : "${dsadir}/$(WovPathExt la ds ${masterproject} ${project})",
-          "repo"       : "$(WovPathExt ra ds ${masterproject} ${project} ${me})",
+          "repo"       : "$(WovPathExt ra ds ${masterproject} ${project} ${stage})",
           "reposerver" : "${reposerver}"
         }
       ]

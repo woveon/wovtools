@@ -26,7 +26,7 @@ ISWOVPROJECT=0
 
 tr_h1 "Global WOVCONFIGF Tests"
 
-tr_protect  "${WOVCONFIGF}" del
+tr_protectfile  "${WOVCONFIGF}" del
 #tr_protectdir  "${WOVCONFIGDIR}" del
 
 {

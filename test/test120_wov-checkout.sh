@@ -8,6 +8,7 @@ tr_protectfile "wovtools/myconfig.json"
 tr_protectfile "${HOME}/wovtools/config"
 tr_protectdir  "test1" del
 
+
 tr_h1 "wov-checkout - $0"
 tr_comment "Tests the wov-checkout command. Assumes test1 project has been created with 'test011_init.sh'."
 . test_common.sh
@@ -16,6 +17,9 @@ tcUseTestingContext
 export PATH=$PATH:/usr/local/bin/wovlib
 . wov-env-common
 
+
+# --- set this because using wov-env-loader in non-project is a pain
+WOVCONFIGF="${HOME}/.wovtools/config"
 
 MTESTDIR="$(realpath .)"
 MSC=X
@@ -39,7 +43,7 @@ D=.delme
   tr_section 'checkenvs'
 
   echo "LADIR: ${LADIR}"
-  wov-checkout --local-archives ${LADIR} --envs test1 X > $D <<EOF
+  wov-checkout --usercode "${TESTME}" --local-archives ${LADIR} --envs test1 X > $D <<EOF
 Y
 Y
 Y
@@ -74,13 +78,12 @@ EOF
     "cat $D | sed -n -e 's/^WOV_BASEDIR=//p'" \
     0 1 "`pwd`/test1_test1X"
 
-  tr_test "check WOV_LOCALARCHIVEBASE" \
-    "cat $D | sed -n -e 's/^WOV_LOCALARCHIVEBASE=//p'" \
-    0 1 "${LADIR}"
-
   tr_test "check PROJSHORTCUT" \
     "cat $D | sed -n -e 's/^PROJSHORTCUT=//p'" \
     0 1 "test1X"
+
+  echo "WOVCONFIGF: ${WOVCONFIGF}"
+  cat "${WOVCONFIGF}"
 
   tr_test "check WOV_CODEREPOARCHIVE" \
     "cat $D | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" \
@@ -94,7 +97,7 @@ D1=.delme1
   tr_section 'checkjson'
 
   
-  wov-checkout --local-archives ${LADIR} --config-only test1 X > $D1
+  wov-checkout --usercode "${TESTME}" --local-archives ${LADIR} --config-only test1 X > $D1
   cat $D
   cat $D1
 
@@ -154,7 +157,7 @@ D2=.delme2
 {
   tr_section 'overridemaster'
 
-  tr_test "override master" "wov-checkout --envs --master MASTER test1 X > $D2" 0 -1
+  tr_test "override master" "wov-checkout --usercode ${TESTME} --envs --master MASTER test1 X > $D2" 0 -1
   tr_test "GLOBALDIR is repo location" "cat $D2 | sed -n -e 's/^GLOBALDIR=//p'" 0 1 "`pwd`"
   tr_test "check WOV_MASTERPROJECT" "cat $D2 | sed -n -e 's/^WOV_MASTERPROJECT=//p'" 0 1 "MASTER"
   tr_test "check WOV_PROJECT" "cat $D2 | sed -n -e 's/^WOV_PROJECT=//p'" 0 1 "test1"
@@ -163,7 +166,6 @@ D2=.delme2
   tr_test "check REPOEXT" "cat $D2 | sed -n -e 's/^REPOEXT=//p'" 0 1 "MASTER_test1_test1X"
   tr_test "check WOV_BASEDIR" "cat $D2 | sed -n -e 's/^WOV_BASEDIR=//p'" 0 1 "$(cd .. ; pwd)/MASTER/test1_test1X"
 
-  tr_test "check WOV_LOCALARCHIVEBASE" "cat $D2 | sed -n -e 's/^WOV_LOCALARCHIVEBASE=//p'" 0 1 "`jq -r '.archives.localbase' "${WOVCONFIGF}"`"
   tr_test "check PROJSHORTCUT" "cat $D2 | sed -n -e 's/^PROJSHORTCUT=//p'" 0 1 "test1X"
   tr_test "check WOV_CODEREPOARCHIVE" "cat $D2 | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" 0 1 "`jq -r '.archives.coderepo' "${WOVCONFIGF}"`"
 
@@ -173,7 +175,7 @@ D2=.delme2
 {
   tr_section 'overrideshortcut'
 
-  tr_test "override shortcut" "wov-checkout --envs --shortcut SHORT test1 X > $D2" 0 -1
+  tr_test "override shortcut" "wov-checkout --usercode  ${TESTME} --envs --shortcut SHORT test1 X > $D2" 0 -1
   tr_test "GLOBALDIR is repo location" "cat $D2 | sed -n -e 's/^GLOBALDIR=//p'" 0 1 "`pwd`"
   tr_test "check WOV_MASTERPROJECT" "cat $D2 | sed -n -e 's/^WOV_MASTERPROJECT=//p'" 0 1 "test"
   tr_test "check WOV_PROJECT" "cat $D2 | sed -n -e 's/^WOV_PROJECT=//p'" 0 1 "test1"
@@ -181,7 +183,6 @@ D2=.delme2
   tr_test "check REPODIR" "cat $D2 | sed -n -e 's/^REPODIR=//p'" 0 1 "test/test1_test1X"
   tr_test "check REPOEXT" "cat $D2 | sed -n -e 's/^REPOEXT=//p'" 0 1 "test_test1_test1X"
   tr_test "check WOV_BASEDIR" "cat $D2 | sed -n -e 's/^WOV_BASEDIR=//p'" 0 1 "$(cd .. ; pwd)/test/test1_test1X"
-  tr_test "check WOV_LOCALARCHIVEBASE" "cat $D2 | sed -n -e 's/^WOV_LOCALARCHIVEBASE=//p'" 0 1 "`jq -r '.archives.localbase' "${WOVCONFIGF}"`"
   tr_test "check PROJSHORTCUT" "cat $D2 | sed -n -e 's/^PROJSHORTCUT=//p'" 0 1 "SHORT"
   tr_test "check WOV_CODEREPOARCHIVE" "cat $D2 | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" 0 1 "`jq -r '.archives.coderepo' "${WOVCONFIGF}"`"
 
@@ -191,7 +192,7 @@ D2=.delme2
 {
   tr_section 'overriderepo'
 
-  tr_test "override shortcut" "wov-checkout --envs --repo REPO test1 X > $D2" 0 -1
+  tr_test "override shortcut" "wov-checkout --usercode ${TESTME} --envs --repo REPO test1 X > $D2" 0 -1
   tr_test "GLOBALDIR is repo location" "cat $D2 | sed -n -e 's/^GLOBALDIR=//p'" 0 1 "`pwd`"
   tr_test "check WOV_MASTERPROJECT" "cat $D2 | sed -n -e 's/^WOV_MASTERPROJECT=//p'" 0 1 "test"
   tr_test "check WOV_PROJECT" "cat $D2 | sed -n -e 's/^WOV_PROJECT=//p'" 0 1 "test1"
@@ -199,7 +200,6 @@ D2=.delme2
   tr_test "check REPODIR" "cat $D2 | sed -n -e 's/^REPODIR=//p'" 0 1 "test/test1_test1X"
   tr_test "check REPOEXT" "cat $D2 | sed -n -e 's/^REPOEXT=//p'" 0 1 "REPO"
   tr_test "check WOV_BASEDIR" "cat $D2 | sed -n -e 's/^WOV_BASEDIR=//p'" 0 1 "$(cd .. ; pwd)/test/test1_test1X"
-  tr_test "check WOV_LOCALARCHIVEBASE" "cat $D2 | sed -n -e 's/^WOV_LOCALARCHIVEBASE=//p'" 0 1 "`jq -r '.archives.localbase' "${WOVCONFIGF}"`"
   tr_test "check PROJSHORTCUT" "cat $D2 | sed -n -e 's/^PROJSHORTCUT=//p'" 0 1 "test1X"
   tr_test "check WOV_CODEREPOARCHIVE" "cat $D2 | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" 0 1 "`jq -r '.archives.coderepo' "${WOVCONFIGF}"`"
 
@@ -209,7 +209,7 @@ D2=.delme2
 {
   tr_section 'overridereposerver'
 
-  tr_test "override shortcut" "wov-checkout --envs --reposerver \"/REPOSERVER\" test1 X > $D2" 0 -1
+  tr_test "override shortcut" "wov-checkout --usercode ${TESTME} --envs --reposerver \"/REPOSERVER\" test1 X > $D2" 0 -1
   tr_test "GLOBALDIR is repo location" "cat $D2 | sed -n -e 's/^GLOBALDIR=//p'" 0 1 "`pwd`"
   tr_test "check WOV_MASTERPROJECT" "cat $D2 | sed -n -e 's/^WOV_MASTERPROJECT=//p'" 0 1 "test"
   tr_test "check WOV_PROJECT" "cat $D2 | sed -n -e 's/^WOV_PROJECT=//p'" 0 1 "test1"
@@ -217,7 +217,6 @@ D2=.delme2
   tr_test "check REPODIR" "cat $D2 | sed -n -e 's/^REPODIR=//p'" 0 1 "test/test1_test1X"
   tr_test "check REPOEXT" "cat $D2 | sed -n -e 's/^REPOEXT=//p'" 0 1 "test_test1_test1X"
   tr_test "check WOV_BASEDIR" "cat $D2 | sed -n -e 's/^WOV_BASEDIR=//p'" 0 1 "$(cd .. ; pwd)/test/test1_test1X"
-  tr_test "check WOV_LOCALARCHIVEBASE" "cat $D2 | sed -n -e 's/^WOV_LOCALARCHIVEBASE=//p'" 0 1 "`jq -r '.archives.localbase' "${WOVCONFIGF}"`"
   tr_test "check PROJSHORTCUT" "cat $D2 | sed -n -e 's/^PROJSHORTCUT=//p'" 0 1 "test1X"
   tr_test "check WOV_CODEREPOARCHIVE" "cat $D2 | sed -n -e 's/^WOV_CODEREPOARCHIVE=//p'" 0 1 "/REPOSERVER"
 
@@ -228,29 +227,29 @@ D2=.delme2
   tr_section  'checkouttest'
 
   tr_test "checkout from repo fails because no repo" \
-    "wov-checkout --reposerver '${MTESTDIR}/${PROJ}remoterepo ' 'test2' 'Y'" \
+    "wov-checkout --usercode ${TESTME} --reposerver '${MTESTDIR}/${PROJ}remoterepo ' 'test2' 'Y'" \
     105 -1
 
   tr_test "checkout from repo fails because looking for single project" \
-    "wov-checkout -vv --debugmode --reposerver '${MTESTDIR}/${MASTER}remoterepo' '${PROJ}' '${MSC}'" \
+    "wov-checkout -vv --debugmode --usercode ${TESTME} --reposerver '${MTESTDIR}/${MASTER}remoterepo' '${PROJ}' '${MSC}'" \
     105 -1
 
   tr_test_skip "TODO: checkout from repo fails because existing checkout points to different repo" \
-    "wov-checkout -vv --debugmode --reposerver '${MTESTDIR}/${MASTER}remoterepo' '${PROJ}'" \
+    "wov-checkout -vv --debugmode --usercode ${TESTME} --reposerver '${MTESTDIR}/${MASTER}remoterepo' '${PROJ}'" \
     108 -1
 
   tr_tests_on
-  #wov-checkout -vv --debugmode --reposerver "${MTESTDIR}/${MASTER}remoterepo" \
+  #wov-checkout -vv --debugmode --usercode ${TESTME} --reposerver "${MTESTDIR}/${MASTER}remoterepo" \
   #                             --local-archives "${MTESTDIR}/${MASTER}localarchives"  "${PROJ}"
 
   tr_test "checkout from repo fails because existing checked out version" \
-    "wov-checkout -vv --debugmode --reposerver '${MTESTDIR}/${MASTER}remoterepo' "`
+    "wov-checkout -vv --debugmode --usercode ${TESTME} --reposerver '${MTESTDIR}/${MASTER}remoterepo' "`
                     `"--local-archives '${MTESTDIR}/${MASTER}localarchives' '${PROJ}'" \
     0 -1
 
   tr_vverbose
   tr_test "checkout from repo fails because existing checked out version" \
-    "wov-checkout -vv --debugmode --reposerver \"${MTESTDIR}/${MASTER}remoterepo\" --local-archives \"${MTESTDIR}/${MASTER}localarchives\" ${PROJ}" \
+    "wov-checkout -vv --debugmode --usercode ${TESTME} --reposerver \"${MTESTDIR}/${MASTER}remoterepo\" --local-archives \"${MTESTDIR}/${MASTER}localarchives\" ${PROJ}" \
     107 -1
 
   tr_dir test1
@@ -261,3 +260,5 @@ D2=.delme2
   tr_section '/checkouttest'
 }
 
+
+tr_results

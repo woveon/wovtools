@@ -371,6 +371,12 @@ EOF
 #  # /TODO
   
 
+  
+  # Ensure wovtools/myconfig.json has .secrets.STAGE, based upon _dev entry
+  # - read in dev entry
+  # - remove _dev extentions, replacing with _STAGE
+  
+
   doCreateK8s $mscode
 }
 

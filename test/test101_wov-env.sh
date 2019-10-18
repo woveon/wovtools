@@ -171,7 +171,6 @@ tr_h2 'wov-env'
     "wov-env --context remote:wov-aws-va-grape-test1-${TESTME} --cm test1X | \grep -e \"WOV_ME=\" -e \"WOV_test1X_port=\" -e \"WOV_test1X_ver=\" -e \"WOV_www_api_url=\" | sort" \
     0 4 "WOV_ME=${wov_me}" 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' "WOV_www_api_url=api-${TESTME}.alywan.com"
 
-  echo "WOV_ME=${wov_me} WOV_test1X_port=80 WOV_test1X_ver=v1 WOV_www_api_url=api-${TESTME}.alywan.com"
   tr_test "Test ConfigurationMap of a Microservice: self ${TESTME}" \
     "wov-env --context wov-aws-va-grape-test1-${TESTME} --origin self --cm test1X | \grep -e \"WOV_ME=\" -e \"WOV_test1X_port=\" -e \"WOV_test1X_ver=\" -e \"WOV_www_api_url=\" | sort" \
     0 4 "WOV_ME=${wov_me}" 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' "WOV_www_api_url=api-${TESTME}.alywan.com"

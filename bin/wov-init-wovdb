@@ -38,10 +38,10 @@ while [[ $1 =~ ^- ]]; do
   if [ "$1" == "--foo" ]; then
     shift
 
-  elif [ "$1" == "--usercode" ]; then
-    shift
-    WOV_ME="${1}"
-    shift
+#  elif [ "$1" == "--usercode" ]; then
+#    shift
+#    WOV_ME="${1}"
+#    shift
 
   else
     echo
@@ -59,8 +59,8 @@ if [ ${WOV_DODEFAULTCOMMAND} == 1 ]; then
   if [ "${WOVDBNAME}" == "" ]; then l_error "No name provided for the WovDatabase."; exit 101; fi
   if [[ "${WOVDBNAME}" != *db ]]; then l_error "By convention, WovDataBases end with 'db' on them."; exit 103; fi
 
-  l_debug "Create the secrets files in secrets"
-  iLocalArchives_SEDBFiles "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_ME}" "${WOVDBNAME}"
+  l_debug "Create the secrets files in secrets (as ${WOV_STAGE})"
+  iLocalArchives_SEDBFiles "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_STAGE}" "${WOVDBNAME}"
 
   l_debug "Ensure entry in the Local Archives: ${WOVDBNAME}.json, ${WOVDBNAME}/schemas dir"
   if [ -d "${WOV_BASEDIR}/wovtools/db/archive/${WOVDBNAME}/schemas" ]; then l_ "...existing WovDataBase Archive with that name."; fi

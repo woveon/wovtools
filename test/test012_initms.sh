@@ -109,8 +109,10 @@ export PATH=$PATH:/usr/local/bin/wovlib
 
   tr_run "cleanup" "rm -Rf ${TEST}${MSCODE}"
 
-  tr_test "make the ms of type nodejs" \
-    ">&2 wov-init-ms -v --ms-type woveonservice --ms ${MSCODE}; echo $?"  0 1 0
+
+  # wov-init-ms -v --ms-type woveonservice --ms ${MSCODE}
+  tr_test "make the ms of type nodejs (calls external system so requires network access)" \
+    "wov-init-ms -v --ms-type woveonservice --ms ${MSCODE}"  0 -1
 
   tr_test "dir exists" "[ -d ${TEST}${MSCODE}/src ] && echo 0 || echo 1"  0 1 0 
   tr_test "package file exists" "[ -f ${TEST}${MSCODE}/package.json ] && echo 0 || echo 1" 0 1 0 
