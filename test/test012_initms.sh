@@ -25,6 +25,9 @@ tr_comment "NOTE: Expects test1 project to exist, created by test001_init.sh"
 tcUseTestingContext
 tr_dir "${TESTDIR}/${TEST}"
 
+export PATH=$PATH:/usr/local/bin/wovlib
+. wov-env-loader
+
 # tr_protectfile "wovtools/secrets/${MASTER}_${TESTME}.json"
 
 {

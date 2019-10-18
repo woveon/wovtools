@@ -12,6 +12,8 @@ usage: `basename $0` {options} [DOMAIN]
 
 Defines secrets for private code repositories.
 
+  --usercode - overrides WOV_ME
+
 EOF
 }
 . wov-env-ops fDisplayOptions "$@"
@@ -19,6 +21,25 @@ EOF
 
 
 MYREPOSITORIESFILE="${WOV_BASEDIR}/wovtools/secrets/repositories.json"
+
+
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+#  echo "param '$1'"
+
+  if [ "$1" == "--usercode" ]; then
+    shift
+    WOV_ME=$1
+    shift
+
+  else
+    echo
+    echo "***ERROR (`basename $0`): unknown option '$1'."
+    echo
+    fDisplayOptions
+    exit 1
+  fi
+done
 
 
 iProjConfig_MergeToSecrets "dev"         "repositories.json" || exit 1

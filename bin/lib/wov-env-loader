@@ -14,6 +14,8 @@
 # --------------------------------------------------------------------- 
 export WOV_VERSION=3
 export WOV_VH_VERSION=0.1
+export WOVCONFIGF="${HOME}/.wovtools/config"
+export WOVCONFIGDIR="${HOME}/.wovtools"
 
 
 # --------------------------------------------------------------------- 
@@ -140,8 +142,6 @@ function getWovProjectVars()
   # --------------------------------------------------------------------- 
   # global config file and dir
   # --------------------------------------------------------------------- 
-  export WOVCONFIGF="${HOME}/.wovtools/config"
-  export WOVCONFIGDIR="${HOME}/.wovtools"
   export WOV_ME=$(cat ${WOVCONFIGF} | jq -r '.me')
   if [ "${WOV_ME}" == "null" ] ; then
     printf "\n\nERROR: You need to set 'me' in the ${WOV_CONFIGFILE_MINE} file.\n"

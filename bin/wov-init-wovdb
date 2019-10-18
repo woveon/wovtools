@@ -30,13 +30,17 @@ EOF
 . wov-env-ops fDisplayOptions "$@"
 . wov-init-common
 
-
 # ---------------------------------------------------------------------
 # Handle Params
 # ---------------------------------------------------------------------
 while [[ $1 =~ ^- ]]; do
 
   if [ "$1" == "--foo" ]; then
+    shift
+
+  elif [ "$1" == "--usercode" ]; then
+    shift
+    WOV_ME="${1}"
     shift
 
   else

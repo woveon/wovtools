@@ -9,6 +9,10 @@ tr_h1 "Test ${0}"
 . test_common.sh
 tcUseTestingContext
 
+export PATH=$PATH:/usr/local/bin/wovlib
+ISWOVPROJECT=0
+. wov-env-loader
+
 
 #TESTDIR=`pwd`
 #MASTER=$(basename ${TESTDIR})
@@ -18,12 +22,12 @@ tcUseTestingContext
 #TESTREPODIR="${TESTDIR}/testremoterepo"
 #mkdir -p "${TESTREPODIR}"
 #PROJDIR="${TESTDIR}/${TEST}"
-#ME=$(cat ${HOME}/.wovtools | jq -r '.me')
+#ME=$(cat "${WOVCONFIGF}" | jq -r '.me')
 PID=$$
   # --- used as a unique number below
 
 
-#tr_protectfile "${HOME}/.wovtools"
+#tr_protectfile "${WOVCONFIGF}"
 
 #if [ "${KOPS_CLUSTER_NAME}" == "" ]; then
 #  tr_comment "KOPS_CLUSTER_NAME is not set. See your available clusters with 'kops get clusters'."
@@ -53,9 +57,9 @@ if [ $_tr_testson -eq 1 ]; then
   rm -Rf ${LADIR}/*archive
   rm -Rf ${TESTREPODIR}/${MASTER}_*.git
 
-  jq -r ".local.searchives.dir" "${HOME}/.wovtools"
-  cat "${HOME}/.wovtools" | jq -r "del(.projects.${PROJ})"  > ~/.wovtools.$$
-  mv ~/.wovtools.$$ ~/.wovtools
+  jq -r ".local.searchives.dir" "${WOVCONFIGF}"
+  cat "${WOVCONFIGF}" | jq -r "del(.projects.${PROJ})"  > "${WOVCONFIGF}.$$"
+  mv "${WOVCONFIGF}.$$" "${WOVCONFIGF}"
 
 #  tr_test "set current kubernetes context just in case" "kubectl config use-context ${USECLUSTER}-${PROJ}-${TESTME}" 0 -1
 
@@ -178,11 +182,25 @@ fi
 }
 
 {
+  tr_section 'testproj'
+
+  tr_test "myconfig has .secrets.testme is only entry in secrets" \
+    "cat wovtools/myconfig.json | jq -r '.secrets | length'" 0 1 1
+
+  tr_test "myconfig has .secrets.testme with 4 files" \
+    "cat wovtools/myconfig.json | jq -r '.secrets.${TESTME} | length'" 0 1 4
+
+  tr_section '/testproj'
+}
+
+{
   tr_section 'testglobal'
 
-  FF="$(jq -r ".projects.${PROJ}" ~/.wovtools)" ; Re=$?
-  if [ $Re -ne 0 ]; then l_error "Failed to parse ~/.wovtools file for '.projects.${PROJ}'"; exit 1; fi
-  if [ "${FF}" == "null" ]; then l_error "Failed to find '.projects.${PROJ}' entry in ~/.wovtools"; exit 1; fi
+  # echo "WOVCONFIGF: ${WOVCONFIGF}";  cat $WOVCONFIGF
+
+  FF="$(jq -r ".projects.${PROJ}" "${WOVCONFIGF}")" ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "Failed to parse WOVCONFIGF file for '.projects.${PROJ}'"; exit 1; fi
+  if [ "${FF}" == "null" ]; then l_error "Failed to find '.projects.${PROJ}' entry in WOVCONFIGF"; exit 1; fi
   tr_section '/testglobal'
 }
 

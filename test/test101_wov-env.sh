@@ -9,6 +9,13 @@ tr_h1 "wov-env commands : $0"
 . test_common.sh
 tcUseTestingContext
 
+if [ ! -d "${PROJDIR}" ]; then l_error "No '${PROJDIR}'. Run test011_init.sh."; exit 1; fi
+#export PATH=$PATH:/usr/local/bin/wovlib
+#. wov-env-logging
+#ISWOVPROJECT=0
+#. wov-env-loader
+#unset ISWOVPROJECT
+
 {
   tr_section 'initfortests'
   if [ ! -e "${PROJ}" ]; then echo "ERROR: project '${PROJ}' does not exist. Run the 'test011_init.sh' test to create it."; exit 1; fi
@@ -63,6 +70,8 @@ tr_h2 'Context in wov-env-loader'
 tr_section 'context-tests'
 {
 
+  tr_vverbose
+  echo "pwd: " ; pwd
   tr_test "simple context" \
     "wov-env --context wov-aws-va-grape-test1-${TESTME} --var WOV_VERSION ; wov-env --context wov-aws-va-grape-test1-${TESTME} --var WOV_SVER" \
     0 2 \
@@ -152,21 +161,24 @@ tr_h2 'wov-env'
     0 1 'WOV_ORIGIN'
 
 
+  wov_me=$(cat "${HOME}/.wovtools/config" | jq -r ".me" )
+  tr_comment "Setting wov_me but should probably return WOV_STAGE instead: ${wov_me}"
   tr_test "Test ConfigurationMap of a Microservice : local ${TESTME}" \
     "wov-env --context local:wov-aws-va-grape-test1-${TESTME} --cm test1X | \grep -e \"WOV_ME=\" -e \"WOV_test1X_port=\" -e \"WOV_test1X_ver=\" -e \"WOV_www_api_url=\" | sort" \
-    0 4 "WOV_ME=${TESTME}" 'WOV_test1X_port=75643' 'WOV_test1X_ver=v1' 'WOV_www_api_url=localhost'
+    0 4 "WOV_ME=${wov_me}" 'WOV_test1X_port=75643' 'WOV_test1X_ver=v1' 'WOV_www_api_url=localhost'
 
   tr_test "Test ConfigurationMap of a Microservice : remote ${TESTME}" \
     "wov-env --context remote:wov-aws-va-grape-test1-${TESTME} --cm test1X | \grep -e \"WOV_ME=\" -e \"WOV_test1X_port=\" -e \"WOV_test1X_ver=\" -e \"WOV_www_api_url=\" | sort" \
-    0 4 "WOV_ME=${TESTME}" 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' "WOV_www_api_url=api-${TESTME}.alywan.com"
+    0 4 "WOV_ME=${wov_me}" 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' "WOV_www_api_url=api-${TESTME}.alywan.com"
 
+  echo "WOV_ME=${wov_me} WOV_test1X_port=80 WOV_test1X_ver=v1 WOV_www_api_url=api-${TESTME}.alywan.com"
   tr_test "Test ConfigurationMap of a Microservice: self ${TESTME}" \
     "wov-env --context wov-aws-va-grape-test1-${TESTME} --origin self --cm test1X | \grep -e \"WOV_ME=\" -e \"WOV_test1X_port=\" -e \"WOV_test1X_ver=\" -e \"WOV_www_api_url=\" | sort" \
-    0 4 "WOV_ME=${TESTME}" 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' "WOV_www_api_url=api-${TESTME}.alywan.com"
+    0 4 "WOV_ME=${wov_me}" 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' "WOV_www_api_url=api-${TESTME}.alywan.com"
 
   tr_test "Test ConfigurationMap of a Microservice: remote dev" \
     'wov-env --context wov-aws-va-grape-test1-dev --origin remote --cm test1X | \grep -e "WOV_ME=" -e "WOV_STAGE=" -e "WOV_test1X_port=" -e "WOV_test1X_ver=" -e "WOV_www_api_url=" | sort' \
-    0 5 "WOV_ME=${TESTME}" 'WOV_STAGE=dev' 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' 'WOV_www_api_url=api-dev.alywan.com'
+    0 5 "WOV_ME=${wov_me}" 'WOV_STAGE=dev' 'WOV_test1X_port=80' 'WOV_test1X_ver=v1' 'WOV_www_api_url=api-dev.alywan.com'
 
 # TODO: secrets
 #  tr_test "Test Secrets of a Microservice : local ${TESTME}" \

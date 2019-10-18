@@ -3,16 +3,6 @@
 
 WOV_DEBUGMODE=1
 DOECHO=2
-#TEST=test1
-#TESTDIR=`pwd`
-##MASTER=$(basename ${TESTDIR})
-#PROJ="${TEST}"
-#LADIR="${TESTDIR}/${MASTER}localarchives"
-#RRDIR="${TESTDIR}/${MASTER}remoterepo"
-#mkdir -p "${RRDIR}"
-#mkdir -p "${LADIR}"
-#PROJDIR="${TESTDIR}/${TEST}"
-#TESTME=testme # $(cat ${HOME}/.wovtools | jq -r '.me')
 PID=$$
 
 
@@ -21,21 +11,14 @@ tr_h1      "Test ${0}"
 # tcUseTestingContext
 
 
+if [ ! -d "${PROJDIR}" ]; then l_error "No '${PROJDIR}'. Run test011_init.sh."; exit 1; fi
+tr_dir ${PROJ}
+export PATH=$PATH:/usr/local/bin/wovlib
+. wov-env-logging
+. wov-env-loader
+
+
 tr_protectfile "wovtools/myconfig.json"
-
-#tr_comment "set .me to '${TESTME}'."
-#cat ~/.wovtools | jq -r ".me=\"${TESTME}\"" > ~/.wovtools.1
-#if [ $? -eq 0 ]; then mv ~/.wovtools.1 ~/.wovtools; 
-#else rm ~/.wovtools.1; tr_comment "Failed changing .me to '${TESTME}'"; exit 2; fi
-
-
-{
-  tr_section 'dirchecks'
-  if [ ! -d "${PROJDIR}" ]; then l_error "No '${PROJDIR}'. Run test011_init.sh."; exit 1; fi
-  tr_dir ${PROJ}
-  tr_section '/dirchecks'
-}
-
 
 {
   tr_section "k8scontext"
@@ -51,13 +34,13 @@ tr_protectfile "wovtools/myconfig.json"
     fi
 
     tr_comment "Looking for a context for this cluster to temporarily use (so can query Kubernetes configuration)"
-    A=$(kubectl config get-contexts | \grep "${USECLUSTER}" | head -n 1 | awk '{print $1}')
+    A=$(kubectl config get-contexts --output=name | \grep "${USECLUSTER}" | head -n 1 | awk '{print $1}')
     if [ "$A" != "" ]; then
       kubectl config use-context "$A"
       if [ $? -eq 0 ]; then break; else echo "...failed to use config '${A}'."; fi
     fi
 
-    read -e -p "Change K8s context to an actual context : " -i "${USECLUSTER}-${PROJ}-$(jq -r ".me" ~/.wovtools)" A
+    read -e -p "Change K8s context to an actual context : " -i "${USECLUSTER}-${PROJ}-$(jq -r ".me" "${WOVCONFIGF}")" A
     kubectl config use-context $A
     if [ $? -ne 0 ]; then "Failed to set. Exiting."; exit 1; fi
   done

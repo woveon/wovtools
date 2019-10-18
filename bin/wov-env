@@ -112,9 +112,8 @@ function fBuildClusterSecrets
 #    if [ "$?" != "0" ]; then exit 1; fi
 #  fi
 
-  l_debug "WOV_ME '${WOV_ME}'"
-  l_debug "fBuildClusterSecrets pre check, ${WOV_SECRETFILE}\n ${WOV_CONFIGFILE_MAIN}"
-  l_debug "1- $([ "${WOV_CONFIGFILE_MAIN}" -nt ${WOV_SECRETFILE} ] && echo 'nt')"
+  #l_debug "fBuildClusterSecrets pre check, ${WOV_SECRETFILE}\n ${WOV_CONFIGFILE_MAIN}"
+  #l_debug "1- $([ "${WOV_CONFIGFILE_MAIN}" -nt ${WOV_SECRETFILE} ] && echo 'nt')"
 
   # ---------------------------------------------------------------------
   # Ensure the SECRET_CACHE_DIR exists and is protected and then merge

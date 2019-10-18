@@ -7,25 +7,27 @@ WOV_DEBUGMODE=1
 . test_common.sh
 
 export PATH=$PATH:/usr/local/bin/wovlib
+ISWOVPROJECT=0
+. wov-env-loader
 . wov-env-logging
 . wov-init-common
 . wov-env-common
 
-#GWOVTOOLSBAK="${HOME}/.wovtools.`date +%s`"
+#GWOVTOOLSBAK="${WOVCONFIGF}.`date +%s`"
 #function finish()
 #{
-#  if [ -e "${HOME}/.wovtools" ]; then cp ~/.wovtools ~/.wovtools.lasttestrun; fi
-#  if [ -e "${GWOVTOOLSBAK}" ]; then mv "${GWOVTOOLSBAK}" ~/.wovtools ; fi
+#  if [ -e "${WOVCONFIGF}" ]; then cp ${WOVCONFIGF} ${WOVCONFIGF}.lasttestrun; fi
+#  if [ -e "${GWOVTOOLSBAK}" ]; then mv "${GWOVTOOLSBAK}" "${WOVCONFIGF} ; fi
 #}
 #trap finish EXIT
 
 
 #tr_tests_off
 
-tr_h1 "Global .wovtools Tests"
+tr_h1 "Global WOVCONFIGF Tests"
 
-tr_protectfile "${HOME}/.wovtools" del
-tr_protectdir  "${HOME}/wovtools" del
+tr_protect  "${WOVCONFIGF}" del
+#tr_protectdir  "${WOVCONFIGDIR}" del
 
 {
   tr_section "Global-Config-Testing"
@@ -53,15 +55,15 @@ EOF
 #  tr_test "secrets archives should exist" "[ -e ${LADIR}/searchive ] && echo '1'" 0 1 '1'
 #  tr_test "DB archives should exist"      "[ -e ${LADIR}/dbarchive ] && echo '1'" 0 1 '1'
 #  tr_test "DS archives should exist"      "[ -e ${LADIR}/dsarchive ] && echo '1'" 0 1 '1'
-  tr_test "test .me" "[ `jq -r .me ~/.wovtools` == '${TESTME}' ] && echo 1" 0 1 '1' 
-  tr_test "test .archives.k8s K8S"      "[ `jq -r .archives.k8s ~/.wovtools` == 'K8S' ] && echo 1" 0 1 '1'
-  tr_test "test .archives.container CA" "[ `jq -r .archives.container ~/.wovtools` == 'CA' ] && echo 1" 0 1 '1'
-  tr_test "test .archives.coderepo CR"  "[ `jq -r .archives.coderepo  ~/.wovtools` == 'CR' ] && echo 1" 0 1 '1'
-  tr_test "local archive base"          "[ `jq -r .archives.localbase ~/.wovtools` == '/tmp/foo' ] && echo 1" 0 1 '1'
+  tr_test "test .me" "[ `jq -r .me "${WOVCONFIGF}"` == '${TESTME}' ] && echo 1" 0 1 '1' 
+  tr_test "test .archives.k8s K8S"      "[ `jq -r .archives.k8s "${WOVCONFIGF}"` == 'K8S' ] && echo 1" 0 1 '1'
+  tr_test "test .archives.container CA" "[ `jq -r .archives.container "${WOVCONFIGF}"` == 'CA' ] && echo 1" 0 1 '1'
+  tr_test "test .archives.coderepo CR"  "[ `jq -r .archives.coderepo  "${WOVCONFIGF}"` == 'CR' ] && echo 1" 0 1 '1'
+  tr_test "local archive base"          "[ `jq -r .archives.localbase "${WOVCONFIGF}"` == '/tmp/foo' ] && echo 1" 0 1 '1'
 
-  # cat ~/.wovtools
+  # cat ${WOVCONFIGF}
 
-  tr_test "Validate ~/.wovtools" "iGlobalConfig_Validate && echo 1" 0 1 '1'
+  tr_test "Validate WOVCONFIGF" "iGlobalConfig_Validate && echo 1" 0 1 '1'
 
   tr_comment "iGlobalConfig_ReadIn" 
   iGlobalConfig_ReadIn
@@ -83,15 +85,15 @@ tr_tests_on
   tr_section "wov-env-common-tests"
 
 
-  tr_run "~/.wovtools now" "cat ~/.wovtools"
+  tr_run "WOVCONFIGF now" "cat ${WOVCONFIGF}"
 
 #  tr_test "Project Repo Name : Normal Call" \
 #    'doGetProjectRepoName "PROJECTNAME"' 1 1 'CR/UNKNOWN'
 #  tr_test "Project Repo Name : Normal Call with User Provided repo ext" \
 #    'doGetProjectRepoName "PROJECTNAME" "EXT"' 0 1 'CR/EXT'
 
-  tr_comment "add to ~/.wovtools the .projects.PROJECTNAME.[dir|repo|repoext]"
-  cat ~/.wovtools | jq -r '.projects.PROJECTNAME={dir : "DIR", repo : "REPO", repobase: "REPOBASE"}' > ~/.wovtools.1 && cp ~/.wovtools.1 ~/.wovtools && rm ~/.wovtools.1
+  tr_comment "add to WOVCONFIGF the .projects.PROJECTNAME.[dir|repo|repoext]"
+  cat "${WOVCONFIGF}" | jq -r '.projects.PROJECTNAME={dir : "DIR", repo : "REPO", repobase: "REPOBASE"}' > "${WOVCONFIGF}.1" && cp "${WOVCONFIGF}.1" "${WOVCONFIGF}" && rm "${WOVCONFIGF}.1"
 
 #  tr_test "Project Repo Name : Master: User Provided" \
 #    'doGetProjectRepoName "PROJECTNAME" "USERPROVIDED" "MSREPO" "MSREPOBASE"' 0 1 'MSREPOBASE/USERPROVIDED'

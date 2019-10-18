@@ -227,6 +227,11 @@ while [[ $1 =~ ^- ]]; do
     FORCE_BUILD=1
     shift
 
+  elif [ "$1" == '--usercode' ]; then
+    shift
+    WOV_ME="${1}"
+    shift
+
   else
     echo
     echo "***ERROR (`basename $0`): unknown option '$1'."

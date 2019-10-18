@@ -7,6 +7,7 @@
 
 export PATH=$PATH:/usr/local/bin/wovlib
 ISWOVPROJECT="0"
+. wov-env-loader
 . wov-env-logging
 . wov-init-common
 . wov-env-common
@@ -18,7 +19,7 @@ FOLD=`tput cols`
 #tr_tests_off
 
 tr_h1 "Project Tests : wovtools/config.json"
-tr_protectfile "${HOME}/.wovtools"
+tr_protectfile "${WOVCONFIGF}"
 
 {
   tr_section "create dummy project"
@@ -224,7 +225,7 @@ tr_vverbose
 
   tr_run "remove Project Config" "rm ${WOV_CONFIGFILE_MAINRAW}"
 
-  cat ~/.wovtools
+  cat "${WOVCONFIGF}"
   iGlobalConfig_ReadIn || exit 1
   echo "WOV_K8SARCHIVE ${WOV_K8SARCHIVE}"
   echo "WOV_CONTAINERARCHIVE ${WOV_CONTAINERARCHIVE}"

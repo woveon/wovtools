@@ -9,6 +9,7 @@ tr_comment "Tests the wov-push-k8s. Assumes test1 has been created."
 
 . test_common.sh
 tcUseTestingContext
+
 tr_dir test1
 tr_protectfile "wovtools/config.json"
 tr_protectfile "wovtools/myconfig.json"
@@ -41,14 +42,14 @@ tr_protectfile "wovtools/myconfig.json"
   #tr_tests_on
 
   # Get var
-  AE=`jq -r '.archive.env' ~/.wovtools`
+  AE=`jq -r '.archive.env' "${WOVCONFIGF}"`
   tr_run "reset .archive.env to ''" \
     "cat wovtools/config.json | jq -r '.archive.env=\"\"' > wovtools/config.json_ ; mv wovtools/config.json_ wovtools/config.json" 
 
 #  tr_test "push but fail because WOV_K8SARCHIVE not set." \
 #    "wov-push-k8s --push" 1 -1
 
-  tr_run "reset .archive.env in wovtools/config.json from ~/.wovtools" \
+  tr_run "reset .archive.env in wovtools/config.json from WOVCONFIGF" \
     "cat wovtools/config.json | jq -r '.archive.env=\"${AE}\"' > wovtools/config.json_ ; mv wovtools/config.json_ wovtools/config.json" 
   tr_run "set .archive.env to " \
     "cat wovtools/config.json | jq -r '.archive.env'"

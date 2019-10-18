@@ -1562,13 +1562,13 @@ function iLocalArchives_SEFiles()
   local retval=0
   local BASEDIR=$1        # WOV_BASEDIR
   local MASTERPROJECT=$2  # WOV_MASTERPROJECT
-  local ME=$3             # WOV_ME
+  local ME=$3             # WOV_STAGE for the dev
   local DOMAIN=$4  # WOV_cluster_dns_domain
 
   # Add to Config
-  iProjConfig_MergeToSecrets   "dev"       "${WOV_MASTERPROJECT}.json" "${WOV_MASTERPROJECT}_dev.json" || exit 1
-  iProjConfig_MergeToSecrets   "prod"      "${WOV_MASTERPROJECT}.json" "${WOV_MASTERPROJECT}_prod.json" || exit 1
-  iProjMyConfig_MergeToSecrets "${WOV_ME}" "${WOV_MASTERPROJECT}.json" "${WOV_MASTERPROJECT}_${WOV_ME}.json" || exit 1
+  iProjConfig_MergeToSecrets   "dev"   "${MASTERPROJECT}.json" "${MASTERPROJECT}_dev.json" || exit 1
+  iProjConfig_MergeToSecrets   "prod"  "${MASTERPROJECT}.json" "${MASTERPROJECT}_prod.json" || exit 1
+  iProjMyConfig_MergeToSecrets "${ME}" "${MASTERPROJECT}.json" "${MASTERPROJECT}_${ME}.json" || exit 1
 
   # make sure default secret files exist
   if [ ! -e "${BASEDIR}/wovtools/secrets/${MASTERPROJECT}.json" ]; then

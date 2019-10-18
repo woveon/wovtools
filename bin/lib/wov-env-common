@@ -567,7 +567,7 @@ function cStage_TestFixInteractive()
   if [ $retval -ne 0 ] && [ "$tfi" == "interactive" ]; then return $retval; fi
 
 
-  l_ "...checking for Kubernetes Namespace '${WOV_PROJECT}-${targetstage}'."
+  l_ "...checking for Kubernetes Namespace '${project}-${targetstage}'."
   while [ $retval -eq 0 ]; do
     R=$(cNamespace_List "${project}" ) ; Re=$?
     l_debug " R) '${R}'"
@@ -638,7 +638,7 @@ function cStage_TestFixInteractive()
   # --------------------------------------------------------------------- 
 
   local gitreponames=( "Code" "Secrets Archive" "DataBase Archive" "DataSet Archive")
-  local gitrepodirs=( "${WOV_BASEDIR}" "${WOV_BASEDIR}/wovtools/secrets" "${WOV_BASEDIR}/wovtools/db/archive" "${WOV_BASEDIR}/wovtools/ds/const" )
+  local gitrepodirs=( "${basedir}" "${basedir}/wovtools/secrets" "${basedir}/wovtools/db/archive" "${basedir}/wovtools/ds/const" )
   local gitrepobranches=( "${targetstage}" "master" "${targetstage}" "${targetstage}" )
 
   for i in `seq 0 $((${#gitreponames[@]} -1))`; do
