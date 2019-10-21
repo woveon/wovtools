@@ -22,12 +22,20 @@ tr_protectfile "wovtools/myconfig.json"
 
   tr_test "clear cluster cache" "wov-env --clear-cluster-cache" 0 -1
 
-  tr_test "make sure clusters directory no longer exists now after cleared" \
-    "ls wovtools/cache/clusters" 2 -1
+  if [ "$(uname -s)" == "Darwin" ]; then
+    tr_test "Darwin(error 1): make sure clusters directory no longer exists now after cleared" \
+      "ls wovtools/cache/clusters" 1 -1
+  elif [ "$(uname -s)" == "Linux" ]; then
+    tr_test "Linux(error 2): make sure clusters directory no longer exists now after cleared" \
+      "ls wovtools/cache/clusters" 2 -1
+  else
+    echo "ERROR: Unknown platform '$(uname -s)' (from uname -s). Unsure what error code to expect for missing directory in 'ls' command."
+    exit 1
+  fi
 
   # tr_vverbose
-  tr_test "wov-env can not run becase of missing packages." "wov-env --context self:wov-aws-va-grape-test1-${TESTME} --cm ${PROJ}${MSCODE}" 1 -1
-  tr_run  "make sure wov-env can run by updating js packages" "cd test1X ; yarn install"
+  # tr_test "wov-env can not run becase of missing packages." "wov-env --context self:wov-aws-va-grape-test1-${TESTME} --cm ${PROJ}${MSCODE}" 1 -1
+  tr_run  "make sure wov-env can run by updating js packages (it may use global if this is not run)" "cd test1X ; yarn install"
   tr_test "wov-env can not run" "wov-env --context self:wov-aws-va-grape-test1-${TESTME} --cm ${PROJ}${MSCODE}" 0 -1
 
   tr_test "call a check but with wrong origin, but still corrects" \
