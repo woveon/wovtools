@@ -20,6 +20,18 @@ export PATH=$PATH:/usr/local/bin/wovlib
   rm -Rf wovtools/secrets/A*db.json
   rm -Rf wovtools/db/archive/A*
   # tcUseTestingContext
+
+  tr_run "remove entries from config for database in dev" \
+    "jq -r 'del( .secrets.dev[] | select( . == \"Adb.json\" or . == \"Adb_dev.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
+  tr_run "remove entries from config for database in prod" \
+    "jq -r 'del( .secrets.prod[] | select( . == \"Adb.json\" or . == \"Adb_prod.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
+  tr_run "remove entries from myconfig for database in prod" \
+    "jq -r 'del( .secrets.${TESTME}[] | select( . == \"Adb.json\" or . == \"Adb_${TESTME}.json\" ) )' wovtools/myconfig.json > wovtools/myconfig.json.1 ; mv wovtools/myconfig.json.1 wovtools/myconfig.json"
+
+  # tr_run "now it is: " "cat wovtools/config.json"
+  tr_test "ensure wovdb not in dev secrets"  "jq -r '.secrets.dev[]' wovtools/config.json | grep Adb.json " 1 -1 
+  tr_test "ensure wovdb not in prod secrets" "jq -r '.secrets.prod[]' wovtools/config.json | grep Adb.json " 1 -1 
+  tr_test "ensure wovdb not in me secrets"   "jq -r '.secrets.${TESTME}[]' wovtools/myconfig.json | grep Adb.json " 1 -1 
   tr_section '/initfortests'
 }
 
@@ -47,20 +59,19 @@ export PATH=$PATH:/usr/local/bin/wovlib
   tr_vverbose
   tr_test 'existing database' "wov-init-wovdb --context \"${USECLUSTER}-${PROJ}-${TESTME}\" Adb | grep '...existing WovDataBase' | wc -l | tr -d '[:space:]'" 0 1 2
 
-  tr_run "remove entries from config for database in dev" \
-    "jq -r 'del( .secrets.dev[] | select( . == \"Adb.json\" or . == \"Adb_dev.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
-  tr_run "remove entries from config for database in prod" \
-    "jq -r 'del( .secrets.prod[] | select( . == \"Adb.json\" or . == \"Adb_prod.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
-  tr_run "remove entries from myconfig for database in prod" \
-    "jq -r 'del( .secrets.${TESTME}[] | select( . == \"Adb.json\" or . == \"Adb_${TESTME}.json\" ) )' wovtools/myconfig.json > wovtools/myconfig.json.1 ; mv wovtools/myconfig.json.1 wovtools/myconfig.json"
-
-  # tr_run "now it is: " "cat wovtools/config.json"
-  tr_test "ensure wovdb not in dev secrets"  "jq -r '.secrets.dev[]' wovtools/config.json | grep Adb.json " 1 -1 
-  tr_test "ensure wovdb not in prod secrets" "jq -r '.secrets.prod[]' wovtools/config.json | grep Adb.json " 1 -1 
-  tr_test "ensure wovdb not in me secrets"   "jq -r '.secrets.me[]' wovtools/myconfig.json | grep Adb.json " 1 -1 
+#  tr_run "remove entries from config for database in dev" \
+#    "jq -r 'del( .secrets.dev[] | select( . == \"Adb.json\" or . == \"Adb_dev.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
+#  tr_run "remove entries from config for database in prod" \
+#    "jq -r 'del( .secrets.prod[] | select( . == \"Adb.json\" or . == \"Adb_prod.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
+#  tr_run "remove entries from myconfig for database in prod" \
+#    "jq -r 'del( .secrets.${TESTME}[] | select( . == \"Adb.json\" or . == \"Adb_${TESTME}.json\" ) )' wovtools/myconfig.json > wovtools/myconfig.json.1 ; mv wovtools/myconfig.json.1 wovtools/myconfig.json"
+#
+#  # tr_run "now it is: " "cat wovtools/config.json"
+#  tr_test "ensure wovdb not in dev secrets"  "jq -r '.secrets.dev[]' wovtools/config.json | grep Adb.json " 1 -1 
+#  tr_test "ensure wovdb not in prod secrets" "jq -r '.secrets.prod[]' wovtools/config.json | grep Adb.json " 1 -1 
+#  tr_test "ensure wovdb not in me secrets"   "jq -r '.secrets.${TESTME}[]' wovtools/myconfig.json | grep Adb.json " 1 -1 
 
 #  wov-init-wovdb --context wov-aws-va-grape-alywan-dev Adb
-#  exit 1
   tr_test 'existing database but not in secrets' "wov-init-wovdb --context wov-aws-va-grape-alywan-dev Adb | grep '...existing WovDataBase'|  wc -l  | tr -d '[:space:]'" 0 -1
   tr_test "ensure wovdb back in secrets" "jq -r '.secrets.dev[]' wovtools/config.json | grep Adb.json " 0 -1 
   tr_test "secrets should have this" "jq -r '.secrets.prod[]' wovtools/config.json | grep Adb.json" 0 1 "Adb.json"
@@ -84,6 +95,17 @@ export PATH=$PATH:/usr/local/bin/wovlib
     "git -C wovtools/db/archive add 'Adb.json'; "`
    `"git -C wovtools/db/archive commit -a -m 'test013 db wovdb def'; "`
    `"git -C wovtools/db/archive push"
+
+  tr_run "code checkin (wovtools/config.json now has Adb entries in dev/prod)" \
+    "git commit -a -m 'test013 db wovdb def'; "`
+   `"git push"
+
+   . wov-env-common
+
+   tr_test "code: check git is checked in and pushed" "cGit_CheckFull ." 0 -1
+   tr_test "sea: check git is checked in and pushed" "cGit_CheckFull wovtools/secrets" 0 -1
+   tr_test "dba: check git is checked in and pushed" "cGit_CheckFull wovtools/db/archive" 0 -1
+   tr_test "dsa: check git is checked in and pushed" "cGit_CheckFull wovtools/ds/const" 0 -1
 
   tr_section "/dbcheckins"
 }
