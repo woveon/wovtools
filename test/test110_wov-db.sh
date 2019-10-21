@@ -15,6 +15,12 @@ tr_run 'set origin to here' 'wov-env --set-origin here'
 tr_protectfile "wovtools/config.json"
 tr_protectfile "wovtools/myconfig.json"
 
+if [ ! -e "wovtools/secrets/Adb.json" ] || [ ! -e "wovtools/secrets/Adb_${TESTME}.json" ]; then
+  echo ""
+  echo "ERROR: requires WovDB Adb to exist. Always run test013_initdb before this."
+  echo ""
+  exit 1
+fi
 
 
 {
@@ -56,10 +62,19 @@ tr_protectfile "wovtools/myconfig.json"
   tr_test 'clean up old Adb secrets' "rm -Rf wovtools/secrets/Adb*.json" 0 -1
   tr_test 'clean up old Adb archive' "rm -Rf wovtools/db/archive/A*" 0 -1
 
+
+  tr_test 'create a Wov database instance but missing secrets files' \
+    "wov-db --context wov-aws-va-grape-fail-${TESTME} --wdb-createinstance Adb" 103 -1
+
+  echo "{}" > "wovtools/secrets/Adb.json"
+  echo "{}" > "wovtools/secrets/Adb_${TESTME}.json"
+
   tr_test 'create a Wov database instance but missing values' \
     "wov-db --context wov-aws-va-grape-fail-${TESTME} --wdb-createinstance Adb" 203 -1
 
-  tr_test 'create a WovDataBase' "wov-init-wovdb Adb" 0 -1
+  tr_test 'clean up old Adb secrets' "rm -Rf wovtools/secrets/Adb*.json" 0 -1
+
+  tr_test 'create a WovDataBase' "wov-init-wovdb --context wov-aws-va-grape-test1-${TESTME} Adb" 0 -1
 
   tr_test 'create a Wov database with correct context but bad DB' \
     "wov-db --context wov-aws-va-grape-test1-${TESTME} --wdb-createinstance A" 203 -1

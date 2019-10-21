@@ -25,7 +25,7 @@ export PATH=$PATH:/usr/local/bin/wovlib
     "jq -r 'del( .secrets.dev[] | select( . == \"Adb.json\" or . == \"Adb_dev.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
   tr_run "remove entries from config for database in prod" \
     "jq -r 'del( .secrets.prod[] | select( . == \"Adb.json\" or . == \"Adb_prod.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
-  tr_run "remove entries from myconfig for database in prod" \
+  tr_run "remove entries from myconfig for database in testme" \
     "jq -r 'del( .secrets.${TESTME}[] | select( . == \"Adb.json\" or . == \"Adb_${TESTME}.json\" ) )' wovtools/myconfig.json > wovtools/myconfig.json.1 ; mv wovtools/myconfig.json.1 wovtools/myconfig.json"
 
   # tr_run "now it is: " "cat wovtools/config.json"
@@ -40,9 +40,17 @@ export PATH=$PATH:/usr/local/bin/wovlib
 
   tr_h1 'wov-init-wovdb'
 
+  tr_test "wovtools/myconfig has one .secrets entry "    "cat wovtools/myconfig.json | jq -r '.secrets | length'" 0 1 1
+  tr_test "wovtools/myconfig has .secrets.testme entry " "cat wovtools/myconfig.json | jq -r '.secrets.testme != null '" 0 1 'true'
+
   tr_test 'No name' "wov-init-wovdb" 101 -1 
+  tr_test "DELME wovtools/myconfig has .secrets.testme is only entry in secrets" \
+    "cat wovtools/myconfig.json | jq -r '.secrets | length'" 0 1 1
 
   tr_test 'No "db" ending' "wov-init-wovdb A" 103 -1 
+
+  tr_test "wovtools/myconfig has one .secrets entry "    "cat wovtools/myconfig.json | jq -r '.secrets | length'" 0 1 1
+  tr_test "wovtools/myconfig has .secrets.testme entry " "cat wovtools/myconfig.json | jq -r '.secrets.testme != null '" 0 1 'true'
   
   # kubectl config current-context
   # cat wovtools/config.json
@@ -52,12 +60,18 @@ export PATH=$PATH:/usr/local/bin/wovlib
   # cat wovtools/myconfig.json
   # exit 1
   tr_test 'create a WovDataBase' "wov-init-wovdb --context \"${USECLUSTER}-${PROJ}-${TESTME}\" Adb" 0 -1 
+   tr_test "DELME wovtools/myconfig has .secrets.testme is only entry in secrets" \
+    "cat wovtools/myconfig.json | jq -r '.secrets | length'" 0 1 1
 
   wov-env -e
   tr_test "should list it now" "wov-db -lwdb" 0 1 "Adb"
+   tr_test "DELME wovtools/myconfig has .secrets.testme is only entry in secrets" \
+    "cat wovtools/myconfig.json | jq -r '.secrets | length'" 0 1 1
 
   tr_vverbose
   tr_test 'existing database' "wov-init-wovdb --context \"${USECLUSTER}-${PROJ}-${TESTME}\" Adb | grep '...existing WovDataBase' | wc -l | tr -d '[:space:]'" 0 1 2
+   tr_test "DELME wovtools/myconfig has .secrets.testme is only entry in secrets" \
+    "cat wovtools/myconfig.json | jq -r '.secrets | length'" 0 1 1
 
 #  tr_run "remove entries from config for database in dev" \
 #    "jq -r 'del( .secrets.dev[] | select( . == \"Adb.json\" or . == \"Adb_dev.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
@@ -80,6 +94,9 @@ export PATH=$PATH:/usr/local/bin/wovlib
   tr_test "secrets should have this" "jq -r '.secrets.${TESTME}[]' wovtools/myconfig.json | grep Adb.json" 0 1 "Adb.json"
   tr_test "secrets should have this" "jq -r '.secrets.${TESTME}[]' wovtools/myconfig.json | grep Adb_${TESTME}.json" 0 1 "Adb_${TESTME}.json"
 
+  tr_run "remove .secrets.dev entry from myconfig, created in above command" \
+    "jq -r 'del( .secrets.dev )' wovtools/myconfig.json > wovtools/myconfig.json.1 && mv wovtools/myconfig.json.1 wovtools/myconfig.json"
+   tr_test "wovtools/myconfig has .secrets.testme is only entry in secrets" "cat wovtools/myconfig.json | jq -r '.secrets | length'" 0 1 1
 
   tr_section '/initdb'
 }
@@ -110,6 +127,12 @@ export PATH=$PATH:/usr/local/bin/wovlib
    tr_test "sea: check git is checked in and pushed" "cGit_CheckFull wovtools/secrets" 0 -1
    tr_test "dba: check git is checked in and pushed" "cGit_CheckFull wovtools/db/archive" 0 -1
    tr_test "dsa: check git is checked in and pushed" "cGit_CheckFull wovtools/ds/const" 0 -1
+
+
+   tr_test "wovtools/config has .secrets has only dev and prod" \
+    "cat wovtools/config.json | jq -r '.secrets | length'" 0 1 2
+   tr_test "wovtools/myconfig has .secrets.testme is only entry in secrets" \
+    "cat wovtools/myconfig.json | jq -r '.secrets | length'" 0 1 1
 
   tr_section "/dbcheckins"
 }
