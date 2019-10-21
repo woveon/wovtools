@@ -14,7 +14,7 @@ export PATH=$PATH:/usr/local/bin/wovlib
 
 {
   tr_section 'initfortests'
-  tr_protectfile "wovtools/config.json" 
+  #tr_protectfile "wovtools/config.json" 
   #tr_protectfile "wovtools/myconfig.json"
   tr_run 'set origin to here' 'wov-env --set-origin here'
   rm -Rf wovtools/secrets/A*db.json
