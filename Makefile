@@ -1,15 +1,16 @@
 
 
-BINS-INIT=wov wov-init wov-init-ms wov-init-cluster wov-init-wovdb wov-init-coderepoaccess wov-checkout wov-init-stage
+BINS-EXTERNAL=wovc wov-checkout wov-init
+BINS-INIT=wov wov-init-ms wov-init-cluster wov-init-wovdb wov-init-coderepoaccess wov-init-stage
 BINS-INIT-LIB=provider-wov-env-aws wov-env-common wov-env-loader wov-env-logging wov-init-common
-BINS-ENV=wov-start wov-env-ops wov-env-build wov-env wov-cluster wov-kops wov-cluster-createdb wov-cluster-configdbnet wov-env-val wov_stage-select wov-git-check wov-env-provider-common
+BINS-ENV=wov-env-ops wov-env-build wov-env wov-cluster wov-kops wov-cluster-createdb wov-cluster-configdbnet wov-env-val wov_stage-select wov-git-check wov-env-provider-common
 BINS-CLI=wov-aws wov-cd wov-bastion wov-bastion-connection wov-cmd wov-ed wov-ls wov-ns wov-db-common wov-db wov-db-cloud wov-p wov-plog \
 	       wov-hash wov-enc wov-dec wov-log wov-context wov-compile wov-hbs wov-stage wov-ns-check
 BINS-VH=wov-vh wov-vh-pushgit wov-vh-pulldir
 BINS-PUSH=wov-push-common wov-push-container wov-push-container-buildcheck wov-push-k8s wov-push-db wov-push
 BINS-DEPLOY=wov-deploy-service wov-deploy-info wov-deploy wov-deploy-dns
 
-BINS=${BINS-INIT} ${BINS-ENV} ${BINS-CLI} ${BINS-VH} ${BINS-PUSH} ${BINS-DEPLOY}
+BINS=${BINS-EXTERNAL} ${BINS-INIT} ${BINS-ENV} ${BINS-CLI} ${BINS-VH} ${BINS-PUSH} ${BINS-DEPLOY}
 
 .PHONY: vh all test
 
@@ -24,7 +25,8 @@ all:
 	@echo ""
 	@echo "  test    - "
 	@echo "  install - "
-	@echo "  vh      - builds the vh Docker container"
+	@echo "  wovbase - builds the Docker container"
+	@echo "  #vh      - builds the vh Docker container"
 	@echo ""
 
 

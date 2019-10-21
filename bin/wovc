@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
   
 FOLD=$(tput cols)
+DIDCOMMAND=0
 #DVOL_kube='wovtoolsvol_kube'
 ORIGINALPROFILE=
   # --- set when entering a container
+
+export PATH=$PATH:/usr/local/bin/wovlib
 
 
 # ---------------------------------------------------------------------
@@ -22,6 +25,9 @@ usage: `basename $0`
 
 EOF
 }
+
+ISWOVPROJECT="0"
+. wov-env-ops fDisplayOptions "$@"
 
 
 
@@ -43,18 +49,26 @@ EOF
 
 
 # --------------------------------------------------------------------- 
-# RETURNS bool, so 1 for true/yes, 0 for false/no
+# RETURNS yes, no, stopped
 # --------------------------------------------------------------------- 
 function isWovContainerRunning() 
 {
-  local retval=0
+  local RETVAL="no"
   local R=
+  local RR=
   local Re=
 
-  R=$(>&2 docker inspect wovtools > /dev/null ) ; Re=$?
-  if [ $Re -eq 0 ]; then retval=1; fi
+  R=$(docker inspect wovtools 2>&1 ) ; Re=$?
+  # >&2 echo "R1 ${R}"
+  if [ $Re -eq 0 ]; then
 
-  return $retval
+    RR="$(echo ${R} | jq '.[0].State.Running')"
+    # >&2 echo "RR1 ${RR}"
+    if [ "${RR}" == "true" ]; then RETVAL="yes";
+    else RETVAL="stopped"; fi
+  fi
+
+  echo "$RETVAL"
 }
 
 
@@ -77,9 +91,9 @@ function doStartWovContainer()
   local R=
   local Re=
   
-  isWovContainerRunning
-  if [ $? -eq 0 ]; then
-    echo "...starting container 'wovtools'"
+  R=$(isWovContainerRunning)
+  if [ "${R}" == "no" ]; then
+    l_ "...starting container 'wovtools'"
     docker run -t -d  \
       --name wovtools \
       -v ${HOME}/.gitconfig:/root/.gitconfig:ro \
@@ -87,11 +101,20 @@ function doStartWovContainer()
       -v ${HOME}/.ssh:/root/.ssh:ro \
       -v ${HOME}/.wovtools:/root/.wovtools \
       -v ${HOME}/.kube:/root/.kube \
+      -v /var/run/docker.sock:/var/run/docker.sock \
       -e KOPS_STATE_STORE=${KOPS_STATE_STORE} \
       -e KOPS_CLUSTER_NAME="wov-aws-va-grape.alywan.com" \
       wovtools/wovbase:3
 
 #      --mount source=wovbase-kube,target=/root/.kube 
+  elif [ "${R}" == "yes" ]; then
+    l_warn "Already running."
+  elif [ "${R}" == "stopped" ]; then
+    l_warn "Container is STOPPED."
+    l_ "Restart by: 'docker start wovtools'"
+    l_ "Remove by : 'docker rm wovtools'"
+  else
+    l_error "Unknown result of '${R}'."
   fi
 }
 
@@ -101,7 +124,7 @@ function doStartWovContainer()
 # --------------------------------------------------------------------- 
 function _onFinish()
 {
-  echo "tell app \"Terminal\" to set current settings of first window to settings set \"${ORIGINALPROFILE}\" " | osascript
+  [ "$(uname -s)" == "Darwin" ] && echo "tell app \"Terminal\" to set current settings of window id ${ORIGINALWINDOW} to settings set \"${ORIGINALPROFILE}\" " | osascript
 }
 
 
@@ -109,16 +132,29 @@ function _onFinish()
 # --------------------------------------------------------------------- 
 function doEnterWovContainer()
 {
-  ORIGINALPROFILE=$(osascript <<EOF
+
+  if [ "$(uname -s)" == "Darwin" ]; then
+    local asq=$(osascript <<EOF
 tell application "Terminal"
-  set bb to name of current settings of selected tab of front window
-  return bb
+  set oprof to name of current settings of window 1 where frontmost is true
+  set wid to id of window 1 where frontmost is true
+  return "" & wid & ":" & oprof
 end tell
 EOF
 )
+    local asqs=( ${asq//:/ } )
+    ORIGINALWINDOW="${asqs[0]}"
+    ORIGINALPROFILE="${asq:${#asqs[0]}+1}"
+    # echo " ORIGINALWINDOW ${ORIGINALWINDOW}"
+    # echo " ORIGINALPROFILE ${ORIGINALPROFILE}"
+  fi
 
   trap _onFinish EXIT
-  echo 'tell app "Terminal" to set current settings of first window to settings set "Ocean" ' | osascript
+
+  [ "$(uname -s)" == "Darwin" ] && echo "tell application \"Terminal\" to set current settings of window id ${ORIGINALWINDOW} to settings set \"Ocean\" " | osascript
+
+  #echo "tell application "Terminal" to set current settings of window 1 where frontmost is true to settings set \"Ocean\" " | osascript
+  #echo 'tell app "Terminal" to set current settings of first window to settings set "Ocean" ' | osascript
   docker exec -it wovtools /bin/bash
   _onFinish
   trap - EXIT
@@ -142,19 +178,25 @@ while [[ $1 =~ ^- ]]; do
 
   elif [[ "$1" == "--test" || "$1" == "-t" ]]; then
     shift
-    isWovContainerRunning ; echo $?
+    isWovContainerRunning
+    if [ $? -eq 1 ]; then echo true;
+    else echo false; fi
+    DIDCOMMAND=1
 
   elif [[ "$1" == "--enter" || "$1" == "-e" ]]; then
     shift
     doEnterWovContainer
+    DIDCOMMAND=1
 
   elif [[ "$1" == "--start" || "$1" == "-s" ]]; then
     shift
     doStartWovContainer
+    DIDCOMMAND=1
 
   elif [[ "$1" == "--stop" || "$1" == "-S" ]]; then
     shift
     doStopWovContainer
+    DIDCOMMAND=1
 
   else
     echo
@@ -165,3 +207,21 @@ while [[ $1 =~ ^- ]]; do
   fi
 done
 
+
+if [ $DIDCOMMAND -eq 0 ]; then
+  R=$(isWovContainerRunning)
+  if [ "${R}" == "yes" ]; then
+    doEnterWovContainer
+  elif [ "${R}" == "stopped" ]; then
+    l_warn "Wovtools Docker container is stopped."
+    l_ "Restart by: 'docker start wovtools'"
+    l_ "Remove by : 'docker rm wovtools'"
+    exit 3
+  elif [ "${R}" == "no" ]; then
+    l_warn "No running wovtools Docker container to join. Try 'wovc --start'."
+    exit 4
+  else
+    l_error "Unknown result of '${R}'."
+    exit 1
+  fi
+fi

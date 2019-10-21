@@ -7,8 +7,7 @@ FROM ubuntu:disco
 # --------------------------------------------------------------------- 
 RUN apt-get -q update
 
-# Create app directory
-#WORKDIR /usr/src/app
+# Create app directory #WORKDIR /usr/src/app
 
 # Some dev tools
 RUN apt-get -y install vim wget curl bash net-tools git iputils-ping dnsutils make ufw gnupg nfs-common jq figlet
@@ -91,6 +90,12 @@ ENV LANG en_US.UTF-8
 ENV LANGUAGE en_US:en
 ENV LC_ALL en_US.UTF-8
 
+# Pip3 (python) and AWSCLI
+RUN apt-get -y install python3-pip groff
+RUN pip3 install awscli
+
+# Install docker (uses mounted socket from host system)
+RUN apt-get install docker.io -y 
 
 # Create app directory
 WORKDIR /root
