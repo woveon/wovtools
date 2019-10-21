@@ -544,40 +544,44 @@ function doPushContainer()
       if [ $DOECHO -ge 1 ]; then echo "  ... container build not needed"; fi
     fi
 
-    # Do we push the container?
-    if [ "$DOPUSH" == "0" ]; then
-      if [ $DOECHO -ge 1 ]; then printf "  ... skipping container push\n"; fi
+
+    # Do we need to version a tag 
+    if [ "${NEEDSBUILD}" == "1" ] || [ "${NEEDSBUILD}" == "5" ] || [ "${DOFORCE}" == "1" ]; then
+
+      l_ "    ... tagging as ${WOV_STAGE}_${WOV_PVER}"
+      docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} ; Re=$?
+      if [ $Re -ne 0 ]; then
+        l_error "Failed to tag container: ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+        exit 1
+      fi
+
+      l_ "  ... tagging as dev container"
+      docker tag ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_dev
+      if [ "$?" != "0" ]; then l_error "Failed tagging as _dev."; exit 1; fi
 
     else
-      # Tag and Push
-      if [ "${NEEDSBUILD}" == "1" ] || [ "${NEEDSBUILD}" == "5" ] || [ "${DOFORCE}" == "1" ]; then
-        if [ $DOECHO -ge 1 ]; then echo "  ... container push needed"; fi
-        if [ $DOECHO -ge 2 ]; then echo "    ... tag repo"; fi
-        #echo "CMD: docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-        docker tag ${WOV_PROJECT}/${CONTAINER} ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} ; Re=$?
-        if [ $Re -ne 0 ]; then
-          l_error "Failed to tag container: ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-          exit 1
-        fi
+      l_ "    ... no tag needed"
+    fi
 
-        if [ $DOECHO -ge 2 ]; then echo "    ... push container to: ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"; fi
+    # Do we need to push the container (same checks as for tagging)
+    if [ "${NEEDSBUILD}" == "1" ] || [ "${NEEDSBUILD}" == "5" ] || [ "${DOFORCE}" == "1" ]; then
+      if [ "$DOPUSH" == "0" ]; then
+        l_ "  ... skipping container push"
+
+      else
+        l_ "  ... container push needed"
+
+        l_verbose "    ... push container to: ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
 
         # check exists would be
         # aws ecr describe-repositories --repository-names ${WOV_PROJECT}/${CONTAINER}
 
         # If just built, dump log, since it will have to push a lot of data
+        echo "COMMAND: docker push ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
         R=$(docker push ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} 2>&1 | tee /dev/tty ) ; Re=$?
         #echo "R: ${Re} '${R}'"
-        if [ $Re -ne 0 ]; then 
-          l_error "Failed to push container: ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
-          exit 1
-        fi
-        if [[ $R == *"name unknown"* ]]; then
-          l_error "Create the repository in your Docker Repository (ECR): https://us-east-1.console.aws.amazon.com/ecr/repositories."
-          exit 1
-        fi
-        if [[ $R == *'Your Authorization Token has expired.'* ]]; then
-          echo "    ... auto-login to AWS attempt"
+        if [[ $R == *'Your Authorization Token has expired.'* ]] || [[ $R == *'no basic auth credentials'* ]]; then
+          l_ "    ... auto-login to AWS attempt"
           AWSAUTHCMD=$(aws ecr get-login --no-include-email)
           eval ${AWSAUTHCMD}
           if [ "$?" != "0" ]; then
@@ -592,24 +596,25 @@ function doPushContainer()
               exit 1
             fi
           fi
+        elif [[ $R == *"name unknown"* ]]; then
+          l_error "Create the repository in your Docker Repository (ECR): https://us-east-1.console.aws.amazon.com/ecr/repositories."
+          exit 1
+        elif [ $Re -ne 0 ]; then 
+          l_error "Failed to push container: ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER}"
+          exit 1
         fi
 
-      else
-        if [ $DOECHO -ge 1 ]; then echo "  ... container push not needed"; fi
-      fi
+        l_ "  ... push _dev"
+        if [ $DOECHO -ge 2 ]; then 
+          docker push ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_dev
+          if [ "$?" != "0" ]; then l_error "Failed pushing _dev."; exit 1; fi
+        else
+          docker push ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_dev > /dev/null
+          if [ "$?" != "0" ]; then l_error "Failed pushing _dev."; exit 1; fi
+        fi
+        l_ "  ... done '${CONTAINER}'."
 
-      echo "  ... tagging as dev container and pushing"
-      docker tag ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_${WOV_PVER} ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_dev
-      if [ "$?" != "0" ]; then printf "\n\nERROR: failed tagging as _dev.\n\n"; exit 1; fi
-
-      if [ $DOECHO -ge 2 ]; then 
-        docker push ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_dev
-        if [ "$?" != "0" ]; then printf "\n\nERROR: failed pushing _dev.\n\n"; exit 1; fi
-      else
-        docker push ${WOV_CONTAINERARCHIVE}/${WOV_PROJECT}/${CONTAINER}:${WOV_STAGE}_dev > /dev/null
-        if [ "$?" != "0" ]; then printf "\n\nERROR: failed pushing _dev.\n\n"; exit 1; fi
       fi
-      echo "  ... done '${CONTAINER}'."
     fi
   fi
 }
