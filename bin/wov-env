@@ -482,7 +482,7 @@ function fConfGeneration()
       R1=$(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") ; RR=$?
       R=( "${R1}" )
     fi
-    if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
+    if [ "${RR}" != "0" ]; then l_error "Failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
 
   elif [ -e "${WOV_BASEDIR}/src/${1}config.js" ]; then
     MSCFILE="${WOV_BASEDIR}/src/${1}config.js"
@@ -494,19 +494,19 @@ function fConfGeneration()
       R1=$(node -e "console.log((new (require('${MSCFILE}'))())._genK8SSecrets())") ; RR=$?
       R=( "${R1}" )
     fi
-    if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
+    if [ "${RR}" != "0" ]; then l_error "Failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
 
   elif [ -e "${WOV_BASEDIR}/${1}/src/${1}config.sh" ]; then
     MSCFILE="${WOV_BASEDIR}/${1}/src/${1}config.sh"
     R1=$(${MSCFILE} $2) ; RR=$?
     R=( "${R1}" )
-    if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
+    if [ "${RR}" != "0" ]; then l_error "Failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
 
   elif [ -e "${WOV_BASEDIR}/src/${1}config.sh" ]; then
     MSCFILE="${WOV_BASEDIR}/src/${1}config.sh"
     R1=$(${MSCFILE} $2) ; RR=$?
     R=( "${R1}" )
-    if [ "${RR}" != "0" ]; then echo "ERROR: failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
+    if [ "${RR}" != "0" ]; then l_error "Failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
 
   else
     (>&2 printf "\nERROR: could not find '${1}config.(js|sh)'. Should be in ./src or ./${1}/src.\n\n")

@@ -524,7 +524,8 @@ fBuildCluster()
         fi
 
         # validate output
-        python -c 'import yaml, sys; yaml.safe_load(sys.stdin)' < ${DEST}
+        python3 -c 'import yaml, sys; yaml.safe_load(sys.stdin)' < ${DEST}
+        # python -c 'import yaml, sys; yaml.safe_load(sys.stdin)' < ${DEST}
         if [ $? != 0 ]; then
           echo "WARNING: generated invalid yaml: ${DEST} from ${SRC}"
         fi
@@ -576,7 +577,11 @@ fBuildCluster()
       # wov-env --context ${WOV_WORKINGCONTEXT} --cm ${f} >> ${CMFILE} 2>&1
       local a=$?
       if [ "$a" == "1" ]; then
-        if [ $DOECHO -ge 1 ]; then l_error "Missing config (.sh/.js) needed to generate ConfigMap for recipe ${f} (ms ${WOV_PROJECT}${f})  ... skipping ${WOV_CLUSTER}/cm/${f}.\n"; fi
+        if [ $DOECHO -ge 1 ]; then
+          l_error "Failed generating ConfigMap for '${WOV_PROJECT}${f}'. Run 'wov-env --context ${WOV_WORKINGCONTEXT} --cm ${WOV_PROJECT}${f}' to test config."
+          l_error "Possibly missing config (.sh/.js) needed to generate ConfigMap for recipe ${f} (ms ${WOV_PROJECT}${f})  ... skipping ${WOV_CLUSTER}/cm/${f}.\n"
+          exit 1
+        fi
         rm ${CMFILE} 
       elif [ "$a" == "2" ]; then
         l_error "Failed generating configmap in cluster: '${WOV_CLUSTER}' for: '${f}'.\n"

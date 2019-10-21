@@ -20,6 +20,7 @@ LADIR="${TESTDIR}/${MASTER}localarchives"
 RRDIR="${TESTDIR}/${MASTER}remoterepo"
 TESTREPODIR="${TESTDIR}/testremoterepo"
 PROJDIR="${TESTDIR}/${TEST}"
+MSCODE=X
 
 mkdir -p "${TESTREPODIR}" || exit 1
 mkdir -p "${RRDIR}" || exit 1

@@ -166,6 +166,8 @@ EOFF
     jq -r "${jqrule}" "${MSDIR}/package.json" > "${MSDIR}/package.json_" ; \
       mv "${MSDIR}/package.json_" "${MSDIR}/package.json"
 
+    cd ${MSDIR} ; yarn install
+
     # Add to git
     git add "${MSDIR}/package.json"
     if [ $? -ne 0 ]; then l_error "Could not add 'package.json' to git."; exit 1; fi
@@ -262,6 +264,8 @@ EOFF
     jq -r "${jqrule}" "${MSDIR}/package.json" > "${MSDIR}/package.json_" ; \
       mv "${MSDIR}/package.json_" "${MSDIR}/package.json"
     cd ${MSDIR} ; yarn add woveon-service
+
+    cd ${MSDIR} ; yarn install
 
     # Add to git
     git add "${f}"
