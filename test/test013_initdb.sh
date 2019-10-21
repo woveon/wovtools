@@ -15,7 +15,7 @@ export PATH=$PATH:/usr/local/bin/wovlib
 {
   tr_section 'initfortests'
   tr_protectfile "wovtools/config.json" 
-  tr_protectfile "wovtools/myconfig.json"
+  #tr_protectfile "wovtools/myconfig.json"
   tr_run 'set origin to here' 'wov-env --set-origin here'
   rm -Rf wovtools/secrets/A*db.json
   rm -Rf wovtools/db/archive/A*
@@ -72,9 +72,11 @@ export PATH=$PATH:/usr/local/bin/wovlib
 #  tr_test "ensure wovdb not in me secrets"   "jq -r '.secrets.${TESTME}[]' wovtools/myconfig.json | grep Adb.json " 1 -1 
 
 #  wov-init-wovdb --context wov-aws-va-grape-alywan-dev Adb
-  tr_test 'existing database but not in secrets' "wov-init-wovdb --context wov-aws-va-grape-alywan-dev Adb | grep '...existing WovDataBase'|  wc -l  | tr -d '[:space:]'" 0 -1
+  tr_test 'existing database but not in secrets' "wov-init-wovdb --context wov-aws-va-grape-alywan-dev Adb | grep '...existing WovDataBase'|  wc -l  | tr -d '[:space:]'" 0 1 2
   tr_test "ensure wovdb back in secrets" "jq -r '.secrets.dev[]' wovtools/config.json | grep Adb.json " 0 -1 
+  tr_test "ensure wovdb back in secrets" "jq -r '.secrets.dev[]' wovtools/config.json | grep Adb_dev.json " 0 -1 
   tr_test "secrets should have this" "jq -r '.secrets.prod[]' wovtools/config.json | grep Adb.json" 0 1 "Adb.json"
+  tr_test "secrets should have this" "jq -r '.secrets.prod[]' wovtools/config.json | grep Adb_prod.json" 0 1 "Adb_prod.json"
   tr_test "secrets should have this" "jq -r '.secrets.${TESTME}[]' wovtools/myconfig.json | grep Adb.json" 0 1 "Adb.json"
   tr_test "secrets should have this" "jq -r '.secrets.${TESTME}[]' wovtools/myconfig.json | grep Adb_${TESTME}.json" 0 1 "Adb_${TESTME}.json"
 
