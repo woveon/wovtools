@@ -94,7 +94,7 @@ function doStartWovContainer()
   R=$(isWovContainerRunning)
   if [ "${R}" == "no" ]; then
     l_ "...starting container 'wovtools'"
-    l_ "  ...using host network (access postgres)"
+    l_ "  ...using host network (for access to localhost ports)"
     l_ "  ...using host ~/.gitconfig READONLY"
     l_ "  ...using host ~/.aws       READONLY"
     l_ "  ...using host ~/.ssh       READONLY"
