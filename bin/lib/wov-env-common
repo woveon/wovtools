@@ -260,7 +260,7 @@ function cGit_CheckCommit()
       l_error "Failed calling 'status' on repo at '${gitpath}'."
     elif [ "${R}" != "" ]; then
       retval=4
-      l_warn "Path '${gitpath}}': failed code/env commit-check. Check in your code/env values."
+      l_warn "Path '${gitpath}': failed code/env commit-check. Check in your code/env values."
       if [ $DOECHO -ge 2 ]; then
         l_verbose "*** git status : start ************************************************"
         git -C "${gitpath}" status

@@ -3,6 +3,7 @@
 DOECHO=1
 FOLD=$(tput cols)
 ONEXIT=0
+export PATH=$PATH:/usr/local/bin/wovlib
 
 
 # ---------------------------------------------------------------------
@@ -35,6 +36,9 @@ ex. '${WOVCONFIGF}': { "projects" : { "myproject" : { "dir" : "/path/to/project"
 EOF
 }
 
+
+ISWOVPROJECT="0"
+. wov-env-ops fDisplayOptions "$@"
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------

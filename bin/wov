@@ -119,26 +119,31 @@ function doDisplayStatus()
   . wov-env-loader
   . <(wov-env --exports)
   . wov-push-common
-  local pvergit=$(wov-git-check -q 2>&1 > /dev/null;                                if [ $? != 0 ]; then echo "*"; fi )
-  local svergit=$(wov-git-check -q ${WOV_BASEDIR}/wovtools/secrets 2>&1 > /dev/null; if [ $? != 0 ]; then echo "*"; fi )
+
+
+  local pvergit=$(wov-git-check -q > /dev/null 2>&1 ;                                if [ $? != 0 ]; then echo "*"; fi )
+  local svergit=$(wov-git-check -q ${WOV_BASEDIR}/wovtools/secrets > /dev/null 2>&1 ; if [ $? != 0 ]; then echo "*"; fi )
   local DEPNS=$(kubectl -n ${WOV_NS} get namespaces ${WOV_PROJECT}-${WOV_STAGE}  -o json)
   local pverconf=$(echo ${DEPNS} | jq -r .metadata.labels.WOV_PVER)
   local sverconf=$(echo ${DEPNS} | jq -r .metadata.labels.WOV_SVER)
   if [ "${pverconf}" == "null" ]; then pverconf='-'; fi
   if [ "${sverconf}" == "null" ]; then sverconf='-'; fi
   local deployedat=$(echo ${DEPNS} | jq -r .metadata.labels.WOV_DEPLOYED)
+
+  fGetMicroserviceRecipes
   local recipes="${RECIPES[@]}"
   if [ "${recipes}" == "" ]; then recipes="none (create in wovtools/msrecipes)"; fi
 
   echo ""
-  figlet ${WOV_PROJECT}
-  fGetMicroserviceRecipes
-  echo "WovTools Project '${WOV_PROJECT}'"
-  echo " Local Project : ${WOV_PROJECTTITLE}"
-  echo "     Local MSs : ${recipes}"
-  echo "         Stage : ${WOV_STAGE}"
-  echo "        Origin : ${WOV_ORIGIN}"
-  echo "       Version : ${WOV_PVER}${pvergit}_${WOV_SVER}${svergit}"
+  figlet ${WOV_PROJECTTITLE}
+  _l_ "  : " "${WOV_PROJECTDESCRIPTION}"
+  echo ""
+  echo "   Master Project : ${WOV_MASTERPROJECT}"
+  echo "    Local Project : ${WOV_PROJECT}"
+  echo "      Project MSs : ${recipes}"
+  echo "            Stage : ${WOV_STAGE}"
+  echo "           Origin : ${WOV_ORIGIN}"
+  echo "          Version : ${WOV_PVER}${pvergit}_${WOV_SVER}${svergit}"
 
   if [ $SHOWPERSIST -eq 1 ]; then
     echo ""
@@ -156,7 +161,7 @@ function doDisplayStatus()
 
   if [ $SHOWSYSTEM -eq 1 ]; then
     echo ""
-    echo " System: '${WOV_NS}'"
+    echo " System in Namespace: '${WOV_NS}'"
     echo " ---"
     echo "  Cluster       : ${WOV_CLUSTER} - ${WOV_cluster_dns_domain}"
     echo "  Configured    : v${pverconf}_${sverconf}"
@@ -165,9 +170,13 @@ function doDisplayStatus()
     else
       echo "  Deployed      : $(date -r ${deployedat}) (epoc ${deployedat})"
     fi
-    echo "  Microservices :"
 
     fGetMicroserviceDeployments
+    echo "  Microservices : ${#MSDEPLOYMENTS[@]}"
+
+    if [ ${#MSDEPLOYMENTS[@]} -eq 0 ]; then
+      echo "  (none)"
+    fi
     for r in ${MSDEPLOYMENTS[@]}; do
       #echo "r: ${r}"
       local depraw=$(kubectl -n ${WOV_NS} get deployment "${r}" -o json 2> /dev/null)
