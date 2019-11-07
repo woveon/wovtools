@@ -323,6 +323,7 @@ function cGit_CheckPush()
 # ---------------------------------------------------------------------
 # Wov Path Extention
 # $1 - Path Type  : RemoteArchive/LocalArchive/ProjectRepo/ProjectPath
+# NOTE: la/ra are the same since I see no reason to make different
 # ---------------------------------------------------------------------
 function WovPathExt()
 {
@@ -346,8 +347,9 @@ function WovPathExt()
       local atype=$2
       local masterp=$3
       local project=$4
+      local stage=$5
 
-        if [ "$atype" == "se" ]; then Retval="${masterp}_sea";
+        if [ "$atype" == "se" ]; then Retval="${masterp}_sea_${stage}";
       elif [ "$atype" == "db" ]; then Retval="${masterp}_${project}_dba";
       elif [ "$atype" == "ds" ]; then Retval="${masterp}_dsa";
       else l_error "Unknown local archive type of '${atype}'."; retval=1; fi

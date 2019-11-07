@@ -8,8 +8,10 @@ set ""
 . wov-env-common
 set -- "${argsbastcon[@]}"
 
+RETVAL=0
 DOECHO=1
 FOLD=$(tput cols)
+eval $(wov-env --conf)
 CL=$(wov-env --var WOV_CLUSTER)
 
 
@@ -82,25 +84,30 @@ function doConfigCheck()
 
 function doDBConfigCheck()
 {
-  local dbname=$(doResName DB ${WOV_CLUSTER} ${1})
-  local entries=`\grep -i "^\s*LocalForward\s*[0-9]*\s*[a-z-]*\.[a-z0-9]*\.[a-z0-9-]*\.rds\.amazonaws.com:5432" ~/.ssh/config`
-  local bentry=`\grep -i "^\s*LocalForward\s*[0-9]*\s*${dbname}\.[a-z0-9]*\.[a-z0-9-]*\.rds\.amazonaws.com:5432" ~/.ssh/config`
+  # local dbname=$(doResName DB ${WOV_CLUSTER} ${1})
+  # local entries=`\grep -i "^\s*LocalForward\s*[0-9]*\s*[a-z-]*\.[a-z0-9]*\.[a-z0-9-]*\.rds\.amazonaws.com:5432" ~/.ssh/config`
+  # local bentry=`\grep -i "^\s*LocalForward\s*[0-9]*\s*${dbname}\.[a-z0-9]*\.[a-z0-9-]*\.rds\.amazonaws.com:5432" ~/.ssh/config`
+  local WOV_DB_endpoint="WOV_${1}_endpoint"; WOV_DB_endpoint="${!WOV_DB_endpoint}"
+  local dbname="${WOV_DB_endpoint}"
+  # local entries=`\grep -i "^\s*LocalForward\s*[0-9]*\s*[a-z-0-9.]*:[0-9]*" ~/.ssh/config`
+  local bentry=`\grep -i "^\s*LocalForward\s*[0-9]*\s*${dbname}:[0-9]*" ~/.ssh/config`
 
   if [ ! -f ~/.ssh/config ]; then
     printf "ERROR: No ~/.ssh/config file. Create enties for bastion here as 'HOST ${CL}-bastion'."
     return 1
   fi
 
-  printf "DB Config Check:\n"
-  printf "Found entries for databases : \n${entries}\n"
-  printf "Looking for db : ${dbname}\n"
+  l_ "DB Config Check: $1"
+  # l_ "Found entries for databases : \n${entries}"
+  l_ "Looking for db : ${dbname}"
+  # l_ "endpoint       : ${WOV_DB_endpoint}"
 
   if [ "$bentry" != "" ]; then
-    printf "... success\n"
+    l_ "... success"
   else
-    printf "... failed\n"
+    l_error  "... failed"
     return 1
-    printf "WARNING: no LocalForward entry for your current db : ${dbname}\n"
+    l_warn "WARNING: no LocalForward entry for your current db : ${dbname}\n"
   fi
 
 }
@@ -182,6 +189,7 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--check-db" ]; then
     shift
     doDBConfigCheck $1
+    if [ $? -ne 0 ]; then RETVAL=1; fi
     shift
 
   elif [ "$1" == "--test-port" ]; then
@@ -202,3 +210,4 @@ while [[ $1 =~ ^- ]]; do
   fi
 done
 
+exit $RETVAL

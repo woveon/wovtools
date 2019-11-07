@@ -281,9 +281,9 @@ l_ "                     ra: ${ra}"
 l_ "    OP_LOCALARCHIVEBASE: ${OP_LOCALARCHIVEBASE}"
 l_ "                 WOV_ME: $WOV_ME"
 
-iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${OP_LOCALARCHIVEBASE}/searchive" "se" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
-iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${OP_LOCALARCHIVEBASE}/dbarchive" "db" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
-iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${OP_LOCALARCHIVEBASE}/dsarchive" "ds" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
+iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${WOV_SEADIR}" "se" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
+iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${WOV_DBADIR}" "db" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
+iProjLocalArchive_EnsureSetup "${WOV_BASEDIR}" "${rabase}" "${WOV_DSADIR}" "ds" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_ME}" "${WOV_USERNAME}" "${WOV_USEREMAIL}"
 
 # "${WOV_BASEDIR}" "${WOV_MASTERPROJECT}" "${WOV_PROJECT}" "${WOV_USERNAME}" "${WOV_USEREMAIL}" "${WOV_ME}" "${WOV_SEADIR}" "${WOV_CODEREPOARCHIVE}" "${rabase}"
 

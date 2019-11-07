@@ -440,6 +440,7 @@ function doDBGetVer()
 {
   local retval=1
 
+  if [ "$DB_TYPE" != "postgres" ]; then >&2 echo "ERROR: only setup for postgres! Can not wov-db doDBGetVer to get version."; retval=2; fi
   if [ "$DB_PORT" == "" ]; then >&2 echo "ERROR: no port specified."; retval=2; fi
   if [ "$DB_USERNAME" == "" ]; then >&2 echo "ERROR: no username specified."; retval=2; fi
   if [ "$DB_PASSWORD" == "" ]; then >&2 echo "ERROR: no password specified."; retval=2; fi

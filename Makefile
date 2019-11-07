@@ -3,7 +3,7 @@
 BINS-EXTERNAL=wovc wov-checkout wov-init
 BINS-INIT=wov wov-init-ms wov-init-cluster wov-init-wovdb wov-init-coderepoaccess wov-init-stage
 BINS-INIT-LIB=provider-wov-env-aws wov-env-common wov-env-loader wov-env-logging wov-init-common
-BINS-ENV=wov-env-ops wov-env-build wov-env wov-cluster wov-kops wov-cluster-createdb wov-cluster-configdbnet wov-env-val wov_stage-select wov-git-check wov-env-provider-common
+BINS-ENV=wov-env-ops wov-env-build wov-env wov-cluster wov-kops wov-cluster-createdb wov-cluster-createmongodb wov-cluster-configdbnet wov-env-val wov_stage-select wov-git-check wov-env-provider-common
 BINS-CLI=wov-aws wov-cd wov-bastion wov-bastion-connection wov-cmd wov-ed wov-ls wov-ns wov-db-common wov-db wov-db-cloud wov-p wov-plog \
 	       wov-hash wov-enc wov-dec wov-log wov-context wov-compile wov-hbs wov-stage wov-ns-check
 BINS-VH=wov-vh wov-vh-pushgit wov-vh-pulldir

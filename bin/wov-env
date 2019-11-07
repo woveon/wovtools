@@ -509,7 +509,8 @@ function fConfGeneration()
     if [ "${RR}" != "0" ]; then l_error "Failed to generate '${1}' config from NodeJS source code: ${MSCFILE}"; exit 1 ; fi
 
   else
-    (>&2 printf "\nERROR: could not find '${1}config.(js|sh)'. Should be in ./src or ./${1}/src.\n\n")
+    l_ "\n"
+    (>&2 l_error "Could not find '${1}config.(js|sh)'. Should be in ./src or ./${1}/src.\n\n")
     exit 1
   fi
 

@@ -119,6 +119,7 @@ function WOV_getClusterConfigDir()
 
 function getWovProjectVars() 
 {
+  local Re=
   # --------------------------------------------------------------------- 
   # git vars
   # --------------------------------------------------------------------- 
@@ -130,12 +131,13 @@ function getWovProjectVars()
     ( IFS=$'\n'; echo "${R[*]}" )
     exit 1
   fi
-  export WOV_PVER="$(git rev-list --count $(git rev-parse --abbrev-ref HEAD))"
-  export WOV_SVER="$(cd ${WOV_BASEDIR}/wovtools/secrets && git rev-list --count $(git rev-parse --abbrev-ref HEAD))"
+  export WOV_PVER="$(git rev-list --count $(git rev-parse --abbrev-ref HEAD))" ; Re=$?
+  WOV_SVER="$(cd ${WOV_BASEDIR}/wovtools/secrets && git rev-list --count $(git rev-parse --abbrev-ref HEAD 2> /dev/null) 2> /dev/null)" ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "wovtools/secrets is not a git repo or has uncommitted changes."; exit 1; fi
+  export WOV_SVER
   export WOV_USERNAME="$(git config user.name)"
   export WOV_USEREMAIL="$(git config user.email)"
   export WOV_GSTAGE="$(git rev-parse --abbrev-ref HEAD)"
-
 
 
 

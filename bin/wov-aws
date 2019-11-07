@@ -94,15 +94,13 @@ EXIT=1
 function doVolumeDescribe() 
 {
   local VOLNAME=$1
-  echo "do 1"
   aws ec2 describe-volumes --filter Name="tag:Name",Values=\"${VOLNAME}\" | jq '.Volumes[0]' -r
 }
 
 function doVolumeID() 
 {
   local VOLNAME=$1
-  echo "do 2"
-  aws ec2 describe-volumes --filter Name="tag:Name",Values=\"${VOLNAME}\" | jq '.Volumes[0].VolumeId' -r
+  aws ec2 describe-volumes --filter Name="tag:Name",Values=\"${VOLNAME}\" | jq -r '.Volumes[0].VolumeId'
 }
 
 function doVolumeCheck() 
@@ -124,27 +122,26 @@ function doVolumeCheck()
 function doVolumeCreate()
 {
 
-  doCluster 
-
-  local CL_ZONES_ARRAY=( $CL_ZONES )
+  local CL_ZONES_ARRAY=( $AWS_ZONES )
   local VOLNAME=$1
   local VOLSIZE=$2
   local VOLZONE=$3
   if [ "${VOLZONE}" == "" ]; then VOLZONE=${CL_ZONES_ARRAY[0]}; fi
-  local AVAILZONE="${CL_REGION}${VOLZONE}"
+  local AVAILZONE="${AWS_REGION}${VOLZONE}"
   local ISBAD=0
 
   if [ "${VOLNAME}" == "" ]; then printf "\n\nERROR: No VOLNAME. Pass a volume name as param 1.\n\n"; ISBAD=1; fi
   if [ "${VOLSIZE}" == "" ]; then printf "\n\nERROR: No VOLSIZE. Pass a volume size in MB as param 2.\n\n"; ISBAD=1; fi
-  if [ "${CL_REGION}" == "" ]; then printf "\n\nERROR: No CL_REGION.\n\n"; ISBAD=1; fi
-  if [ "${AVAILZONE}" == "" ] || [ "${AVAILZONE}" == "${CL_REGION}" ]; then printf "\n\nERROR: No Availability Zone '${AVAILZONE}'. CL_REGION, passed in zone and/or CL_ZONES_ARRAY are not set.\n\n"; ISBAD=1; fi
+  if [ "${AWS_REGION}" == "" ]; then printf "\n\nERROR: No AWS_REGION.\n\n"; ISBAD=1; fi
+  if [ "${AVAILZONE}" == "" ] || [ "${AVAILZONE}" == "${AWS_REGION}" ]; then printf "\n\nERROR: No Availability Zone '${AVAILZONE}'. AWS_REGION, passed in zone and/or CL_ZONES_ARRAY are not set.\n\n"; ISBAD=1; fi
   if [ "${ISBAD}" == "1" ]; then exit 1; fi
 
-  local RES=`aws ec2 create-volume --size ${VOLSIZE} --region ${CL_REGION} \
+  local RES=`aws ec2 create-volume --size ${VOLSIZE} --region ${AWS_REGION} \
     --availability-zone ${AVAILZONE} --volume-type gp2 \
     --tag-specifications "ResourceType=volume,Tags=[{Key=Name,Value=${VOLNAME}},{Key=KubernetesCluster,Value=${WOV_CLUSTER}.${WOV_cluster_dns_domain}}]" | jq ".VolumeId" -r`
   RET=$?
   #echo "Create: $RES"
+
   echo ${RES}
   return $RET
 }

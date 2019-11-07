@@ -1,28 +1,13 @@
 #!/usr/bin/env bash
 
 
-
-# ---------------------------------------------------------------------
-# Import Env
-# ---------------------------------------------------------------------
-wov-env-build -q --local
-if [ "$?" != "0" ]; then
-  exit 1
-fi
-pushenvargs=( "$@" )
-set ""
-. wov-env --provider
-. wov-ns-check
-set -- "${pushenvargs[@]}"
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
 
 DOECHO=1
-DOFORCE=0
 DIDRUN=0
-FOLD=$(tput cols)
 CURSERVICE=""
 RETVAL=0
-
-
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
@@ -35,45 +20,81 @@ usage: `basename $0` [options]
 
 Runs, tests or kills a service for this Kubernetes context (ex. a database, helm chart, etc). These commands are run in order.
 
+  -l         : lists services (in wovtools/services directory)
   -s service : Sets the name of the service (look for in wovtools/services/SERVICE)
-  -r : run the service if test fails 
+  -r : run the service if test fails
   -R : run without testing
   -t : test the service (if error code returned, fails) (./wovtools/services/SERVICE-test)
   -k : kill the service (./wovtools/services/SERVICE-kill)
   -h : this help
   -q/-v : quiet/verbose
 
+ex. `basename $0` -s SERVICE -t    - to test 
+ex. `basename $0` -s SERVICE -r    - to run, testing first
+ex. `basename $0` -s SERVICE -R    - to run without a test
+
+
 EOF
 }
 
+. wov-env-ops fDisplayOptions "${@}"
+. <(wov-env --provider --exports)
+
+
+
+
 function doTest()
 {
-  if [ ${DOECHO} -ge 2 ]; then echo "...test"; fi
+  local retval=1
+
+  l_verbose "...test"
   if [ -e ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-test ]; then
-    OUTIS=$(${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-test)
-    RETVAL=$?
+    # OUTIS=$(${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-test)
+    ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}-test
+    retval=$?
   else
-    if [ ${DOECHO} -ge 2 ]; then echo "  ...no test script for '${DOSERVICE}'"; fi
-    OUTIS=""
-    RETVAL=0
+    l_verbose "  ...no test script for '${DOSERVICE}'. assumming success."
+    #OUTIS=""
+    retval=0
   fi
-  if [ ${DOECHO} -ge 2 ]; then printf "<<EOF\n${OUTIS}\nEOF\n  ...result ${RETVAL}\n"; fi
-  if [ "${RETVAL}" != "0" ]; then
-    echo
-    echo "ERROR: failed test '${DOSERVICE}'."
-    echo
+#  >&2 l_verbose "<<EOF\n${OUTIS}\nEOF\n  ...result ${retval}\n"
+  if [ "${retval}" != "0" ]; then
+    l_
+    l_error "failed test '${DOSERVICE}'."
+    l_
   fi
+
+  DIDRUN=1
+  return $retval
+}
+
+
+function doList()
+{
+  local services=( $(cd ${WOV_BASEDIR}/wovtools/services && find * -maxdepth 0 -type f 2> /dev/null) )
+
+  for f in ${services[@]}; do
+    l_ $f
+  done
+
   DIDRUN=1
 }
 
 function doRun()
 {
-  if [ ${DOECHO} -ge 2 ]; then echo "...run"; fi
+  local retval=1
+  l_verbose "...run"
 
-  ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}
-  local a=$?
+  if [ -e ${WOV_BASEDIR}/wovtools/services/${DOSERVICE} ]; then
+    ${WOV_BASEDIR}/wovtools/services/${DOSERVICE}
+    retval=$?
+  else
+    l_error "Unknown services '${DOSERVICE}'."
+    retval=1
+  fi
+
   DIDRUN=1
-  RETVAL=$a
+  return $retval
 }
 
 function doKill()
@@ -100,27 +121,31 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-s" ]; then
     shift
     DOSERVICE="$1"
-    if [ ${DOECHO} -ge 2 ]; then echo "...setting service '${DOSERVICE}'."; fi
+    l_verbose "...setting service '${DOSERVICE}'."
     shift
 
   elif [ "$1" == "-R" ]; then
     shift
-    DOFORCE=1
-    DOSERVICE="$1"
-    shift
     doRun
-    DOFORCE=0
+    RETVAL=$?
 
   elif [ "$1" == "-r" ]; then
     shift
-    DOSERVICE="$1"
-    shift
     doTest
-    if [ "${RETVAL}" != "0" ]; then doRun; fi
+    RETVAL=$?
+    if [ "${RETVAL}" != "0" ]; then
+      doRun
+      RETVAL=$?
+    fi
 
   elif [ "$1" == "-t" ]; then
     shift
     doTest
+    RETVAL=$?
+
+  elif [ "$1" == "-l" ]; then
+    shift
+    doList
 
   elif [ "$1" == "-k" ]; then
     shift
@@ -139,7 +164,7 @@ while [[ $1 =~ ^- ]]; do
   fi
 done
 
-if [ "${DIDRUN}" == "0" ]; then
+if [ $WOV_DODEFAULTCOMMAND -eq 1 ] && [ "${DIDRUN}" == "0" ]; then
   printf "\n\nERROR: you did not call any services.\n"
   fDisplayOptions
   exit 1

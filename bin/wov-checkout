@@ -23,10 +23,15 @@ function fDisplayOptions()
   cat <<EOF | fold -w ${FOLD} -s
 
 
-Usage: `basename $0` (options) [project] (mscode)
+Usage: `basename $0` (options) [msservice]
+       `basename $0` (options) [project] [mscode]
+
+  msservice - the name of the microservice                    ex. alywandata
+  ... so MASTER_alywandata will be created
 
   project - the WovTools project name                         ex. alywan
-  mscode  - If this is a team project, the microservice code  ex. data
+  mscode  - the microservice code                             ex. data
+  ... so MASTER_alywan_alywandata will be created
 
 Checks out a WovTools project and connects it to WovTools resources.
 
@@ -94,9 +99,12 @@ iGlobalConfig_ReadIn || exit 1
 
 
 # --------------------------------------------------------------------
-WOV_SEADIR="${WOV_LOCALARCHIVEBASE}/searchive"
-WOV_DBADIR="${WOV_LOCALARCHIVEBASE}/dbarchive"
-WOV_DSADIR="${WOV_LOCALARCHIVEBASE}/dsarchive"
+# WOV_SEADIR="${WOV_LOCALARCHIVEBASE}/searchive"
+# WOV_DBADIR="${WOV_LOCALARCHIVEBASE}/dbarchive"
+# WOV_DSADIR="${WOV_LOCALARCHIVEBASE}/dsarchive"
+WOV_SEADIR="${WOVCONFIGDIR}/sea"
+WOV_DBADIR="${WOVCONFIGDIR}/dba"
+WOV_DSADIR="${WOVCONFIGDIR}/dsa"
 
 
 COMMAND='checkout'
@@ -205,8 +213,11 @@ WOV_CONFIGFILE_MINERAW="${WOV_BASEDIR}/${WOV_CONFIGFILE_MINE}"
 WOV_CONFIGFILE_MAINRAW="${WOV_BASEDIR}/${WOV_CONFIGFILE_MAIN}"
 
 # remote repo could be a local file, so use realpath if it is to ensure full path
-REPOproto="$(echo "${WOV_CODEREPOARCHIVE}" | grep :// | sed -e's,^\(.*://\).*,\1,g')"
-if [ "${REPOproto}" == "" ]; then WOV_CODEREPOARCHIVE=$(realpath ${WOV_CODEREPOARCHIVE}); fi
+REPOprotoURL="$(echo "${WOV_CODEREPOARCHIVE}" | grep :// | sed -e's,^\(.*://\).*,\1,g')"
+REPOprotoGIT="$(echo "${WOV_CODEREPOARCHIVE}" | grep "^git@")"
+# echo "$REPOprotoURL $REPOprotoGIT"
+if [ "${REPOprotoURL}" == "" ] && [ "${REPOprotoGIT}" == "" ]; then WOV_CODEREPOARCHIVE=$(realpath ${WOV_CODEREPOARCHIVE}); fi
+#echo "WOV_CODEREPOARCHIVE ${WOV_CODEREPOARCHIVE}"
 
 
 if [ "${WOV_PROJECT}" == "" ]; then fDisplayOptions; exit 1; fi
@@ -343,8 +354,13 @@ if  [ ${WOV_DODEFAULTCOMMAND} -eq 1 ]; then
     l_verbose "Starting clone"
     # ---------------------------------------------------------------------
     l_verbose "... cloning into '${REPOFULLDIR}' from '${TARGETREPO}', stage '${WOV_ME}' "
-    git clone -b "${WOV_ME}" "${TARGETREPO}" "${REPOFULLDIR}" ; Re=$?
+    # git clone -b "${WOV_ME}" "${TARGETREPO}" "${REPOFULLDIR}" ; Re=$?
+    git clone "${TARGETREPO}" "${REPOFULLDIR}" ; Re=$?
     if [ ${Re} -ne 0 ]; then l_error "Failed to clone repository '${TARGETREPO}' in '${REPOFULLDIR}'."; exit 105; fi
+
+    l_verbose "... checkout branch '${WOV_ME}'"
+    git -C "${REPOFULLDIR}" checkout -b "${WOV_ME}" ; Re=$?
+    if [ ${Re} -ne 0 ]; then l_error "Failed to checkout/create branch '${WOV_ME}'."; exit 1; fi
 
     # ---------------------------------------------------------------------
     l_verbose "Ensure 'wovtools/myconfig.json'"

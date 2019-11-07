@@ -265,7 +265,7 @@ function iGlobalConfig_ReadIn()
   WOV_K8SARCHIVE=$(      [ "${data[1]}" == "null" ] && echo "" || echo "${data[1]}" )
   WOV_CONTAINERARCHIVE=$([ "${data[2]}" == "null" ] && echo "" || echo "${data[2]}" )
   WOV_CODEREPOARCHIVE=$( [ "${data[3]}" == "null" ] && echo "" || echo "${data[3]}" )
-  WOV_LOCALARCHIVEBASE=$([ "${data[4]}" == "null" ] && echo "" || echo "${data[4]}" )
+  WOV_LOCALARCHIVEBASE=$([ "${data[4]}" == "null" ] && echo "${WOVCONFIGDIR}" || echo "${data[4]}" )
 }
 
 
@@ -355,6 +355,19 @@ function iProjConfig_Validate()
     retval=1
   fi
 
+  local data=()
+  while read d; do
+    data+=( "$d" )
+  done <<<$(cat "${WOV_CONFIGFILE_MAINRAW}" | jq -r ".project.masterproject, .project.name, .project.type, .project.title, .project.description, .archives.k8s, .archives.container, .archives.coderepo" )
+
+  if [ "${data[0]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.masterproject' entry."; fi
+  if [ "${data[1]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.name' entry."; fi
+  if [ "${data[2]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.type' entry."; fi
+  if [ "${data[3]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.title' entry."; fi
+  if [ "${data[4]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.description' entry."; fi
+  if [ "${data[5]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.archive.k8s' entry."; fi
+  if [ "${data[6]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.archive.container' entry."; fi
+
   return $retval
 }
 
@@ -363,6 +376,9 @@ function iProjConfig_Validate()
 # --------------------------------------------------------------------- 
 function iProjConfig_ReadIn()
 {
+  iProjConfig_Validate
+  if [ $? -ne 0 ]; then return 1; fi
+
   local data=()
   while read d; do
     data+=( "$d" )
@@ -381,6 +397,7 @@ function iProjConfig_ReadIn()
   WOV_K8SARCHIVE=$(      [ "${data[5]}" == "null" ] && echo "${WOV_K8SARCHIVE}" || echo "${data[5]}" )
   WOV_CONTAINERARCHIVE=$([ "${data[6]}" == "null" ] && echo "${WOV_CONTAINERARCHIVE}" || echo "${data[6]}" )
   WOV_CODEREPOARCHIVE=$( [ "${data[7]}" == "null" ] && echo "${WOV_CODEREPOARCHIVE}" || echo "${data[7]}" )
+
 }
 
 
@@ -914,15 +931,15 @@ function iProjRepo_Naming()
   # Handle Single directories first
   if [ -e "${WOV_BASEDIR}/src" ]; then
     export wov_REPO_TYPE="single"
-    l_debug printf "setting wov_REPO_TYPE: ${wov_REPO_TYPE}\n"
-    if [ "${P}" != "${DD}"   ]; then l_warn "Your project's parent directory is not the project name."; retval=1; fi
+    l_ "Repo Type is Single (./src directory found), so directory expected to be : MASTERPROJECT/TEAMPROJECT_MICROSERVICENAME\n"
+    if [ "${P}" != "${DD}"   ]; then l_warn "Your project's parent directory '${DD}' is not the project name '${P}'."; retval=1; fi
     dminus=${D:0:${#P}}
     if [ "${dminus}" != "${P}" ]; then
       l_warn "Your current directory does not start with your project name. Can not determine MSCode or Repo extension."
       retval=$((retval+2))
     else
       wov_REPO_MSCODE=${D:${#P}}
-      if [ "${wov_REPO_MSCODE}" == "" ]; then l_warn "Your mscode is not the end part of your project directory name."
+      if [ "${wov_REPO_MSCODE}" == "" ]; then l_warn "Your mscode '${wov_REPO_MSCODE}' is not the end part of your project directory name."
         retval=$((retval+4))
       else
         RECIPES+=( "${wov_REPO_MSCODE}" )
@@ -935,6 +952,7 @@ function iProjRepo_Naming()
   # Handle many microservices in project
   else
     export wov_REPO_TYPE="many"
+    l_ "Repo Type is Many, so directory expected to be : MASTERPROJECT/TEAMPROJECT\n"
     if [ "${MP}" != "${DD}" ]; then l_warn "Your project parent directory '${DD}' is not the master project name '${MP}'."; retval=$((retval+8)); fi
     if [ "${P}" != "${D}"   ]; then l_warn "Your project directory is not the project name."; retval=$((retval+16)); fi
     # export wov_REPO_EXT="${MP}_${P}"
@@ -1530,10 +1548,8 @@ function iProjLocalArchive_EnsureSetup()
 #  l_ "  ...symlink Secrets"
 #  if [ -e "${BASEDIR}/wovtools/secrets" ]; then l_ "    ...existing connection to Secrets Archive. Skipping."
 #  else
-#    set -x
 #    ln -s ${SEADIR}/${MASTERPROJECT}_sea ${BASEDIR}/wovtools/secrets ; Re=$?
 #    if [ ${Re} -ne 0 ]; then l_error "Failed to link '${BASEDIR}/wovtools/secrets' to '${SEADIR}/${MASTERPROJECT}_sea'."; exit 1; fi
-#    set +x
 #  fi
 #
 #  l_ "  ...symlink Database Archive"
@@ -1663,8 +1679,10 @@ function iLocalArchives_SEDBFiles()
       "database"     : "",
       "//port"       : "Assuming postgres default port",
       "port"         : 5432,
+      "extport"      : "SET TO A LOCALPORTNUMBER",
       "type"         : "postgres",
       "version"      : "9.6.11-R1",
+      "//version"    : "MONGO chart 0.4.25",
       "password"     : "$(openssl rand -hex 20)",
       "instanceAvailabilityZone"    : "c",
       "instanceAvailabilityZoneAlt" : "d",
@@ -1672,7 +1690,7 @@ function iLocalArchives_SEDBFiles()
         "class"   : "db.t2.small",
         "storage" : 20
       },
-      "ORIGINlocal" : {
+      "ORIGINlaptop" : {
         "//desc"   : "This is for connecting to a locally running system.",
         "subhost"  : "localhost",
         "endpoint" : "localhost",
@@ -1734,7 +1752,7 @@ function iProjLocalArchives_InteractiveUpdate()
   # overwrite if base provided
   if [ "${labase}" != "" ]; then
     l_ "NOTE: Using local archive default base directory of '${labase}', instead of the global values."
-    dirs=( "${labase}/searchive" "${labase}/dbarchive" "${labase}/dsarchive" )
+    dirs=( "${labase}/sea" "${labase}/dba" "${labase}/dsa" )
   fi
 
   for i in $(seq 0 $((${#dirs[@]}-1)) ); do
@@ -1826,7 +1844,6 @@ function iProjLocalArchives_InteractiveUpdate()
 #    # echo "  ... ${sera}"
 #
 #    # config repo
-#    set -x
 #    git -C "${BASEDIR}/wovtools/secrets" config user.name "${WOV_USERNAME}"
 #    git -C "${BASEDIR}/wovtools/secrets" config user.email "${WOV_USEREMAIL}"
 #    git -C "${BASEDIR}/wovtools/secrets" add .gitignore
@@ -1844,7 +1861,6 @@ function iProjLocalArchives_InteractiveUpdate()
 #    # set upstream
 #    git -C "${BASEDIR}/wovtools/secrets" push --set-upstream origin master
 #    if [ "$?" != "0" ]; then l_error "SECRETS ARCHIVE> Pushing upstream failed."; exit 1; fi
-#    set +x
 #  fi
 #
 #

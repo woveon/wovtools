@@ -1,0 +1,276 @@
+#!/usr/bin/env bash
+
+RETVAL=0
+DB=
+DOFORCE=0
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+
+usage: `basename $0` [WOVDB] {options}
+
+Creates a WovDatabase of mongodb type in the cluster. Uses a helm chart.
+
+EOF
+}
+
+
+# Now check options
+# ---------------------------------------------------------------------
+DB=$1; if [ "$DB" == "" ]; then l_error "Bad WovDB name of '${DB}'."; exit 1; fi
+shift
+. wov-env-ops fDisplayOptions "$@"
+. <(wov-env --provider --conf)
+
+
+# ---------------------------------------------------------------------
+l_debug "...checking configuration"
+# ---------------------------------------------------------------------
+WOV_DB_type="WOV_${DB}_type" ; WOV_DB_type=${!WOV_DB_type} ; if [ "${WOV_DB_type}" == "" ]; then l_error "no ${DB}.type"; exit 1; fi
+if [ "${WOV_DB_type}" != "mongo" ]; then l_error "This script is for the creation of a 'mongo' db. Type is '${WOV_DB_type}'."; exit 1; fi
+WOV_DB_instance_storage="WOV_${DB}_instance_storage" ; WOV_DB_instance_storage=${!WOV_DB_instance_storage} ; if [ "${WOV_DB_instance_storage}" == "" ]; then l_error "no ${DB}.instance.storage"; exit 1; fi
+WOV_DB_password="WOV_${DB}_password" ; WOV_DB_password=${!WOV_DB_password} ; if [ "${WOV_DB_password}" == "" ]; then l_error "no ${DB}.password"; exit 1; fi
+WOV_DB_username="WOV_${DB}_username" ; WOV_DB_username=${!WOV_DB_username} ; if [ "${WOV_DB_username}" == "" ]; then l_error "no ${DB}.username"; exit 1; fi
+WOV_DB_version="WOV_${DB}_version" ; WOV_DB_version=${!WOV_DB_version} ; if [ "${WOV_DB_version}" == "" ]; then l_error "no ${DB}.version"; exit 1; fi
+WOV_DB_endpoint="WOV_${DB}_endpoint" ; WOV_DB_endpoint=${!WOV_DB_endpoint} ; if [ "${WOV_DB_endpoint}" == "" ]; then l_error "no ${DB}.endpoint"; exit 1; fi
+WOV_DB_port="WOV_${DB}_port" ; WOV_DB_port=${!WOV_DB_port} ; if [ "${WOV_DB_port}" == "" ]; then l_error "no ${DB}.port"; exit 1; fi
+WOV_DB_extport="WOV_${DB}_extport" ; WOV_DB_extport=${!WOV_DB_extport} ; if [ "${WOV_DB_extport}" == "" ]; then l_error "no ${DB}.extport"; exit 1; fi
+
+# ---------------------------------------------------------------------
+wov_kVOLNAME="${DB}-${WOV_STAGE}-mongodb"
+wov_VOLNAME="vol-${wov_kVOLNAME}"
+
+
+# ---------------------------------------------------------------------
+l_ "  DB                      : ${DB}"
+l_ "  wov_VOLNAME             : ${wov_VOLNAME}"
+l_ "  WOV_DB_instance_storage : ${WOV_DB_instance_storage}"
+l_ "  WOV_DB_username         : ${WOV_DB_username}"
+l_ "  WOV_DB_password         : <EXISTS>"
+l_ "  WOV_DB_version          : ${WOV_DB_version}"
+l_ "  WOV_DB_endpoint         : ${WOV_DB_endpoint}"
+l_ "  FULL CLUSTER : ${WOV_CLUSTER}.${WOV_cluster_dns_domain}"
+
+
+
+
+
+# Return: 0 on success/found, 1 on not running.
+function doTest()
+{
+  local retval=1
+
+  l_ "\n... checking for existing stable/mongodb deployment"
+  helm list | grep  ${DB}-${WOV_STAGE}  > /dev/null 2>&1
+  if [ $? -eq 0 ]; then
+    helm list ${DB}-${WOV_STAGE}
+    l_ "Running"
+    retval=0
+  else
+    l_ "Not running"
+    retval=1
+  fi
+
+  return $retval
+}
+
+
+function doKill()
+{
+  local retval=0
+
+  helm delete --purge ${DB}-${WOV_STAGE}
+  retval=$?
+
+  return $retval
+}
+
+
+function doCreate()
+{
+  local retval=0
+  local result=
+
+  if [ $DOFORCE -eq 0 ]; then
+    doTest
+    if [ $? -eq 0 ]; then retval=1; fi
+  fi
+
+  if [ $retval -eq 0 ]; then
+    l_ "\n... ensuring AWS volume"
+    VOLID=`wov-aws volume-ensure ${wov_VOLNAME} ${WOV_DB_instance_storage}`
+    retval=$?
+    if [ $retval -eq 0 ]; then
+      l_ "    AWS Volume: ${wov_VOLNAME}, id: ${VOLID}"
+    else
+      l_error "Failed ensuring volume '${wov_VOLNAME}' exists.\n"
+    fi
+  fi
+
+  if [ $retval -eq 0 ]; then
+    l_ "\n... wait for volume to be available : volid ${VOLID}"
+    aws ec2 wait volume-available --volume-ids ${VOLID}
+    retval=$?
+    if [ $retval -ne 0 ]; then l_error "Failed waiting for '${wov_VOLNAME}'.\n\n"; fi
+  fi
+
+  if [ $retval -eq 0 ]; then
+    l_ "\n... ensuring K8s PersistentVolume '${wov_kVOLNAME}'"
+    kubectl get persistentvolume ${wov_kVOLNAME} > /dev/null 2>&1
+    result=$?
+    if [ $result -ne 0 ]; then
+      cat <<EOF | kubectl create -f -
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: ${wov_kVOLNAME}
+#  annotations:
+#    volume.beta.kubernetes.io/storage-class: generic
+  labels:
+    mongodbVol: "${wov_kVOLNAME}"
+    KubernetesCluster: "${WOV_CLUSTER}.${WOV_cluster_dns_domain}"
+spec:
+  capacity:
+    storage: ${WOV_DB_instance_storage}Gi
+  accessModes:
+    - ReadWriteOnce
+  awsElasticBlockStore:
+    fsType: ext4
+    volumeID: ${VOLID}
+EOF
+      retval=$?
+      if [ $retval -ne 0 ]; then l_error "Failed creating persistentvolume '${wov_kVOLNAME}'."; fi
+    else
+      echo "  ...exists"
+    fi
+  fi
+
+
+  if [ $retval -eq 0 ]; then
+    l_ "\n... ensuring K8s PersistentVolumeClaim '${wov_kVOLNAME}'"
+    kubectl get persistentvolumeclaim ${wov_kVOLNAME} > /dev/null 2>&1
+    result=$?
+    if [ $result -ne 0 ]; then
+      cat <<EOF | kubectl create -f -
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: ${wov_kVOLNAME}
+  labels:
+    mongodbVol: "${wov_kVOLNAME}"
+    KubernetesCluster: "${WOV_CLUSTER}.${WOV_cluster_dns_domain}"
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: ${WOV_DB_instance_storage}Gi
+EOF
+      retval=$?
+      if [ $retval -ne 0 ]; then l_error "Failed creating persistentvolumeclaim '${wov_kVOLNAME}'."; fi
+    else
+      echo "  ...exists"
+    fi
+  fi
+
+  if [ $retval -eq 0 ]; then
+    l_ "\n... searching for stable/mongodb chart : ${WOV_DB_version}"
+    helm search -v ${WOV_DB_version} stable/mongodb
+    if [ "$?" != "0" ]; then
+      l_error "Failed to find helm chart for stable/mongodb, version ${WOV_DB_version}.\n\n"
+      retval=1
+    fi
+  fi
+
+
+  if [ $retval -eq 0 ]; then
+    l_ "\n... helm install"
+    helm install --name ${DB}-${WOV_STAGE} \
+      --namespace=${WOV_NS} \
+      --set mongodbRootPassword="${WOV_DB_password}",mongodbUsername=${WOV_DB_username},persistence.enabled=true,persistence.existingClaim=${wov_kVOLNAME},nodeselector='{"failure-domain.beta.kubernetes.io/zone": "us-east-1c"}' \
+      --version ${WOV_DB_version} stable/mongodb
+    result=$?
+    if [ $DOFORCE -eq 0 ]; then
+      retval=$result
+    fi
+  fi
+
+
+  if [ $retval -eq 0 ]; then
+    l_ "\n... init : wov-db -I --- but I don't think it works yet for mongo."
+  fi
+
+  # NOTE: not using bastion, using helm chart's form of communcation
+#  if [ $retval -eq 0 ]; then
+#    l_ "\n... Bastion configuration"
+#
+#    wov-bastion-connection --check-db ${DB} > /dev/null
+#    if [ $? -ne 0 ]; then
+#      cat <<EOF
+#You should add this LocalForward line into ~/.ssh/config in the Host entry:
+#
+#Host ${WOV_CLUSTER}-bastion
+#  ...
+#  LocalForward ${WOV_DB_extport} ${WOV_DB_endpoint}:${WOV_DB_port}
+#  ...
+#
+#EOF
+#    else
+#      echo "  - found bastion entry for database (hope it's correct!)."
+#      echo ""
+#    fi
+#
+#  fi
+
+  return $retval
+}
+
+
+# ---------------------------------------------------------------------
+# Handle Remaining Params
+# ---------------------------------------------------------------------
+while [[ $1 =~ ^- ]]; do
+
+  if [ "$1" == "-t" ]; then
+    shift
+    doTest
+    RETVAL=$?
+    WOV_DODEFAULTCOMMAND=0
+
+  elif [ "$1" == "-k" ]; then
+    shift
+    doKill
+    RETVAL=$?
+    WOV_DODEFAULTCOMMAND=0
+
+  elif [ "$1" == "-f" ]; then
+    shift
+    DOFORCE=1
+
+  else
+    echo
+    fDisplayOptions
+    echo
+    l_error "***ERROR: unknown option '$1'."
+    exit 1
+  fi
+done
+
+
+
+if [ ${WOV_DODEFAULTCOMMAND} -ne 0 ]; then
+
+  doCreate
+  RETVAL=$?
+
+fi
+
+exit $RETVAL
+
