@@ -343,16 +343,17 @@ function iProjConfig_CreateIfNotExists()
 
 # --------------------------------------------------------------------- 
 # Just Test that it is proper JSON
+# Return: 2- invalid json, 1 - valid json, incomplete data, 0- all good
 # --------------------------------------------------------------------- 
 function iProjConfig_Validate()
 {
-  local retval=0
+  local retval=3
   # --- Ensure formatting
   local JQTEST=$(jq -r "." "${WOV_CONFIGFILE_MAINRAW}" 2>&1 ); Re=$?
   if [ "${Re}" != 0 ]; then
     l_error "JSON format error in '${WOV_CONFIGFILE_MAIN}' file."
     l_ "  : ${JQTEST}"
-    retval=1
+    retval=2
   fi
 
   local data=()
@@ -360,13 +361,15 @@ function iProjConfig_Validate()
     data+=( "$d" )
   done <<<$(cat "${WOV_CONFIGFILE_MAINRAW}" | jq -r ".project.masterproject, .project.name, .project.type, .project.title, .project.description, .archives.k8s, .archives.container, .archives.coderepo" )
 
-  if [ "${data[0]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.masterproject' entry."; fi
-  if [ "${data[1]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.name' entry."; fi
-  if [ "${data[2]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.type' entry."; fi
-  if [ "${data[3]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.title' entry."; fi
-  if [ "${data[4]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.description' entry."; fi
-  if [ "${data[5]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.archive.k8s' entry."; fi
-  if [ "${data[6]}" == "null" ]; then retval=1; l_error "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.archive.container' entry."; fi
+  if [ "${data[0]}" == "null" ]; then retval=1; l_warn "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.masterproject' entry."; fi
+  if [ "${data[1]}" == "null" ]; then retval=1; l_warn "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.name' entry."; fi
+  if [ "${data[2]}" == "null" ]; then retval=1; l_warn "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.type' entry."; fi
+  if [ "${data[3]}" == "null" ]; then retval=1; l_warn "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.title' entry."; fi
+  if [ "${data[4]}" == "null" ]; then retval=1; l_warn "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.project.description' entry."; fi
+  if [ "${data[5]}" == "null" ]; then retval=1; l_warn "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.archive.k8s' entry."; fi
+  if [ "${data[6]}" == "null" ]; then retval=1; l_warn "${WOV_CONFIGFILE_MAINRAW} Invalid: Missing '.archive.container' entry."; fi
+
+  if [ $retval -eq 3 ]; then retval=0; fi
 
   return $retval
 }
@@ -376,8 +379,9 @@ function iProjConfig_Validate()
 # --------------------------------------------------------------------- 
 function iProjConfig_ReadIn()
 {
-  iProjConfig_Validate
-  if [ $? -ne 0 ]; then return 1; fi
+  local Re=
+  iProjConfig_Validate ; Re=$?
+  if [[ $Re -ne 1 && $Re -ne 0 ]]; then return 1; fi
 
   local data=()
   while read d; do
@@ -426,12 +430,13 @@ function iProjConfig_InteractiveUpdate()
   local retval=0
   local A=
   local B=
+  l_debug 'iProjConfig_InteractiveUpdate'
 
   # Validate it just to make sure we can continue
   iProjConfig_Validate ; retval=$?
 
-  # Read what we can
-  if [ $retval -eq 0 ]; then iProjConfig_ReadIn ; reatval=$?;  fi
+  l_debug "  ...Read what we can $retval "
+  if [[ $retval -eq 0 || $retval -eq 1 ]]; then iProjConfig_ReadIn ; retval=$?;  fi
 
   # Make assumptions if values not set
   if [ $retval -eq 0 ]; then
@@ -672,7 +677,7 @@ function iProjConfig_InteractiveUpdate()
     # Add Secrets and Origin Mods
     # iProjConfig_MergeToSecrets "dev"  "${WOV_MASTERPROJECT}.json" "${WOV_MASTERPROJECT}_dev.json" || exit 1
     # iProjConfig_MergeToSecrets "prod" "${WOV_MASTERPROJECT}.json" "${WOV_MASTERPROJECT}_prod.json" || exit 1
-    iProjConfig_AddOriginMod "local" "For deverlopers to develop locally." || exit 1
+    iProjConfig_AddOriginMod "external" "For deverlopers to develop locally." || exit 1
   fi
 
   return $retval
@@ -1360,7 +1365,7 @@ function iProjLocalArchive_EnsureSetup()
   fi
 
   l_debug "Check local archive exists, and create if it does not."
-  if [ ! -e "${la}" ]; then mkdir -p -m 700 "${la}}"; fi
+  if [ ! -e "${la}" ]; then mkdir -p -m 700 "${la}"; fi
 
   l_debug "ensure local archive git is setup properly"
   if [ ! -d "${la}/.git" ]; then
@@ -1627,7 +1632,7 @@ EOF
         "api"   : {"urlscheme" : "https", "url" : "api-${ME}.${DOMAIN}"},
         "app"   : {"urlscheme" : "https", "url" : "app-${ME}.${DOMAIN}"}
       },
-      "ORIGINlocal" : {
+      "ORIGINhere" : {
         "api" : {"urlscheme" : "http", "url" : "localhost"},
         "app" : {"urlscheme" : "http", "url" : "localhost"}
       }
@@ -1670,42 +1675,60 @@ function iLocalArchives_SEDBFiles()
   # Main database secret file, for dev stage
   if [ ! -e "${BASEDIR}/wovtools/secrets/${WOVDBNAME}.json" ]; then
       cat <<EOF > "${BASEDIR}/wovtools/secrets/${WOVDBNAME}.json"
-  {
-    "${WOVDBNAME}" : {
-      "//subhost" : "combined with WOV_CLUSTER to create host name. if localhost, only localhost",
-      "subhost"      : "${WOVDBNAME}dev",
-      "username"     : "",
-      "endpoint"     : "unknown.rds.amazonaws.com",
-      "database"     : "",
-      "//port"       : "Assuming postgres default port",
-      "port"         : 5432,
-      "extport"      : "SET TO A LOCALPORTNUMBER",
-      "type"         : "postgres",
-      "version"      : "9.6.11-R1",
-      "//version"    : "MONGO chart 0.4.25",
-      "password"     : "$(openssl rand -hex 20)",
-      "instanceAvailabilityZone"    : "c",
-      "instanceAvailabilityZoneAlt" : "d",
-      "instance" : {
-        "class"   : "db.t2.small",
-        "storage" : 20
-      },
-      "ORIGINlaptop" : {
-        "//desc"   : "This is for connecting to a locally running system.",
-        "subhost"  : "localhost",
-        "endpoint" : "localhost",
-        "//port"   : "This is the direct port the local POSTGRES db is listening to.",
-        "port"     : 5432
-      },
-      "ORIGINremote" : {
-        "//desc"   : "This is for connecting to a remotely running system.",
-        "subhost"  : "localhost",
-        "endpoint" : "localhost",
-        "//port"   : "This is the ssh tunnel port opened through bastion.",
-        "port"     : 65432
-      }
+{
+  "${WOVDBNAME}" : {
+    "//subhost" : "combined with WOV_CLUSTER to create host name. if localhost, only localhost",
+    "subhost"   : "${WOVDBNAME,,}dev",
+    "endpoint"  : "SET IN STAGE",
+    "password"  : "create with: openssl rand -hex 20 | pbcopy",
+    "username"  : "SET IN STAGE",
+    "version"   : "9.6",
+    "//version" : "MONGO chart 0.4.25",
+    "database"  : "SET IN STAGE",
+    "type"      : "postgres",
+    "port"      : "SET IN ORIGIN",
+    "extport"   : "SET IN ORIGIN",
+    "generator" : "helm, docker or rds for example",
+
+    "instanceAvailabilityZone" : "c",
+    "instanceAvailabilityZoneAlt" : "d",
+    "instance" : {
+      "class"   : "db.t2.small",
+      "storage" : 20
+    },
+
+    "STAGEdev" : {
+      "username" : "postgres",
+      "database" : "${WOVDBNAME,,}dev",
+      "password" : "create with: openssl rand -hex 20 | pbcopy"
+    },
+
+    "ORIGINhere" : {
+      "desc"      : "This is for a locally running system.",
+      "subhost"   : "localhost",
+      "endpoint"  : "localhost",
+      "generator" : "docker",
+      "port"      : 5432,
+      "extport"   : 5432
+    },
+    "ORIGINinternal" : {
+      "desc"      : "This is for running in the cluster.",
+      "subhost"   : "localhost",
+      "endpoint"  : "localhost",
+      "generator" : "helm",
+      "port"      : 5432,
+      "extport"   : 5432
+    },
+    "ORIGINexternal" : {
+      "desc"      : "This is for running here but using cluster db.",
+      "subhost"   : "localhost",
+      "endpoint"  : "localhost",
+      "generator" : "helm",
+      "port"      : 65432,
+      "extport"   : 65432
     }
   }
+}
 EOF
   fi
 
@@ -1717,8 +1740,8 @@ EOF
   "${WOVDBNAME}" : {
     "STAGE${st}" : {
       "username"     : "postgres",
-      "password"     : "$(openssl rand -hex 20)",
-      "database"     : "${WOVDBNAME}${st}"
+      "database"     : "${WOVDBNAME,,}${st}",
+      "password"     : "$(openssl rand -hex 20)"
     }
   }
 }
@@ -1983,7 +2006,7 @@ function doCreateMyConfigJSON()
     cat <<EOF > "${1}"
 {
   "ver-local" : ${WOV_VERSION},
-  "curorigin" : "local",
+  "curorigin" : "external",
   "secrets" : {
     "${2}" : [
     ]

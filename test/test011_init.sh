@@ -54,7 +54,7 @@ if [ $_tr_testson -eq 1 ]; then
 
   # Remove old dirs and git test git repo
   rm -Rf "${TESTDIR}/${PROJ}"
-  rm -Rf ${LADIR}/*archive
+  rm -Rf ${LADIR}/*a
   rm -Rf ${TESTREPODIR}/${MASTER}_*.git
 
   jq -r ".local.searchives.dir" "${WOVCONFIGF}"
@@ -86,9 +86,9 @@ if [ $_tr_testson -eq 1 ]; then
   git -C "${TESTREPODIR}/${MASTER}_dsa.git" init --bare
 
   # Make local archives for testing
-  mkdir -p -m 700 "${LADIR}/searchive/${MASTER}_sea"          # per Master Project Person, but only one person so single directory
-  mkdir -p -m 700 "${LADIR}/dbarchive/${MASTER}_${PROJ}_dba"  # per Master Project Team Project, and will create a local repo as needed
-  mkdir -p -m 700 "${LADIR}/dsarchive/${MASTER}_dsa"          # per Master Project
+  mkdir -p -m 700 "${LADIR}/sea/${MASTER}_sea_${TESTME}" # per Master Project Person, but only one person so single directory
+  mkdir -p -m 700 "${LADIR}/dba/${MASTER}_${PROJ}_dba"   # per Master Project Team Project, and will create a local repo as needed
+  mkdir -p -m 700 "${LADIR}/dsa/${MASTER}_dsa"           # per Master Project
 
   # add to wovtools/myconfig.json
   tr_dir "${TESTDIR}/${PROJ}"
@@ -145,15 +145,15 @@ fi
 
 
   tr_test "Project Secrets Archive correctly sym linked" \
-    "echo ${PID} > \"${LADIR}/searchive/${MASTER}_sea/ii\" ; cat wovtools/secrets/ii" \
+    "echo ${PID} > \"${LADIR}/sea/${MASTER}_sea_${TESTME}/ii\" ; cat wovtools/secrets/ii" \
     0 1 "${PID}"
 
   tr_test "Project DB Archives correctly sym linked" \
-    "echo ${PID} > \"${LADIR}/dbarchive/${MASTER}_${PROJ}_dba/ii\" ; cat wovtools/db/archive/ii" \
+    "echo ${PID} > \"${LADIR}/dba/${MASTER}_${PROJ}_dba/ii\" ; cat wovtools/db/archive/ii" \
     0 1 "${PID}"
 
   tr_test "Project DS Archives correctly sym linked" \
-    "echo ${PID} > \"${LADIR}/dsarchive/${MASTER}_dsa/ii\" ; cat wovtools/ds/const/ii" \
+    "echo ${PID} > \"${LADIR}/dsa/${MASTER}_dsa/ii\" ; cat wovtools/ds/const/ii" \
     0 1 "${PID}"
     
   tr_section '/symlinktest'
@@ -167,15 +167,15 @@ fi
     0 1 "${TESTREPODIR}/${MASTER}_${PROJ}"
 
   tr_test "Local Archive Secrets to Remote Repo" \
-    "git -C \"${LADIR}/searchive/${MASTER}_sea\" config --get remote.origin.url"  \
+    "git -C \"${LADIR}/sea/${MASTER}_sea_${TESTME}\" config --get remote.origin.url"  \
     0 1 "${TESTREPODIR}/${MASTER}_sea_${TESTME}"
 
   tr_test "Local Archive DBA to Remote Repo" \
-    "git -C \"${LADIR}/dbarchive/${MASTER}_${PROJ}_dba\" config --get remote.origin.url"  \
+    "git -C \"${LADIR}/dba/${MASTER}_${PROJ}_dba\" config --get remote.origin.url"  \
     0 1 "${TESTREPODIR}/${MASTER}_${PROJ}_dba"
 
   tr_test "Local Archive DSA to Remote Repo" \
-    "git -C \"${LADIR}/dsarchive/${MASTER}_dsa\" config --get remote.origin.url"  \
+    "git -C \"${LADIR}/dsa/${MASTER}_dsa\" config --get remote.origin.url"  \
     0 1 "${TESTREPODIR}/${MASTER}_dsa"
 
   tr_section '/repoconnections'

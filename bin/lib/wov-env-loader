@@ -78,10 +78,10 @@ function isProject()
 {
   let retval=1
   # >&2 echo "WOV_BASEDIR ${WOV_BASEDIR}"
-  if [      "${WOV_BASEDIR}" == "" ]; then echo "WARNING: not in wovtools project (no git)."; retval=0; fi
-  if [ ! -d "${WOV_BASEDIR}/wovtools" ]; then echo "WARNING: not in wovtools project (no wovtools directory)."; retval=0; fi
-  if [ ! -f "${WOV_BASEDIR}/${WOV_CONFIGFILE_MAIN}" ]; then echo "WARNING: not in wovtools project (no ${WOV_CONFIGFILE_MAIN} file)."; retval=0; fi
-  if [ ! -f "${WOV_BASEDIR}/${WOV_CONFIGFILE_MINE}" ]; then echo "WARNING: not in wovtools project (no ${WOV_CONFIGFILE_MINE} file)."; retval=0; fi
+  if [      "${WOV_BASEDIR}" == "" ]; then l_warn "Not in wovtools project (no git)."; retval=0; fi
+  if [ ! -d "${WOV_BASEDIR}/wovtools" ]; then l_warn "Not in wovtools project (no wovtools directory)."; retval=0; fi
+  if [ ! -f "${WOV_BASEDIR}/${WOV_CONFIGFILE_MAIN}" ]; then l_warn "Not in wovtools project (no ${WOV_CONFIGFILE_MAIN} file)."; retval=0; fi
+  if [ ! -f "${WOV_BASEDIR}/${WOV_CONFIGFILE_MINE}" ]; then l_warn "Not in wovtools project (no ${WOV_CONFIGFILE_MINE} file)."; retval=0; fi
   return $retval;
 }
 
@@ -127,7 +127,7 @@ function getWovProjectVars()
   if [ ${?} != 1 ]; then
     # skip out of error if WOV_DODEFAULTCOMMANDS is 0.. they probably called -h/--help
     if [ ${WOV_DODEFAULTCOMMAND} == 0 ]; then return; fi
-    echo "ERROR: not in a WovTools project. Try using wov-init or correcting the errors to have a recognized WovTools project here."
+    l_error "Not in a WovTools project. Try using wov-init or correcting the errors to have a recognized WovTools project here."
     ( IFS=$'\n'; echo "${R[*]}" )
     exit 1
   fi

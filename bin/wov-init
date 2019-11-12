@@ -206,13 +206,24 @@ l_ "Setup the project's main configuration in the wovtools/config.json and wovto
 echo ""
 l_block    "Config : wovtools/config.json"
 # ---------------------------------------------------------------------
-if [ -e "${WOV_BASE}/wovtools/config.json" ] && [ "$(iProjConfig_Validate ; echo $?)" == "0" ]; then
-  read -r -p "wovtools/config.json exists and is valid. Skip? [Y/n] " A
-  case $A in
-    ""|[Yy][Ee][Ss]|[Yy])
-      OP_SKIPWOVTOOLSCONFIG=1
-      ;;
-  esac
+if [ -e "${WOV_BASE}/wovtools/config.json" ]; then
+  iProjConfig_Validate ; Re=$?
+  echo "Re ${Re}"
+  if [ $Re -eq 2 ]; then
+    l_error "wovtools/config.json is not valid json"
+    exit 1
+  elif [ $Re -eq 1 ]; then
+    l_warn "wovtools/config.json is not complete."
+  else
+    read -r -p "wovtools/config.json exists and is complte. Skip configuration procress? [Y/n] " A
+    case $A in
+      ""|[Yy][Ee][Ss]|[Yy])
+        OP_SKIPWOVTOOLSCONFIG=1
+        ;;
+    esac
+  fi
+else
+  l_warn "wovtools/config.json does not exist."
 fi
 if [ ${OP_SKIPWOVTOOLSCONFIG} -eq 1 ]; then
   l_ "  ...skipping"
@@ -1331,7 +1342,7 @@ EOF
     "healthprobetime" : "15",
     "secrettoken"     : null,
     "//secrettoken"   : "run: openssl rand -hex 20",
-    "ORIGINlocal"     : { "port" : 3001, "healthprobetime" : "99" }
+    "ORIGINhere"      : { "port" : 3001, "healthprobetime" : "99" }
   }
 }
 EOF

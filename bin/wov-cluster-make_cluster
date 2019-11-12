@@ -1,5 +1,24 @@
 #!/usr/bin/env bash
 
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
+
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+usage: `basename $0`
+
+Called from within wov-cluster. Probably should not call on its own.
+
+EOF
+}
+
+ISWOVPROJECT="0"
+. wov-env-ops fDisplayOptions "$@"
+if [ ${WOV_DODEFAULTCOMMAND} -eq 0 ]; then exit 0; fi
+
+
 if [ -z ${KEY_PUBLIC+x} ];               then echo "var KEY_PUBLIC is unset"; exit 1; fi
 if [ -z ${WOV_PROVIDER+x} ];             then echo "var WOV_PROVIDER is unset"; exit 1; fi
 if [ -z ${WOV_CLUSTER+x} ];              then echo "var WOV_CLUSTER is unset"; exit 1; fi
@@ -14,6 +33,24 @@ if [ -z ${WOV_cluster_node_size+x} ];   then echo "var WOV_cluster_node_size is 
 
 # ---------------------------------------------------------------------
 # Create cluster with kops
+l_verbose "...kops creating command:"
+cat <<EOF
+kops create cluster \\
+  --ssh-public-key ${KEY_PUBLIC} \\
+  --cloud ${WOV_PROVIDER} \\
+  --name=${WOV_CLUSTER}.${WOV_cluster_dns_domain} \\
+  --master-count ${WOV_cluster_master_count} \\
+  --master-zones="${WOV_cluster_master_zones}" \\
+  --zones="${WOV_cluster_node_zones}" \\
+  --node-count ${WOV_cluster_node_count} \\
+  --dns-zone="${WOV_cluster_dns_domain}"  \\
+  --node-size="${WOV_cluster_node_size}"  \\
+  --master-size="${WOV_cluster_master_size}" \\ 
+  --networking weave  \\
+  --bastion="true"  \\
+  --topology private 
+EOF
+
 kops create cluster \
   --ssh-public-key ${KEY_PUBLIC} \
   --cloud ${WOV_PROVIDER} \

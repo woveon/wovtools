@@ -1,0 +1,224 @@
+#!/usr/bin/env bash
+
+WOV_dbvars=( 'subhost' 'endpoint' 'password' 'username' 'version'  \
+  'database' 'type' 'port' 'extport' 'generator' \
+  'instanceAvailabilityZone' 'instanceAvailabilityZoneAlt' 'instance_class' \
+  'instance_storage' )
+
+
+. wov-db-common-docker
+. wov-db-common-helm
+. wov-db-common--postgres
+# . wov-db-common-docker
+
+
+# ///////////////////////////////////////////////////////////////////// 
+#  COMMON
+# ///////////////////////////////////////////////////////////////////// 
+
+# --------------------------------------------------------------------- 
+# Create a list of databases to look at
+# 1. take from command line if they have it
+# 2. else, from all deltas files and archive files
+# 
+#  Call by : DATABASES=( $(doFindDatabases $*) )
+# --------------------------------------------------------------------- 
+function doFindDatabases()
+{
+  l_debug "doFindDatabases called"
+  DATABASES=( $* )
+  if [ ! -e ${WOV_BASEDIR}/wovtools/db ]; then
+    printf "\n\nERROR: no database directory in wovtools: '${WOV_BASEDIR}/wovtools/db' missing.\n" 1>&2
+    fFailedDBConnection 1
+
+  elif [ ! -e ${WOV_BASEDIR}/wovtools/db/archive ]; then
+    printf "\n\nERROR: no database archive in wovtools/db: '${WOV_BASEDIR}/wovtools/db/archive' missing.\n" 1>&2
+    fFailedDBConnection 1
+
+  elif [ ${#DATABASES} == 0 ]; then
+    DATABASES=()
+    D1=()
+    D2=()
+    DELTAS=( $(cd ${WOV_BASEDIR}/wovtools/db && ls *.deltas 2> /dev/null ) )
+    for d in "${DELTAS[@]}"; do
+      D1+=("${d%.deltas}")
+    done
+    REGFILES=( $(cd ${WOV_BASEDIR}/wovtools/db/archive && ls *.json 2> /dev/null ) )
+    for f in "${REGFILES[@]}"; do
+      D2+=("${f%.json}")
+    done
+
+    D3=( "${D1[@]}" "${D2[@]}" )
+    IFS=$'\n' DATABASES=($(sort <<<"${D3[*]}" | uniq)); unset IFS
+
+
+#    # Make sure only one entry : so add y, then every z not in y
+#    # echo "D1: ${D1[@]}" 1>&2
+#    # echo "D2: ${D2[@]}" 1>&2
+#    i=0
+#    for y in ${D2[@]}
+#    do
+#      DATABASES[i++]="$y"
+#    done
+#
+#    # add in z's if not in y
+#    for z in ${D1[@]}
+#    do
+##      DATABASES[i++]="$z"
+#      doskip=0
+#      for y in ${D2[@]}
+#      do
+#        if [ "$z" == "$y" ]; then
+#          doskip=1
+#        fi
+#      done
+#      if [ "${doskip}" == "0" ]; then
+##        echo "adding $z"
+#        DATABASES[i++]="$z"
+#      fi
+#    done
+  fi
+  echo "${DATABASES[@]}"
+}
+
+
+
+# ---------------------------------------------------------------------
+# Displays WovDB configuration env vars.
+# $1 - WOVDBNAME
+# ---------------------------------------------------------------------
+function doDBConfigDisplay()
+{
+  local WOVDBNAME=$1
+  local vn=
+
+  for v in ${WOV_dbvars[@]}; do
+    vn="WOV_${WOVDBNAME}_${v}"
+    echo "${vn}=${!vn}"
+  done
+}
+
+
+# ---------------------------------------------------------------------
+# Set config from env vars and project type
+# $1 - WOVDBNAME
+# ---------------------------------------------------------------------
+function doDBConfigReadAndValidate()
+{
+  local WOVDBNAME=$1
+  local retval=2  # 2: assumed error, 1: error found, 0: all good
+  local vn=
+  local vset=
+
+  if [ "${WOVDBNAME}" == "" ]; then l_error "Unknown WovDB name."; retval=1;
+  else
+
+    DB_name="${WOVDBNAME}"
+
+    # check each variable and thne assign to a generic DB_X variable to use in later scripts
+    for v in ${WOV_dbvars[@]}; do
+      # l_debug "  ...looking for WOV_${WOVDBNAME}_${v}"
+      vn="WOV_${WOVDBNAME}_${v}"
+      # l_debug "    ...currently ${vn} is '${!vn}'"
+      if [ "${!vn}" != "" ]; then
+        vset="DB_${v}"
+        eval "${vset}=${!vn}"
+        # l_debug "    ...found as ${vset} to be '${!vset}'"
+      else
+        l_error "${WOVDBNAME}: Wov Database missing variable '${vn}'."
+        retval=1
+      fi
+    done
+
+    if [ ${retval} -eq 1 ]; then
+      l_error "Failed to provide all Wov Database configuration values."
+    else retval=0; fi
+  fi
+
+  return $retval
+
+#  DB_SUBHOST=WOV_${WOVDBNAME}_subhost
+#  DB_TYPE=WOV_${WOVDBNAME}_type
+#  DB_DATABASE=WOV_${WOVDBNAME}_database
+#  DB_USERNAME=WOV_${WOVDBNAME}_username
+#  DB_PASSWORD=WOV_${WOVDBNAME}_password
+##  DB_HOST=WOV_${WOVDBNAME}_host
+#  DB_HOST=localhost
+#  DB_PORT=WOV_${WOVDBNAME}_port
+#  DB_INSTANCEAVAILABILITYZONE=WOV_${WOVDBNAME}_instanceAvailabilityZone
+#  DB_INSTANCEAVAILABILITYZONEALT=WOV_${WOVDBNAME}_instanceAvailabilityZoneAlt
+#  DB_INSTANCE_CLASS=WOV_${WOVDBNAME}_instance_class
+#  DB_INSTANCE_STORAGE=WOV_${WOVDBNAME}_instance_storage
+#  DB_VERSION=WOV_${WOVDBNAME}_version
+#
+#  DB_HEADEROPTIONS=-t
+
+#  # Set variables to values of the name
+#  DB_SUBHOST=${!DB_SUBHOST}
+#  DB_TYPE=${!DB_TYPE}
+#  DB_DATABASE=${!DB_DATABASE}
+#  DB_USERNAME=${!DB_USERNAME}
+#  DB_PASSWORD=${!DB_PASSWORD}
+##  DB_HOST=${!DB_HOST}
+#  DB_PORT=${!DB_PORT}
+#  DB_INSTANCEAVAILABILITYZONE=${!DB_INSTANCEAVAILABILITYZONE}
+#  DB_INSTANCEAVAILABILITYZONEALT=${!DB_INSTANCEAVAILABILITYZONEALT}
+#  DB_INSTANCE_CLASS=${!DB_INSTANCE_CLASS}
+#  DB_INSTANCE_STORAGE=${!DB_INSTANCE_STORAGE}
+#  DB_VERSION=${!DB_VERSION}
+
+#  local vars=( 'DB_SUBHOST' 'DB_TYPE' 'DB_DATABASE' 'DB_USERNAME' 'DB_PASSWORD' \
+#    'DB_PORT' 'DB_INSTANCEAVAILABILITYZONE' 'DB_INSTANCEAVAILABILITYZONEALT' 'DB_INSTANCE_CLASS' \
+#    'DB_INSTANCE_STORAGE' 'DB_VERSION' )
+#
+#  # Verify that values are set
+#  local isgood=1
+#  for v in ${vars[@]}; do
+#    if [ "${!v}" == "" ]; then
+#      l_warn "Wov Database is missing '${WOVDBNAME}.`echo ${v:3} | tr '[:upper:]' '[:lower:]'`'."
+#      isgood=0
+#    fi
+#  done
+#  if [ ${isgood} -eq 0 ]; then
+    l_error "Failed to provide all Wov Database configuration values."
+#    exit 203
+#  fi
+}
+
+
+
+
+# --------------------------------------------------------------------- 
+# A connection failure occurred, so try to diagnose type of issue. WHen
+# the external/internal ports differ, then we know it might be a 
+# bastion connection issue.
+#
+# $1 - external port number 
+# $2 - internal port number
+# --------------------------------------------------------------------- 
+function wovdb_ConnectionIssue()
+{
+  local Re=
+  local extport=$1   # external port
+  local port=$2      # internal port
+
+  nc -z localhost ${extport} ; Re=$?
+  if [ $Re -eq 0 ]; then
+    if [ "${extport}" != "${port}" ]; then
+      l_warn "  ...extport ${extport} is open. (Ext)ports differ, so bastion pointing to bad server location?"
+    else
+      l_warn "  ...extport ${extport} is open. (Ext)ports same, so server connection issue?"
+    fi
+  else
+    if [ "${extport}" != "${port}" ]; then
+      l_warn "  ...extport ${extport} is closed. (Ext)ports differ, so probably a bastion connection issue?"
+    else
+      l_warn "  ...extport ${extport} is closed. (Ext)ports same, so probably server not running?"
+    fi
+  fi
+  exit 1
+}
+
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ 
+#  COMMON
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ 

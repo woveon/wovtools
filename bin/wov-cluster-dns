@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-FOLD=`tput cols`
-DOECHO=1
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
 
 CVPCID=
 HOSTEDZONEID=
@@ -21,26 +21,37 @@ This handles checks on DNS routes to nodes for each microservice and DNS zone in
   --records HOSTEDZONEID      - get the resource record sets
   --apidns                    - Returns the project dns record (from WOV_www_api_url)
   --lb                        - finds the AWS Load Balancer that serves the K8s cluster nodes
-  --create-dns               - create/upsert the project dns record set
+  --create-dns                - create/upsert the project dns record set
   --ingress                   - load stable/nginx-ingress for the Ingress
 
 EOF
 
 }
 
+. wov-env-ops fDeployDNSDisplayOptions "$@"
+if [ ${WOV_DODEFAULTCOMMAND} -eq 0 ]; then exit 0; fi
+. <(wov-env --provider --exports)
 
-if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then fDeployDNSDisplayOptions; exit 0; fi
+#. wov-env-common
 
-# ---------------------------------------------------------------------
-# Import Env
-# ---------------------------------------------------------------------
-envddnsargs=( "$@" )
-set ""
-. wov-env-loader
-set -- "${envddnsargs[@]}"
 
-WOV_cluster_dns_domain=`wov-env --var WOV_cluster_dns_domain`
-WOV_www_api_url=`wov-env --var WOV_www_api_url`
+## ---------------------------------------------------------------------
+## Import Env
+## ---------------------------------------------------------------------
+#envddnsargs=( "$@" )
+#set ""
+#. wov-env-loader
+#set -- "${envddnsargs[@]}"
+
+l_  " WOV_cluster_dns_domain ${WOV_cluster_dns_domain}"
+l_  " WOV_www_api_url        ${WOV_www_api_url}"
+
+if [ "${WOV_cluster_dns_domain}" == "" ]; then l_error "WOV_cluster_dns_domain is not set."; exit 1; fi
+if [ "${WOV_www_api_url}" == "" ]; then l_error "WOV_www_api_url is not set."; exit 1; fi
+
+#WOV_cluster_dns_domain=`wov-env --var WOV_cluster_dns_domain`
+#WOV_www_api_url=`wov-env --var WOV_www_api_url`
+
 
 
 

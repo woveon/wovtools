@@ -15,13 +15,11 @@ tr_run 'set origin to here' 'wov-env --set-origin here'
 tr_protectfile "wovtools/config.json"
 tr_protectfile "wovtools/myconfig.json"
 
-if [ ! -e "wovtools/secrets/Adb.json" ] || [ ! -e "wovtools/secrets/Adb_${TESTME}.json" ]; then
-  echo ""
-  echo "ERROR: requires WovDB Adb to exist. Always run test013_initdb before this."
-  echo ""
-  exit 1
-fi
 
+tr_run  "rm Adb files"   "rm -Rf wovtools/db/archive/Adb"
+tr_run  "rm Adb files"   "rm -Rf wovtools/db/Adb.deltas"
+tr_run  "rm Adb secrets" "rm -Rf wovtools/secrets/Adb*.json"
+tr_test 'create a WovDataBase to start' "wov-init-wovdb --context \"${USECLUSTER}-${PROJ}-${TESTME}\" Adb" 0 -1
 
 {
   tr_section 'non-database-specific'
@@ -40,13 +38,13 @@ fi
 {
   tr_section 'wov-database-errors'
 
-  tr_test 'ensure bad context error' 'wov-env --context wov-aws-va-grape-fail-fail --exports -e' 102 -1
+  tr_test 'ensure bad context error' "wov-env --context ${USECLUSTER}-fail-fail --exports -e" 102 -1
 
   tr_test 'info assuming db on bad context errors' \
-    'wov-db --context wov-aws-va-grape-fail-fail' 102 -1
+    "wov-db --context ${USECLUSTER}-fail-fail" 102 -1
 
   tr_test 'info assuming db on bad context errors' \
-    'wov-db --context wov-aws-va-grape-fail-fail  --info' 102 -1
+    "wov-db --context ${USECLUSTER}-fail-fail  --info" 102 -1
 
   tr_test 'info on non-existent db errors' \
     'wov-db A --info' 201 -1
@@ -54,47 +52,75 @@ fi
   tr_section '/wov-database-errors'
 }
 
+{
+  tr_section 'wov-database-start'
+
+  tr_run "make sure docker container is not running" "docker stop postgres-here"
+
+  tr_test 'start a HERE WovDB' "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} Adb --start" 0 -1
+
+  tr_test_skip 'wait for WovDB' "wov-db --context ${USECLUSTER}-test1-${TESTME} Adb --wait " 0 -1
+
+  tr_test 'test WovDB' "wov-db --context ${USECLUSTER}-test1-${TESTME} Adb --test" 0 -1
+
+  tr_section '/wov-database-start'
+}
 
 {
-  tr_section 'wov-database-inst'
+  tr_section 'wov-database-instance'
 
-  #tr_test 'clean up old Adb secrets' "rm -Rf wovtools/secrets/A*db.json" 0 -1
-  tr_test 'clean up old Adb secrets' "rm -Rf wovtools/secrets/Adb*.json" 0 -1
-  tr_test 'clean up old Adb archive' "rm -Rf wovtools/db/archive/A*" 0 -1
-
-
-  tr_test 'create a Wov database instance but missing secrets files' \
-    "wov-db --context wov-aws-va-grape-fail-${TESTME} --wdb-createinstance Adb" 103 -1
+#  tr_exit
+#  tr_test 'clean up old Adb secrets' "rm -Rf wovtools/secrets/Adb*.json" 0 -1
+#  tr_test 'create a Wov database instance but missing secret files' \
+#    "wov-db --context ${USECLUSTER}-fail-${TESTME} Adb --wdb-create" 103 -1
 
   echo "{}" > "wovtools/secrets/Adb.json"
   echo "{}" > "wovtools/secrets/Adb_${TESTME}.json"
+  tr_h1 "NEED TO FIX NEXT LINE"
+  tr_run  "since wov-env does not work" "touch wovtools/config.json"
+  wov-env --context ${USECLUSTER}-${PROJ}-${TESTME} | grep Adb
+  tr_test 'create a Wov database instance but missing secrets' \
+    "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} Adb --wdb-create" 203 -1
 
-  tr_test 'create a Wov database instance but missing values' \
-    "wov-db --context wov-aws-va-grape-fail-${TESTME} --wdb-createinstance Adb" 203 -1
+  tr_test 'clean up old Adb archive' "rm -Rf wovtools/db/archive/A*" 0 -1
+  #tr_run  "list wdbs" "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} --lwdb"
+  #tr_test "list wdbs" "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} --lwdb" 0 "Adb"
+  tr_test 'clean up old Adb deltas'  "rm -Rf wovtools/db/*.deltas" 0 -1
+  #tr_run  "list wdbs" "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} --lwdb"
+  #tr_test "list wdbs" "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} --lwdb" 0 1 ""
+
+  tr_test 'create a Wov database instance but missing WovDB files that identify a WovDB' \
+    "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} --wdb-create" 204 -1
+
+  tr_test 'create a Wov database instance but missing WovDB files' \
+    "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} Adb --wdb-create" 201 -1
 
   tr_test 'clean up old Adb secrets' "rm -Rf wovtools/secrets/Adb*.json" 0 -1
 
-  tr_test 'create a WovDataBase' "wov-init-wovdb --context wov-aws-va-grape-test1-${TESTME} Adb" 0 -1
+  tr_test 'create a WovDataBase' "wov-init-wovdb --context ${USECLUSTER}-${PROJ}-${TESTME} Adb" 0 -1
 
   tr_test 'create a Wov database with correct context but bad DB' \
-    "wov-db --context wov-aws-va-grape-test1-${TESTME} --wdb-createinstance A" 203 -1
+    "wov-db --context ${USECLUSTER}-test1-${TESTME} A --wdb-create" 201 -1
+  tr_section '/wov-database-instance'
+}
+
+
+{
+  tr_section 'wov-database-stop'
 
   tr_test 'stop any running db so we know it has correct user and password' \
-    'wov-db --docker-postgres-stop' 0 -1
+    "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} Adb --stop " 0 -1
 
   tr_test 'start local postgres db' \
-    "wov-db --context wov-aws-va-grape-test1-${TESTME} --docker-postgres-start Adb" 0 -1
-
-  tr_test 'create a Wov database with correct context' \
-    "wov-db --context here:wov-aws-va-grape-test1-${TESTME} --wdb-createinstance Adb" 0 -1
-
-  tr_test 'info on db shows values (assumed db)' \
-    "wov-db --context wov-aws-va-grape-test1-${TESTME} --info" 0 -1
+    "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} Adb --start" 0 -1
 
   tr_test 'info on db shows values' \
-    "wov-db --context wov-aws-va-grape-test1-${TESTME} Adb --info" 0 -1
+    "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} Adb --info" 0 -1
 
-  tr_section '/wov-database-inst'
+  tr_test 'info on db shows values (assumed db)' \
+    "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} --info" 0 -1
+
+  tr_section '/wov-database-stop'
 }
 
 
@@ -102,22 +128,19 @@ fi
   tr_section 'wov-db-create-and-init'
   tr_comment 'NOTE: requires a running local database from above section'
 
-  tr_test 'Should be empty database' \
-    "wov-db --context wov-aws-va-grape-test1-${TESTME} Adb -c \"\d\"" 0 1 "No relations found."
+  tr_run "deinit WovDB" \
+    "wov-db --context ${USECLUSTER}-test1-${TESTME} Adb -c \"DROP database wovtools\""
 
-  tr_test_skip 'database server wait --dbs-wait'
+  tr_test 'Should be empty database' \
+    "wov-db --context ${USECLUSTER}-test1-${TESTME} Adb -c \"\d\"" 0 1 "No relations found."
+
+  tr_test 'Make sure connection works' \
+    "wov-db --context ${USECLUSTER}-test1-${TESTME} Adb -c \"select 1\"" 0 -1
 
   tr_test 'Create and init Wov database' \
-    "wov-db --context wov-aws-va-grape-test1-${TESTME} --wdb-init Adb" 0 -1
+    "wov-db --context ${USECLUSTER}-test1-${TESTME} Adb --wdb-init" 0 -1
+
   tr_section '/wov-db-create-and-init'
-}
-
-
-{
-  tr_section 'wov-db-server'
-  tr_test_todo 'create a server'
-  tr_test_todo 'wait for it'
-  tr_section '/wov-db-server'
 }
 
 
@@ -125,12 +148,14 @@ fi
   tr_section 'wov-db-cmds'
 
   tr_test 'Schema gets returned' \
-    "wov-db --context wov-aws-va-grape-test1-${TESTME} Adb --schema | wc -l | tr -d \"[:space:]\"" 0 1 36
+    "wov-db --context ${USECLUSTER}-test1-${TESTME} Adb --schema | wc -l | tr -d \"[:space:]\"" 0 1 36
 
-  tr_test 'Schema diff against 0 but no version' \
-    "wov-db --context wov-aws-va-grape-test1-${TESTME} Adb --schema-diff 0" 1 1 "ERROR: no schema for database 'Adb', schema version '0'."
+  tr_test 'Schema hash returned' \
+    "wov-db --context ${USECLUSTER}-test1-${TESTME} Adb --schemahash " 0 1 "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
 
-  tr_test_skip 'schema hash'
+  tr_test_skip 'Schema diff against 0 but no version' \
+    "wov-db --context ${USECLUSTER}-test1-${TESTME} Adb --schema-diff 0" 1 1 "ERROR: no schema for database 'Adb', schema version '0'."
+
 
   tr_test_skip 'check in schema'
   tr_test_skip 'commit db version'
@@ -153,6 +178,17 @@ fi
   tr_test_skip 'data set : full'
 
   tr_section '/wov-db-data'
+}
+
+{
+  tr_section "wov-db-helm"
+
+  # tr_run "delete running chart" "helm "
+  tr_test "start" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --info"
+
+  tr_test "start" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --start"
+
+  tr_section "/wov-db-helm"
 }
 
 

@@ -33,9 +33,9 @@ tr_protectfile  "${WOVCONFIGF}" del
   tr_section "Global-Config-Testing"
 
   tr_comment  "Run iGlobalConfig_CreateIfNotExists"
-#  mkdir -p -m 700 ${LADIR}/searchive
-#  mkdir -p -m 700 ${LADIR}/dsarchive
-#  mkdir -p -m 700 ${LADIR}/dbarchive
+#  mkdir -p -m 700 ${LADIR}/sea
+#  mkdir -p -m 700 ${LADIR}/dsa
+#  mkdir -p -m 700 ${LADIR}/dba
 #  tr_h1 "LADIR: ${LADIR}"
   iGlobalConfig_CreateIfNotExists '/tmp/foo' <<EOF
 n
@@ -52,9 +52,9 @@ Y
 EOF
 
 
-#  tr_test "secrets archives should exist" "[ -e ${LADIR}/searchive ] && echo '1'" 0 1 '1'
-#  tr_test "DB archives should exist"      "[ -e ${LADIR}/dbarchive ] && echo '1'" 0 1 '1'
-#  tr_test "DS archives should exist"      "[ -e ${LADIR}/dsarchive ] && echo '1'" 0 1 '1'
+#  tr_test "secrets archives should exist" "[ -e ${LADIR}/sea ] && echo '1'" 0 1 '1'
+#  tr_test "DB archives should exist"      "[ -e ${LADIR}/dba ] && echo '1'" 0 1 '1'
+#  tr_test "DS archives should exist"      "[ -e ${LADIR}/dsa ] && echo '1'" 0 1 '1'
   tr_test "test .me" "[ `jq -r .me "${WOVCONFIGF}"` == '${TESTME}' ] && echo 1" 0 1 '1' 
   tr_test "test .archives.k8s K8S"      "[ `jq -r .archives.k8s "${WOVCONFIGF}"` == 'K8S' ] && echo 1" 0 1 '1'
   tr_test "test .archives.container CA" "[ `jq -r .archives.container "${WOVCONFIGF}"` == 'CA' ] && echo 1" 0 1 '1'
@@ -73,9 +73,9 @@ EOF
   tr_test "WOV_CONTAINERARCHIVE" 'echo "${WOV_CONTAINERARCHIVE}"' 0 1 'CA'
   tr_test "WOV_CODEREPOARCHIVE"  'echo "${WOV_CODEREPOARCHIVE}"' 0 1 'CR'
   tr_test "WOV_LOCALARCHIVEBASE" 'echo "${WOV_LOCALARCHIVEBASE}"' 0 1 "/tmp/foo"
-  # tr_test "WOV_SEADIR"           'echo "${WOV_SEADIR}"' 0 1 "${LADIR}/searchive"
-  # tr_test "WOV_DBADIR"           'echo "${WOV_DBADIR}"' 0 1 "${LADIR}/dbarchive"
-  # tr_test "WOV_DSADIR"           'echo "${WOV_DSADIR}"' 0 1 "${LADIR}/dsarchive"
+  # tr_test "WOV_SEADIR"           'echo "${WOV_SEADIR}"' 0 1 "${LADIR}/sea"
+  # tr_test "WOV_DBADIR"           'echo "${WOV_DBADIR}"' 0 1 "${LADIR}/dba"
+  # tr_test "WOV_DSADIR"           'echo "${WOV_DSADIR}"' 0 1 "${LADIR}/dsa"
 
   tr_section "/Global-Config-Testing"
 }

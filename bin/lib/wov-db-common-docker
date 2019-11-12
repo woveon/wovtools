@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+
+
+# ///////////////////////////////////////////////////////////////////// 
+#  DOCKER - POSTGRES
+# ///////////////////////////////////////////////////////////////////// 
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Docker_Postgres_Start()
+{
+  local retval=2
+  local Re=
+  local R=
+  local runningstatus=
+  l_debug 'wovdb_Docker_Postgres_Start'
+
+  if [ "${WOV_ORIGIN}" == "here" ]; then
+
+    R=$(docker inspect "postgres-${WOV_ORIGIN}" 2>&1 ) ; Re=$?
+    if [ $Re -eq 0 ]; then
+      # running so make sure all ok
+      runningstatus=$(echo ${R} | jq -r '.[0].State.Running')
+      if [ "${runningstatus}" == "true" ]; then l_ "  ...currently running";
+      else
+        l_error "  ...stopped. Remove ('docker rm postgres-${WOV_ORIGIN}') or restart it ('docker restart postgres-${WOV_ORIGIN}')."
+        retval=1
+      fi
+    else
+      # not running so start
+      docker run --rm --name "postgres-${WOV_ORIGIN}" -e POSTGRES_PASSWORD=${DB_password} -d -p ${DB_extport}:5432 postgres:${DB_version} ; Re=$?
+      if [ $Re -eq 0 ]; then l_ "  ...started database server"; else l_error "Failed to start"; retval=1; fi
+
+    fi
+
+    l_debug "wait for it to be ready"
+    wovdb_Docker_Postgres_Wait   # wait until server ready tho since just started
+
+
+    if [ $retval -eq 2 ]; then
+      wovdb_Docker_Postgres_Create ; Re=$?
+      if [ $Re -ne 0 ]; then retval=1; fi
+    fi
+
+    if [ $retval -eq 2 ]; then
+      wovdb_COMMON_Postgres_Init ; Re=$?
+      if [ $Re -ne 0 ]; then retval=1; fi
+    fi
+
+    if [ $retval -eq 2 ]; then 
+      l_ "...success. WovDB '${DB_name}' created as '${DB_generator}', type '${DB_type}' and database '${DB_database}'."
+      retval=0
+    fi
+
+  else
+    l_error "WovDB for Docker Postgres can only be at ORIGIN 'here'."
+    retval=1
+  fi
+
+  return $retval
+}
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Docker_Postgres_Init()
+{
+  wovdb_COMMON_Postgres_Init
+  return $?
+}
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Docker_Postgres_Stop()
+{
+  local retval=
+  local Re=
+
+  docker stop postgres-${WOV_ORIGIN} ; Re=$?
+  if [ $Re -eq 0 ]; then l_ "  ...stopped database server"; retval=0; else l_error "Failed to stop"; retval=1; fi
+
+  return $retval
+}
+
+
+# --------------------------------------------------------------------- 
+# Wait for it to become live. 
+# TODO: This should actually query it..
+# --------------------------------------------------------------------- 
+function wovdb_Docker_Postgres_Wait()
+{
+  local retval=2
+  local R=""
+  local Re=
+
+  while [ "${R}" != "running" ]; do
+    l_verbose "  ...waiting"
+    if [ "$R" != "" ]; then sleep 3; fi # skip 1st sleep
+    R=$(wovdb_Docker_Postgres_Test) ; Re=$?
+    if [ ${Re} -ne 0 ]; then
+      retval=1
+      break;
+    fi
+    l_debug "R ${R}"
+  done 
+
+  # wait a little more for postres to be running (i.e. not just container)
+  sleep 5
+
+  if [ "${R}" == "running" ]; then l_ "...success"; retval=0; fi
+
+  return $retval
+}
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Docker_Postgres_Test()
+{
+  local retval=
+  docker inspect -f "{{.State.Status}}" "postgres-${WOV_ORIGIN}" ; retval=$?
+  return $retval
+}
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Docker_Postgres_Create()
+{
+  local R=
+  local Re=
+  local retval=2
+  local psqlcmd1="SELECT * FROM pg_database WHERE datname='${DB_database}'"
+  local psqlcmd2="CREATE DATABASE ${DB_database}"
+
+  l_debug "test for exists"
+  R=$(PGPASSWORD=${DB_password} psql -h ${DB_endpoint} -U ${DB_username} -c "${psqlcmd1}") ; Re=$?
+  if [ $Re -eq 0 ]; then
+    echo "${R}" | grep '(1 row)'  ; Re=$?
+    if [ $Re -eq 0 ]; then l_ "  ...database instance exists"; retval=0; fi
+  fi
+
+  l_debug "if not exists $retval"
+  if [ $retval -eq 2 ]; then
+    # create
+    R=$(PGPASSWORD=${DB_password} psql -h ${DB_endpoint} -U ${DB_username} -c "${psqlcmd2}") ; Re=$?
+    if [ $Re -eq 0 ]; then l_ "  ...database instance created"; retval=0; else l_error "Failed to create database ${Re}"; retval=1; fi
+  fi
+
+  return $retval
+}
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Docker_Postgres_Connect()
+{
+  local Re=
+  local retval=
+
+  PGPASSWORD=${DB_password} psql -h localhost -U ${DB_username} -p ${DB_extport} "${DB_database}" ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "Failed to connect"; retval=1; else retval=0; fi
+ 
+  return $retval
+}
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Docker_Postgres_Command()
+{
+  local R=
+  local Re=
+  local retval=2
+  local db_command="$*"
+  if [ "${db_command}" == "" ]; then db_command=${DB_COMMAND}; fi
+
+  l_verbose "run command : ${db_command} : on ${DB_database}" >&2
+  R=$(PGPASSWORD=${DB_password} psql -h ${DB_endpoint} -U ${DB_username} -d ${DB_database} -c "${db_command}" 2>&1) ; Re=$?
+  if [ $Re -eq 0 ]; then l_ "${R}"; retval=0;
+  else l_warn "${R}"; retval=1; fi
+
+  return $retval
+}
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Docker_Postgres_File()
+{
+  l_error "TODO"
+}
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Docker_Postgres_Schema()
+{
+  wovdb_COMMON_Postgres_Schema
+  return $?
+}
+
+function wovdb_Docker_Postgres_Schemahash()
+{
+  local Re=
+  wovdb_COMMON_Postgres_Schemahash ; Re=$?
+  return $Re
+}
+
+
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ 
+#  DOCKER - POSTGRES
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ 
+

@@ -103,6 +103,13 @@ function l_h3()
   printf -- "\n"
 }
 
+function l_hr()
+{
+  printf -- "-%.0s" `seq 1 ${FOLD}`
+  printf -- "\n"
+}
+
+
 
 function _l_()
 {
@@ -121,13 +128,18 @@ function l_()
 {
   local head=""
   local text=
+  local retval=1
   if [ ${DOECHO} -ge 1 ]; then
-    text="${*}"
-    if [ "${WOV_DEBUGMODE}" == "1" ]; then
-      head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO}): "
+    retval=0
+    if  [ ${#*} -ne 0  ] || [ "${WOV_DEBUGMODE}" == "1" ]; then
+      text="${*}"
+      if [ "${WOV_DEBUGMODE}" == "1" ]; then
+        head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO}): "
+      fi
+      _l_ "${head}" "${text}"
     fi
-    _l_ "${head}" "${text}"
   fi
+  return $retval
 }
 function l_tab() 
 {
@@ -143,12 +155,17 @@ function l_verbose()
 {
   local head="V:"
   local text=
+  local retval=1
   if [ ${DOECHO} -ge 2 ]; then
-    text="${*}"
-    if [ "${WOV_DEBUGMODE}" == "1" ]; then head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})V: "; fi
-    # printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
-    _l_ "${head}" "${text}"
+    retval=0
+    if  [ ${#*} -ne 0  ] || [ "${WOV_DEBUGMODE}" == "1" ]; then
+      text="${*}"
+      if [ "${WOV_DEBUGMODE}" == "1" ]; then head="(`basename ${BASH_SOURCE[1]}`:${BASH_LINENO})V: "; fi
+      # printf -- "${text}\n" | fold -s -w $((FOLD-headl)) | sed -e "1,\$s/^/$head/"
+      _l_ "${head}" "${text}"
+    fi
   fi
+  return $retval
 }
 
 function l_debug()

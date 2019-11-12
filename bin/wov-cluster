@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
+
+DOECHO=1
 FOLD=$(tput cols)
-DOECHO=0
+export PATH=$PATH:/usr/local/bin/wovlib
+
 
 function fDisplayOptions()
 {
@@ -33,10 +36,100 @@ Commands:
 EOF
 }
 
-function doConfigDB() 
+ISWOVPROJECT="0"
+. wov-env-ops fDisplayOptions "$@"
+if [ ${WOV_DODEFAULTCOMMAND} -eq 0 ]; then exit 0; fi
+
+
+function doTestKops()
 {
-  . wov-cluster-configdb
+  local Re=
+  local R=
+  local retval=2 # 2: expected error, 1: found error, 0: no error, 3: no bucket error
+
+  l_ "...testing kops configuration"
+
+  l_verbose "  ...test kops is installed"
+  if [ $retval -eq 2 ]; then
+    R=$(which kops) ; Re=$?
+    if [ $Re -ne 0 ]; then l_error "kops is not installed."; retval=1; fi
+  fi
+
+  l_verbose "  ...test KOPS_STATE_STORE variable being defined"
+  if [ $retval -eq 2 ]; then
+    if [ "${KOPS_STATE_STORE}" == "" ]; then l_error "KOPS_STATE_STORE is not defined."; retval=1; fi
+  fi
+
+  l_verbose "  ...test kops state store AWS Bucket exists" 
+  if [ $retval -eq 2 ]; then
+    R=$(aws s3api list-buckets | grep kops.${WOV_cluster_dns_hostedZone}) ; Re=$?
+    if [ $Re -ne 0 ]; then l_error "no AWS Bucket exists"; retval=3; fi
+  fi
+
+  if [ $retval -eq 2 ]; then l_verbose "  ...success"; retval=0; else l_verbose "  ...failed"; fi
+
+  return $retval
 }
+
+
+function doEnsureKops()
+{
+  local Re=
+  local R=
+  local retval=1  # error by default
+  local bucketname=
+
+  doTestKops ; Re=$?
+
+  if [ $Re -eq 0 ]; then retval=0; l_verbose "...success";
+  elif [ $Re -eq 1 ]; then l_error "...unrecoverable error"; exit 1; 
+  elif [ $Re -eq 3 ]; then 
+    l_verbose "...missing bucket so creating."
+    local region=$(aws configure get region)
+    local oKOPS_STATE_STORE="${KOPS_STATE_STORE}"
+    l_ "\n\nLet's Fix this. Creating KOPS_STATE_STORE AWS bucket for you. Select a bucket name:"
+    read -e -p "KOPS_STATE_STORE: " -i "${KOPS_STATE_STORE}" KOPS_STATE_STORE
+
+    if [ "${KOPS_STATE_STORE}" != "${KOPS_STATE_STORE}" ]; then
+      l_warn "Changed KOPS_STATE_STORE! Update your shell env variables: 'export KOPS_STATE_STORE=${KOPS_STATE_STORE}'"
+    fi
+
+    # remove s3://
+    echo "${KOPS_STATE_STORE}" | grep "^s3://" > /dev/null
+    if [ $? -eq 0 ]; then bucketname="${KOPS_STATE_STORE:5}"; else bucketname=${KOPS_STATE_STORE}; fi
+    export KOPS_STATE_STORE="s3://${bucketname}"
+
+    l_ "...creating bucket: '${KOPS_STATE_STORE}'"
+    aws s3api create-bucket --bucket "${bucketname}" --region "${region}" ; Re=$?
+    if [ $Re -ne 0 ]; then
+      l_error "Unable to create the bucket. Fix your AWS confguration?"
+    else
+      l_ "  ...ensure public access is blocked"
+      aws s3api put-public-access-block --bucket "${bucketname}" --public-access-block-configuration="BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"  ; Re=$?
+      if [ $Re -ne 0 ]; then
+        l_error "Unable to turn off public access for bucket. Fix your AWS configuration?"
+      else
+        l_ "  ...ensure versioning of bucket is on"
+        aws s3api put-bucket-versioning --bucket "${bucketname}" --region "${region}" --versioning-configuration Status=Enabled; Re=$?
+        if [ $Re -ne 0 ]; then
+          l_error "Failed versioning bucket ${bucket} in ${WOV_cluster_region}."
+        else
+          doTestKops ; retval=$?
+        fi
+      fi
+    fi
+  else
+    l_error "Unknown error."
+    retval=1
+  fi
+
+  return $retval
+}
+
+#function doConfigDB() 
+#{
+#  . wov-cluster-configdb
+#}
 
 function doConfigDBNet() 
 {
@@ -45,28 +138,62 @@ function doConfigDBNet()
 
 function doConfigHelm() 
 {
-  which helm
-  if [ "$?" != "0" ]; then
-    echo ""
-    echo "ERROR: Kubernetes package management tool 'helm' is not installed. See it's documentation, then rerun this command."
-    echo ""
+  local R=
+  local Re=
+
+  R=$(which helm) ; Re=$?
+  if [ $Re -ne 0 ]; then
+    l_
+    l_error "Kubernetes package management tool 'helm' is not installed. See it's documentation, then rerun this command."
+    l_
     exit 1
   fi
-  kubectl apply -f ./wov-cluster-tiller.yaml
-  if [ "$?" != "0" ]; then
-    printf "\nERROR: failed installing tiller.\n"
-    exit 1
-  fi
-  helm init --service-account tiller --upgrade
-  if [ "$?" != "0" ]; then
-    printf "\nERROR: failed installing helm.\n"
-    exit 1
-  fi
+
+  # This gives ALL access to tiller... not good
+  # FROM: https://github.com/helm/helm/issues/3130#issuecomment-345506262
+
+  l_verbose '...install tiller configuration'
+  cat <<'EOF' | kubectl apply -f -
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tiller
+  namespace: kube-system
+EOF
+  Re=$? ; if [ $Re -ne 0 ]; then l_error "Failed installing tiller."; exit 1; fi
+
+  cat <<'EOF' | kubectl apply -f -
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: tiller-clusterrolebinding
+subjects:
+- kind: ServiceAccount
+  name: tiller
+  namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: ""
+EOF
+  Re=$? ; if [ $Re -ne 0 ]; then l_error "Failed installing tiller."; exit 1; fi
+
+  l_verbose "...calling helm init with tiller"
+  helm init --service-account tiller --upgrade ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "Failed installing helm."; exit 1; fi
+
+
+  l_ "...success"
 }
 
 
 function doCreate()
 {
+  local R=
+  local Re=
+  local proj=
+  local stage=
+  local dns=
 
   if [ "$#" != "1" ]; then
     printf "\nERROR: must provide the new cluster name: ex. wov-aws-va-flavor.\n"
@@ -74,11 +201,31 @@ function doCreate()
   fi
 
   WOV_CLUSTER="$1"
-  WOV_NS="`wov-env --var WOV_WPROJECT`-`wov-env --var WOV_GSTAGE`"
 
-  kops get clusters | grep ${WOV_CLUSTER} > /dev/null
-  R=$?
-  if [ "$R"  == "0" ]; then
+  dns=$(wov-env --var WOV_cluster_dns_hostedZone) ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "Failed wov-env call for WOV_cluster_dns_hostedZone. Check your settings."; exit 1; fi
+
+  proj=$(wov-env --var WOV_WPROJECT) ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "Failed wov-env call for WOV_WPROJECT. Check your settings."; exit 1; fi
+
+  stage=$(wov-env --var WOV_GSTAGE) ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "Failed wov-env call for WOV_GSTAGE. Check your settings."; exit 1; fi
+
+  WOV_NS="${proj}-${stage}"
+
+  l_ ""
+  figlet "Create Cluster"
+  l_hr
+  l_ "WOV_CLUSTER : ${WOV_CLUSTER}.${dns}"
+  l_ "WOV_NS      : ${WOV_NS}"
+  l_hr
+
+  doEnsureKops
+  if [ $? -ne 0 ]; then exit 1; fi
+
+  l_verbose "Test for existing cluster entry in kops"
+  R=$(kops get clusters 2> /dev/null | grep "${WOV_CLUSTER}" 2> /dev/null) ; Re=$?
+  if [ $Re -eq 0 ]; then
     echo ""
     echo "ERROR: existing cluster of name '${WOV_CLUSTER}'. Stopping."
     echo ""
@@ -86,14 +233,14 @@ function doCreate()
     kops get clusters
     echo ""
     exit 1
+  else
+    l_verbose "  ...no existing cluster found. good."
   fi
 
+  l_verbose "generating env settings using context: ${WOV_CLUSTER}-${WOV_NS}"
+  . <(wov-env --context ${WOV_CLUSTER}-${WOV_NS} --exports)
 
-#  . wov-env -g ${WOV_CLUSTER}-${WOV_NS} -c ${WOV_CLUSTER}
-#  . wov-env-build -q --namespace ${WOV_NS} --cluster ${WOV_CLUSTER} --secrets ${WOV_CLUSTER}
-   . wov-env -g ${WOV_CLUSTER}-${WOV_NS} -c ${WOV_CLUSTER}
-
-  echo "... creating cluster: *** ${WOV_CLUSTER}-${WOV_NS} ***"
+  l_ "...Cluster to Create Configuration: *** ${WOV_CLUSTER}-${WOV_NS} ***"
 
   GETENVS=( "KOPS_STATE_STORE" "WOV_cluster_dns_domain" "WOV_cluster_dns_hostedZone" "WOV_cluster_region"
             "WOV_cluster_master_count" "WOV_cluster_master_zones" "WOV_cluster_master_size"
@@ -101,7 +248,7 @@ function doCreate()
 
   UNDEFVAR=0
   for f in ${GETENVS[@]}; do
-    TMP=`wov-env -g ${WOV_CLUSTER}-${WOV_NS} --var ${f}`
+    TMP=`wov-env --context ${WOV_CLUSTER}-${WOV_NS} --var ${f}`
     #TMP=`wov-env -g ${WOV_CLUSTER} -c ${WOV_CLUSTER} --var ${f}`
     if [ "${TMP}" == "" ]; then
       echo "WARNING: variable '${f}' is not defined."
@@ -126,10 +273,9 @@ function doCreate()
     exit 1
   fi
 
-  exit 1
 
-  printf ": ensure at least one host Nameserver is used locally (speeds up development)\n"
-  printf "  ... getting nameservers of your domain from AWS Route53\n"
+  l_ ": ensure at least one host Nameserver is used locally (speeds up development)\n"
+  l_ "  ... getting nameservers of your domain from AWS Route53\n"
   NRVS=$(aws route53 get-hosted-zone --id ${WOV_cluster_dns_hostedZone} | jq -r '.DelegationSet.NameServers[]')
   found=0
   for ns in ${NRVS[@]}; do
@@ -150,41 +296,60 @@ function doCreate()
     fi
   done
   if [ "$found" != "1" ]; then
-    printf "\nERROR: you need to use one of your hostedzones' nameservers. Put into /etc/resolv.conf or on mac use GUI.\n\n"
+    l_warn "You should use one of your hostedzones' nameservers. Put into /etc/resolv.conf or on mac use GUI.\n\n"
     for ns in ${NRVS[@]}; do
       echo "  - $ns"
     done
-    echo ""
-    exit 1
+    l_ 
+    read -r -p "You do not currently are not using one of these.  Continue? [Y/n]" A
+    if [ "${A}" == 'n' ] || [ "${A}" == "no" ]; then exit 1; fi
+  else
+    l_ "  ... nameserver of hosted zone in use (good)"
   fi
-  echo "  ... nameserver of hosted zone in use (good)"
 
 
-  printf "... making key\n"
-  . ./wov-cluster-make_key
+  l_ "... making key\n"
+  . wov-cluster-make_key
+    # --- NOTE: "." because it sets env vars
   if [ "$?" != "0" ]; then exit 1; fi
   if [ -z ${KEY_PUBLIC+x} ]; then echo "KEY_PUBLIC is unset"; exit 1; fi
 
-  printf "... making bucket\n"
-  ./wov-cluster-make_bucket
+#  l_ "... making bucket\n"
+#  wov-cluster-make_bucket
+#  if [ "$?" != "0" ]; then exit 1; fi
+
+  l_ "... making cluster\n"
+  wov-cluster-make_cluster
   if [ "$?" != "0" ]; then exit 1; fi
 
-  printf "... making cluster\n"
-  ./wov-cluster-make_cluster
-  if [ "$?" != "0" ]; then exit 1; fi
-
+  l_ "...validating kops cluster"
   kops validate cluster > /dev/null
-  R=$?
-  while [ "${R}" != "0" ]; do
+  Re=$?
+  while [ ${Re} -ne 0 ]; do
     echo "  ... waiting for kops validate cluster to work (20 seconds)"
     sleep 20
     kops validate cluster > /dev/null
-    R=$?
+    Re=$?
   done
 
+  l_ "...create namespace"
+  kubectl create ns ${WOV_NS} ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "Failed to create Kubernetes namespace for some reason?"; exit 1; fi
 
-  printf ": rename Kubenetes config : ${WOV_CLUSTER}.${WOV_cluster_dns_domain} ==> ${WOV_CLUSTER}-${WOV_NS}\n"
-  kubectl config rename-cluster ${WOV_CLUSTER}.${WOV_cluster_dns_domain} ${WOV_CLUSTER}-${WOV_NS}
+  l_ "...create Kubernetes context : ${WOV_CLUSTER}-${WOV_NS} from cluster, user, namespace"
+  kubectl config set-context ${WOV_CLUSTER}-${WOV_NS} \
+                             --cluster=${WOV_CLUSTER}.${WOV_cluster_dns_domain} \
+                             --user=${WOV_CLUSTER}.${WOV_cluster_dns_domain} \
+                             --namespace=${WOV_NS}
+  if [ $Re -ne 0 ]; then l_error "Failed to create Kubernetes context for some reason?"; exit 1; fi
+
+#  l_ "Create a Kubenetes context: ${WOV_CLUSTER}-${WOV_NS}\n"
+#  kubectl config rename-context ${WOV_CLUSTER}.${WOV_cluster_dns_domain} ${WOV_CLUSTER}-${WOV_NS} ; Re=$? 
+#  if [ $Re -ne 0 ]; then l_error "Failed to rename Kubernetes config."; exit 1; fi
+
+  l_ "...success. Now, consider further configurations like helm and dbnet:"
+  l_ "   ex. wov-cluster config helm"
+  l_ "   ex. wov-cluster config dbnet"
 }
 
 
@@ -254,10 +419,10 @@ case $1 in
         shift
         doConfigDBNet
         ;;
-      db)
-        shift
-        doConfigDB
-        ;;
+#      db)
+#        shift
+#        doConfigDB
+#        ;;
       *)
         printf "\nERROR: unknown config option of '$1'.\n\n"
         fDisplayOptions

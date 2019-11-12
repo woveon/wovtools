@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+
+# ///////////////////////////////////////////////////////////////////// 
+#  HELM - POSTGRES
+# ///////////////////////////////////////////////////////////////////// 
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Helm_Postgres_Start()
+{
+  local DB_volid
+  local retval=2
+  local Re=
+  local R=
+  local runningstatus=
+  l_debug 'wovdb_Helm_Postgres_Start'
+
+
+  if [ "${WOV_ORIGIN}" == "external" ]; then
+
+    R=$(wovdb_Helm_Postgres_Test) ; Re=$?
+    if [ $Re -eq 0 ]; then l_ "  ...currently running"; retval=0; fi
+
+#    if [ $retval -eq 2 ]; then
+#      l_ "  ... ensuring AWS volume"
+#      DB_volid=$(wov-aws volume-ensure "${DB_volname}" "${DB_instance_storage}") ; Re=$?
+#      if [ $Re -eq 0 ]; then
+#        l_ "    AWS Volume: ${DB_volname}, id: ${DB_volid}"
+#      else
+#        l_error "Failed ensuring volume '${DB_volname}' exists.\n"
+#        retval=1
+#      fi
+#    fi
+
+#    if [ $retval -eq 2 ]; then
+#      l_ "  ... wait for volume to be available : volid ${DB_volid}"
+#      aws ec2 wait volume-available --volume-ids ${DB_volid} ; Re=$?
+#      if [ $Re -ne 0 ]; then l_error "Failed waiting for '${DB_volname}'."; retval=1; fi
+#    fi
+
+#    if [ $retval -eq 2 ]; then
+#      l_ "  ... ensuring K8s PersistentVolume '${DB_kvolname}'"
+#      kubectl get persistentvolume ${DB_kvolname} > /dev/null 2>&1 ; Re=$?
+#      if [ $Re -ne 0 ]; then
+#        cat <<EOF | kubectl create -f -
+#kind: PersistentVolume
+#apiVersion: v1
+#metadata:
+#  name: ${DB_kvolname}
+##  annotations:
+##    volume.beta.kubernetes.io/storage-class: generic
+#  labels:
+#    postgresdbVol: "${DB_kvolname}"
+#    KubernetesCluster: "${WOV_CLUSTER}.${WOV_cluster_dns_domain}"
+#spec:
+#  capacity:
+#    storage: ${DB_instance_storage}Gi
+#  accessModes:
+#    - ReadWriteOnce
+#  storageClassName: "gp2"
+#  awsElasticBlockStore:
+#    fsType: gp2
+#    volumeID: ${DB_volid}
+#EOF
+#    # fsType: ext4
+#        Re=$?
+#        if [ $Re -ne 0 ]; then l_error "Failed creating persistentvolume '${DB_kvolname}'."; retval=1; fi
+#      else
+#        echo "  ...persistent volume exists"
+#      fi
+#    fi
+
+#    if [ $retval -eq 2 ]; then
+#      l_ "  ... ensuring K8s PersistentVolumeClaim '${DB_kvolname}'"
+#      kubectl get persistentvolumeclaim ${DB_kvolname} > /dev/null 2>&1 ; Re=$?
+#      if [ $Re -ne 0 ]; then
+#        cat <<EOF | kubectl create -f - ; Re=$?
+#kind: PersistentVolumeClaim
+#apiVersion: v1
+#metadata:
+#  name: ${DB_kvolname}
+#  labels:
+#    postgresdbVol: "${DB_kvolname}"
+#    KubernetesCluster: "${WOV_CLUSTER}.${WOV_cluster_dns_domain}"
+#spec:
+#  volumeName: "${DB_kvolname}"
+#  storageClassName: "gp2"
+#  accessModes:
+#  - ReadWriteOnce
+#  resources:
+#    requests:
+#      storage: ${DB_instance_storage}Gi
+#EOF
+#  # selector: matchLabels: postgresdbVol: "${DB_kvolname}"
+#        Re=$?
+#        if [ $Re -ne 0 ]; then l_error "Failed creating persistentvolumeclaim '${DB_kvolname}'."; retval=1; fi
+#      else
+#        echo "  ...persistent volume claim exists"
+#      fi
+#    fi
+
+    if [ $retval -eq 2 ]; then
+      l_ "  ... searching for stable/postgresql chart : ${DB_version}"
+      helm search -v ${DB_version} stable/postgresql ; Re=$?
+      if [ $Re -ne 0 ]; then
+        l_error "Failed to find helm chart for stable/postgresql, version ${DB_version}."
+        retval=1
+      fi
+    fi
+
+    if [ $retval -eq 2 ]; then
+      l_ "  ... helm chart install"
+      helm install --name ${DB_name}-${WOV_STAGE} \
+        --namespace=${WOV_NS} \
+        --set postgresqlPassword="${DB_password}",postgresqlDatabase="${DB_database}" \
+        --set postgresqlUsername="${DB_username}" \
+        --set persistence.enabled=true \
+        --set nodeselector="{\"failure-domain.beta.kubernetes.io/zone\": \"${WOV_cluster_master_zones}\"}" \
+        --set image.tag="${DB_version}" \
+        stable/postgresql ; Re=$?
+
+      #  --set persistence.existingClaim=${DB_kvolname} 
+      if [ $Re -ne 0 ]; then
+        l_error "Failed creating chart"
+        retval=1
+      fi
+    fi
+
+    if [ $retval -eq 2 ]; then
+      wovdb_Helm_Postgres_Init ; Re=$?
+      if [ $Re -ne 0 ]; then
+        l_error "Failed to init WovDB"
+        retval=1;
+      fi
+    fi
+
+    if [ $retval -eq 2 ]; then retval=0; fi
+
+  else
+    l_error "WovDB for Helm Postgres can only be at ORIGIN 'external'."
+    retval=1
+  fi
+
+  if [ $retval -eq 0 ]; then l_ "  ...success"; fi
+
+  return $retval
+}
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Helm_Postgres_Stop()
+{
+  local retval=
+  local Re=
+
+  helm delete --purge "${DB_name}-${WOV_STAGE}" ; Re=$?
+  if [ $Re -eq 0 ]; then l_ "  ...stopped database server"; retval=0; else l_error "Failed to stop"; retval=1; fi
+
+  return $retval
+}
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+#function wovdb_Helm_Postgres_Wait()
+#{
+#  local Re=
+#  local R=
+#  local retval=2
+#
+#  return $retval
+#}
+
+
+
+# --------------------------------------------------------------------- 
+# Return: 0 on success/found, 1 on not running
+# --------------------------------------------------------------------- 
+function wovdb_Helm_Postgres_Test()
+{
+  local retval=2
+
+  l_ "  ... checking for existing helm postgres deployment"
+  helm list | grep  "${DB_name}-${WOV_STAGE}"  > /dev/null 2>&1
+  if [ $? -eq 0 ]; then
+    helm list "${DB_name}-${WOV_STAGE}"
+    l_ "Running"
+    retval=0
+  else
+    l_ "Not running"
+    retval=1
+  fi
+
+  return $retval
+}
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Helm_Postgres_connectstring() {
+  l_debug "wovdb_Helm_Postgres_connectstring '${*}'"
+  echo "kubectl exec -it '${DB_name}-${WOV_STAGE}-postgresql-0' -- /bin/bash -c \"PGPASSWORD=${DB_password} psql -h ${DB_endpoint} -U ${DB_username} -d ${DB_database,,} ${*}\"'"
+}
+
+# --------------------------------------------------------------------- 
+function wovdb_Helm_Postgres_Create()
+{
+  local R=
+  local Re=
+  local retval=2
+  local psqlcmd1="-c \"SELECT * FROM pg_database WHERE datname='${DB_database}'\""
+  local psqlcmd2="-c \"CREATE DATABASE ${DB_database}\""
+
+  # test for exists
+  R=$(kubectl exec -it "${DB_name}-${WOV_STAGE}-postgresql-0" -- /bin/bash -c "PGPASSWORD=${DB_password} psql -h ${DB_endpoint} -U ${DB_username} -d ${DB_database,,} ${psqlcmd1}") ; Re=$?
+  if [ $Re -eq 0 ]; then
+    echo "Re ${Re}"
+    echo "${R}" | grep '(1 row)'  ; Re=$?
+    if [ $Re -eq 0 ]; then l_ "  ...database instance exists"; retval=0; fi
+  fi
+
+  # if not exists
+  if [ $retval -eq 2 ]; then
+    # create
+    kubectl exec -it "${DB_name}-${WOV_STAGE}-postgresql-0" -- /bin/bash -c "PGPASSWORD=${DB_password} psql -h ${DB_endpoint} -U ${DB_username} -d ${DB_database,,} ${psqlcmd2}" ; Re=$?
+    if [ $Re -eq 0 ]; then l_ "  ...database instance created"; retval=0; else l_error "Failed to start"; retval=1; fi
+  fi
+
+  return $retval
+}
+
+# --------------------------------------------------------------------- 
+function wovdb_Helm_Postgres_Connect()
+{
+  local Re=
+  local retval=2
+
+  kubectl exec -it "${DB_name}-${WOV_STAGE}-postgresql-0" -- /bin/bash -c "PGPASSWORD=${DB_password} psql -h ${DB_endpoint} -U ${DB_username} -d ${DB_database,,}" ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "Failed to connect"; retval=1; else retval=0; fi
+
+  return $retval
+}
+
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ 
+#  HELM - POSTGRES
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ 

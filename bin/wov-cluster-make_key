@@ -14,18 +14,20 @@ if [ ! -f "${KEY_PUBLIC}" ]; then
   echo "openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out ~/.ssh/${WOV_CLTYPE}/${WOV_CLUSTER}.pem"
   echo "openssl rsa -in ~/.ssh/${WOV_CLTYPE}/${WOV_CLUSTER}.pem -outform PEM -pubout -out ~/.ssh/${WOV_CLTYPE}/${WOV_CLUSTER}_pub.pem"
   echo "ssh-keygen -f ~/.ssh/${WOV_CLTYPE}/${WOV_CLUSTER}_pub.pem -i -mPKCS8 > ~/.ssh/${WOV_CLTYPE}/${WOV_CLUSTER}_pub"
-  echo "chmod 400 ~/.ssh/wov/wov-aws-va-frog.pem"
-  echo "chmod 400 ~/.ssh/wov/wov-aws-va-frog_pub"
-  echo "chmod 400 ~/.ssh/wov/wov-aws-va-frog_pub.pem"
+  echo "chmod 400 ~/.ssh/wov/${WOV_CLUSTER}.pem"
+  echo "chmod 400 ~/.ssh/wov/${WOV_CLUSTER}_pub"
+  echo "chmod 400 ~/.ssh/wov/${WOV_CLUSTER}_pub.pem"
   exit 1
 fi
 if [ "$?" != "0" ] || [ "${KEYEXISTS}" == "" ]; then
   printf "ERROR: failed to find key '${WOV_CLUSTER}' in aws key pairs.\n\n"
   echo "Generate the key and import it into AWS key pairs : EC2 > Key Pairs"
   echo " - open https://console.aws.amazon.com/ec2/v2/home?region=${WOV_cluster_region}#KeyPairs:sort=keyName"
-  echo "   - import the key with the name: '${WOV_CLUSTER}'"
-  echo "   - copy in public key (file contents: ~/.ssh/wov/${WOV_CLUSTER}_pub.pem -- NOTE: only parts between '---') "
-  echo "     - 'open -a TextEdit ~/.ssh/wov/${WOV_CLUSTER}_pub.pem'"
+  l_   "   - press 'Import Key Pair' button up top."
+  l_   "   - name : '${WOV_CLUSTER}'"
+  l_   "   - copy in public key from file : ~/.ssh/wov/${WOV_CLUSTER}_pub.pem -- NOTE: only parts between '---') "
+  l_   "     - option 1: grep -v '^-' ~/.ssh/wov/${WOV_CLUSTER}_pub.pem  | pbcopy"
+  l_   "     - option 2: open -a TextEdit ~/.ssh/wov/${WOV_CLUSTER}_pub.pem"
   exit 1
 fi
 

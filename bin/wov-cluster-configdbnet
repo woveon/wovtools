@@ -1,6 +1,25 @@
 #!/usr/bin/env bash
 
-DOECHO=1
+FOLD=$(tput cols)
+export PATH=$PATH:/usr/local/bin/wovlib
+
+function fDisplayOptions()
+{
+  cat <<EOF | fold -w ${FOLD} -s
+
+usage: `basename $0` [options]
+
+This sets up a peering connection from the default VPC to the cluster's VPC, so databases persist between clusters. This is extremely confusing.
+
+EOF
+}
+
+# ISWOVPROJECT="0"
+. wov-env-ops fDisplayOptions "$@"
+if [ ${WOV_DODEFAULTCOMMAND} -eq 0 ]; then exit 0; fi
+
+. wov-env-common
+
 
 # --------------------------------------------------------------------- 
 # Set to 0 to turn this off for debugging
@@ -13,38 +32,42 @@ CONFIG_PEERINGROUTES=1
 
 
 
-# Load base environment, enough to grab cluster
-. wov-env-loader
+
+## Load base environment, enough to grab cluster
+#. wov-env-loader
 if [ -z ${WOV_CLUSTER+x} ];             then echo "var WOV_CLUSTER is unset"; exit 1; fi
-. wov-env -g ${WOV_CLUSTER} -c ${WOV_CLUSTER}
+#. wov-env -g ${WOV_CLUSTER} -c ${WOV_CLUSTER}
+
+
+l_ "Context : ${WOV_CONTEXT}"
 
 GETENVS=( "WOV_cluster_dns_domain" "WOV_cluster_region" "WOV_cluster_zone_primary" "WOV_cluster_zone_secondary" 
           "WOV_cluster_rds_subnet1" "WOV_cluster_rds_subnet2" )
 
 UNDEFVAR=0
 for f in ${GETENVS[@]}; do
-  TMP=`wov-env -g ${WOV_CLUSTER} -c ${WOV_CLUSTER} --var ${f}`
+  TMP=`wov-env --context ${WOV_CONTEXT} --var ${f}`
   if [ "${TMP}" == "" ]; then
     echo "WARNING: variable '${f}' is not defined."
     UNDEFVAR=1;
   else 
     eval $f=$TMP
+    l_verbose "  : $f=$TMP"
   fi
 done
-if [ "${UNDEFVAR}" != "0" ]; then
-  printf "\nERROR: missing variables. Exiting. Check your secrets.\n\n";
-  exit 1
-fi
+if [ "${UNDEFVAR}" != "0" ]; then l_error "Missing variables. Exiting. Check your secrets.\n"; exit 1; fi
 
-if [ $DOECHO -gt 0 ]; then echo "Configuring/Ensuring Database Network for Cluster '${WOV_CLUSTER}'"; fi
+
+l_verbose "...Configuring/Ensuring Database Network for Cluster '${WOV_CLUSTER}'"
 
 # --------------------------------------------------------------------- 
-#echo "... finding default VPC"
-DVPCID=`aws ec2 describe-vpcs --filters "Name=tag-key, Values=Name, Name=tag-value, Values=default" | jq -r ".Vpcs[].VpcId"`
-if [ "$?" != "0" ]; then echo "\nERROR: failed to find default VPC.\n"; exit 1; fi
+l_verbose "... finding default VPC"
+DVPCID=$(aws ec2 describe-vpcs | jq -r '.Vpcs[] | select(.IsDefault == true ) | .VpcId') ; Re=$?
+if [ $Re -ne 0 ] || [ "${DVPCID}" == "" ]; then l_error "Failed to find default VPC.\n"; exit 1; fi
 
-CVPCID=`aws ec2 describe-vpcs --filters "Name=tag-key, Values=Name, Name=tag-value, Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}" | jq -r ".Vpcs[].VpcId"`
-if [ "$?" != "0" ]; then echo "\nERROR: failed to find Cluster VPC.\n"; exit 1; fi
+l_verbose "... finding Cluster VPC"
+CVPCID=`aws ec2 describe-vpcs --filters "Name=tag-key, Values=Name, Name=tag-value, Values=${WOV_CLUSTER}.${WOV_cluster_dns_domain}" | jq -r ".Vpcs[].VpcId"` ; Re=$?
+if [ $Re -ne 0 ] || [ "${CVPCID}" == "" ]; then l_error "Failed to find Cluster VPC.\n"; exit 1; fi
 
 WOV_CLUSTER_UNFLAVORED="${WOV_CLTYPE}-${WOV_PROVIDER}-${WOV_REGION}"
 
@@ -64,19 +87,25 @@ DBRT=$(doResName DBRT ${WOV_CLUSTER_UNFLAVORED})
 PEERCONN=$(doResName "PEERCONN" "${WOV_CLUSTER}")
 
 
-if [ $DOECHO -gt 0 ]; then
-  echo ""
-  echo "... Database Network Setup"
-  echo "  ... will ensure in Default VPC:"
-  echo "              subnets : ${DBSN1} ${DBSN2}"
-  echo "          subnetgroup : ${DBSNG}"
-  echo "    DB security group : ${DBSG}"
-  echo "          route table : ${DBRT}"
-  echo "  ... will create to link to cluster VPC:"
-  echo "   peering connection : ${PEERCONN}"
-  echo ""
+l_   ""
+l_   "... Database Network Setup"
+l_   "        Default VPCID : ${DVPCID}"
+l_   "        Cluster VPCID : ${CVPCID}"
+l_   "  ... will ensure in Default VPC:"
+l_   "              subnets : ${DBSN1} ${DBSN2}"
+l_   "          subnetgroup : ${DBSNG}"
+l_   "    DB security group : ${DBSG}"
+l_   "          route table : ${DBRT}"
+l_   "  ... will create to link to cluster VPC:"
+l_   "   peering connection : ${PEERCONN}"
+l_   ""
+read -r -p "Configure db networking with above configuration? [Y/n] " A
+if [[ $A == "" ]] || [[ $A =~ [yY][eE][sS] ]]; then
+  l_ "... creating"
+else
+  l_ "Exiting: did not configure."
+  exit 1
 fi
-
 
 # --------------------------------------------------------------------- 
 # Database Network Setup - 
@@ -93,25 +122,27 @@ if [ "$CONFIG_DBS" == "1" ]; then
   DBSNQ1=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${DBSN1}" | jq '.Subnets[0]') ; DBSNQ1e=$?
   if [ "${DBSNQ1e}" != "0" ]; then echo "ERROR: could not query subnets."; exit 1; fi
   if [ "${DBSNQ1}" == "null" ]; then
-    echo "  ... creating ${DBSN1}"
+    l_ "  ... creating subnet ${DBSN1}"
+    set -x
     R1=$(aws ec2 create-subnet --vpc-id ${DVPCID} --cidr-block ${WOV_cluster_rds_subnet1} --availability-zone ${WOV_cluster_region}${WOV_cluster_zone_primary}) ; RR1=$?
+    set +x
 #    echo "R1: ${R1}"
 #    echo "RR1: ${RR1}"
-    if [ "${RR1}" != "0" ]; then printf "\n\nERROR: could not create subnet: ${R1}\n"; exit 1; fi
+    if [ "${RR1}" != "0" ]; then l_error "Could not create subnet: ${R1}"; exit 1; fi
     SNID1=$(echo ${R1} | jq '.Subnet.SubnetId' | sed -e 's/^"//' -e 's/"$//' )
 #    echo "SNID1: ${SNID1}"
     RRR1=$(aws ec2 create-tags --resources $SNID1 --tags "Key=Name,Value=\"${DBSN1}\"" "Key=Cluster,Value=\"${WOV_CLUSTER}\"" ) ; RRRR1=$?
 #    echo "RRR1: ${RRR1}"
 #    echo "RRRR1: ${RRRR1}"
-    if [ "$RRRR1" != "0" ]; then printf "\n\nERROR: failed to name subnet id '${SNID1}'. Unknown error.\n"; printf "${RRR1}"; exit 1; fi
+    if [ "$RRRR1" != "0" ]; then l_error "Failed to name subnet id '${SNID1}'. Unknown error."; l_error "${RRR1}"; exit 1; fi
   else
-    echo "  ... existing ${DBSN1} : $(echo ${DBSNQ1} | jq -r ".CidrBlock")"
+    l_ "  ... existing ${DBSN1} : $(echo ${DBSNQ1} | jq -r ".CidrBlock")"
   fi
 
   DBSNQ2=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${DBSN2}" | jq '.Subnets[0]') ; DBSNQ2e=$?
   if [ "${DBSNQ2e}" != "0" ]; then echo "ERROR: could not query subnets."; exit 1; fi
   if [ "${DBSNQ2}" == "null" ]; then
-    echo "  ... creating ${DBSN2}"
+    l_ "  ... creating ${DBSN2}"
     R2=$(aws ec2 create-subnet --vpc-id ${DVPCID} --cidr-block ${WOV_cluster_rds_subnet2} --availability-zone ${WOV_cluster_region}${WOV_cluster_zone_secondary}) ; RR2=$?
 #    echo "R2: ${R2}"
 #    echo "RR2: ${RR2}"

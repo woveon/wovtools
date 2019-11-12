@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+
+
+# /////////////////////////////////////////////////////////////////////
+#  COMMON - POSTGRES
+# /////////////////////////////////////////////////////////////////////
+
+function wovdb_COMMON_Postgres_Init()
+{
+  local Re=
+  local R=
+  local retval=2
+  local tmpdb="${DB_database}"
+
+  local ev="wovdb_${DB_generator^}_Postgres_Command"
+  local cmd1="SELECT 1 FROM pg_database WHERE datname = 'wovtools'"
+  local cmd2="CREATE DATABASE wovtools"
+  local cmd3="CREATE TABLE IF NOT EXISTS logs (id SERIAL NOT NULL PRIMARY KEY, database varchar, wovtoolsver varchar, label varchar, pver integer, sver integer, snapshot varchar, schema varchar DEFAULT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() );"
+
+
+  mkdir -p ${WOV_BASEDIR}/wovtools/db/archive ; Re=$?
+  if [ $Re -ne 0 ]; then retval=1; fi
+
+  DB_database="postgres"  # assume this db since don't know what is created
+  if [ $retval -eq 2 ]; then
+    l_ "Check for wovtools database"
+    R=$(eval "${ev} \"${cmd1}\"") ; Re=$?
+    if [ $Re -ne 0 ]; then retval=1; l_error "Failed to connect to db";
+    else 
+      l_ "R: $R"
+      echo $R | grep -q "(1 row)"
+      Re=$?
+      l_ "Re: $Re"
+      if [ $Re -ne 0 ]; then
+        l_verbose "Create wovtools database"
+        eval "${ev} \"${cmd2}\"" ; Re=$?
+        if [ $Re -ne 0 ]; then retval=1; l_error "Failed to create db entry 'wovtools'."; fi
+      fi
+    fi
+  fi
+
+  # following are on this db
+  DB_database="wovtools"
+
+  if [ $retval -eq 2 ]; then
+    l_verbose "Create logs table in wovtools database"
+    eval "${ev} \"${cmd3}\"" ; Re=$?
+    if [ $Re -ne 0 ]; then retval=1; l_error "Failed to create logs table."; fi
+  fi
+
+  if [ $retval -eq 2 ]; then
+    # first delta is that it exists
+    cat <<EOF >> "${WOV_BASEDIR}/wovtools/db/${DB_name}.deltas"
+# ---------------------------------------------------------------------
+# doInitDB called for: ${DB_name}
+# ---------------------------------------------------------------------
+# 1) create wovtools database if not exist
+# 2) create the logs database in wovtools
+# ---------------------------------------------------------------------
+EOF
+
+    # Init the archive for it
+    if [ ! -e "${WOV_BASEDIR}/wovtools/db/archive/${DB_name}.json" ]; then
+      cat <<EOF >> ${WOV_BASEDIR}/wovtools/db/archive/${DB_name}.json
+{
+  "wovtoolsversion": "0",
+  "versions": {}
+}
+EOF
+      if [ $Re -ne 0 ]; then retval=1; fi
+    fi
+  fi
+
+  if [ $retval -eq 2 ]; then
+    l_verbose "  ...add to git"
+    R=$(git -C ${WOV_BASEDIR}/wovtools/db/archive add ${DB_name}.json) ; Re=$?
+    if [ $Re -ne 0 ]; then
+      l_error "failed to add files to DB Archive. go to wovtools/db/archive and 'git status'"
+      l_warn "${R}"
+      retval=1
+    fi
+  fi
+
+  if [ $retval -eq 2 ]; then
+    l_verbose "  ...git commit : git -C ${WOV_BASEDIR}/wovtools/db/archive commit -a -m \"Created wov db ${DB_name}\""
+    R=$(git -C ${WOV_BASEDIR}/wovtools/db/archive commit -a -m "Created wov db ${DB_name}") ; Re=$?
+
+    # No git check needed since it might already exist ... so ok...
+    if [ $Re != 0 ]; then
+      # l_error "failed to commit DB Archive. go to wovtools/db/archive and 'git status'"
+      # l_ "${R}"
+      l_warn "  ...looks like wovtools/db/archive already has this. skipping git push."
+      retval=0
+    fi
+  fi
+
+  if [ $retval -eq 2 ]; then
+    l_verbose "  ... git push"
+    R=$(git -C ${WOV_BASEDIR}/wovtools/db/archive push) ; Re=$?
+    if [ $Re != 0 ]; then
+      l_error "failed to push DB Archive. go to wovtools/db/archive and 'git status'"
+      l_warn "${R}"
+      retval=1
+    fi
+  fi
+
+  if [ $retval -eq 2 ]; then retval=0; fi
+  DB_database="${tmpdb}"
+
+  return $retval
+}
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function wovdb_COMMON_Postgres_Schema()
+{
+  local Re=
+  local retval=1
+
+  l_debug 'wovdb_COMMON_Postgres_Schema'
+
+  PGPASSWORD="${DB_password}" pg_dump -p ${DB_extport} -h "${DB_endpoint}" -U "${DB_username}" -d "${DB_database,,}" -s ; Re=$?
+  if [ $Re -ne 0 ]; then
+    l_error "...failed to connect to WovDB"
+    wovdb_ConnectionIssue "${DB_extport}" "${DB_port}"
+  else
+    retval=0
+  fi
+
+  return $retval
+}
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function wovdb_COMMON_Postgres_Schemahash()
+{
+  local Re=
+  local retval=1
+
+  l_debug 'wovdb_COMMON_Postgres_Schemahash'
+  R=$(wovdb_COMMON_Postgres_Schema | \
+    sed 's/^\(-- Dumped from database version\) \([0-9]*.[0-9]*.[0-9]*\)/\1 X.X.X/g' | \
+    sed 's/^\(-- Dumped by pg_dump version\) \([0-9]*.[0-9]*.[0-9]*\)/\1 X.X.X/g' ) ; Re=$?
+  if [ $Re -eq 0 ]; then
+    echo $R2 | shasum -a 256 - | cut -d' ' -f1 ; retval=$?
+  fi
+
+  return $retval
+}
+
+
+
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+#  COMMON - POSTGRES
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+
+

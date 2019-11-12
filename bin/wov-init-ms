@@ -324,12 +324,12 @@ function doBuildMicroservice_base()
 
   msentry=$(cat <<EOF
 {
-  "containerfrom" : "node:12.6-alpine",
-  "ver"           : "v1",
-  "port"          : 80,
-  "healthpath"    : "/${WOV_PROJECT}${mscode}/v1/pub/health",
+  "containerfrom"   : "node:12.6-alpine",
+  "ver"             : "v1",
+  "port"            : 80,
+  "healthpath"      : "/${WOV_PROJECT}${mscode}/v1/pub/health",
   "healthprobetime" : 90,
-  "ORIGINlocal"  : {"port" : 75643, "//port" : "make sure you have no conflicts"}
+  "ORIGINhere"      : {"port" : 75643, "//port" : "make sure you have no conflicts"}
 }
 EOF
 )

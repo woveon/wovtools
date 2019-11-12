@@ -40,8 +40,16 @@ function DoDisplay {
   echo "- endpoints ---------------------------------------------------------"
   kubectl get --no-headers -n "$WOV_NS" endpoints --show-labels=true
   echo 
-  echo "- secrets and configmaps --------------------------------------------"
+  echo "- pv ----------------------------------------------------------------"
+  kubectl get --no-headers -n "$WOV_NS" pv --show-labels=true
+  echo 
+  echo "- pvc ---------------------------------------------------------------"
+  kubectl get --no-headers -n "$WOV_NS" pvc --show-labels=true
+  echo 
+  echo "- secrets -----------------------------------------------------------"
   kubectl get --no-headers -n "$WOV_NS" secrets --show-labels=true
+  echo 
+  echo "- configmaps --------------------------------------------------------"
   kubectl get --no-headers -n "$WOV_NS" configmaps --show-labels=true
 }
 

@@ -117,7 +117,7 @@ D1=.delme1
   echo "jq : $(jq -r '.projects.test1X.sub[0].dir' ${D1})"
   tr_test "check .projects.test1X.sub[0].dir" \
     "jq -r '.projects.test1X.sub[0].dir' ${D1}" 0 1  \
-    "${LADIR}/searchive/$(WovPathExt la se ${MASTER} ${PROJ})"
+    "${LADIR}/sea/$(WovPathExt la se ${MASTER} ${PROJ})"
 
   tr_test "check .projects.test1X.sub[0].repo" \
     "echo 'test_sea_${TESTME}'" \
@@ -129,7 +129,7 @@ D1=.delme1
   # DataBase Local Archive
   tr_test "check .projects.test1X.sub[1].dir" \
   "jq -r '.projects.test1X.sub[1].dir' ${D1}" 0 1 \
-    "${LADIR}/dbarchive/$(WovPathExt la db ${MASTER} ${PROJ})"
+    "${LADIR}/dba/$(WovPathExt la db ${MASTER} ${PROJ})"
   tr_test "check .projects.test1X.sub[1].repo" \
     "echo 'test_test1_dba'" \
     0 1 "`jq -r '.projects.test1X.sub[1].repo' ${D1}`"
@@ -140,7 +140,7 @@ D1=.delme1
   # DataSet Local Archive
   tr_test "check .projects.test1X.sub[2].dir" \
     "jq -r '.projects.test1X.sub[2].dir' ${D1}" 0 1 \
-    "${LADIR}/dsarchive/$(WovPathExt la ds ${MASTER} ${PROJ})"
+    "${LADIR}/dsa/$(WovPathExt la ds ${MASTER} ${PROJ})"
   tr_test "check .projects.test1X.sub[2].repo" \
     "echo 'test_dsa'" \
     0 1 "`jq -r '.projects.test1X.sub[2].repo' ${D1}`"
