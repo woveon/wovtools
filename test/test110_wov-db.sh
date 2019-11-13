@@ -21,6 +21,8 @@ tr_run  "rm Adb files"   "rm -Rf wovtools/db/Adb.deltas"
 tr_run  "rm Adb secrets" "rm -Rf wovtools/secrets/Adb*.json"
 tr_test 'create a WovDataBase to start' "wov-init-wovdb --context \"${USECLUSTER}-${PROJ}-${TESTME}\" Adb" 0 -1
 
+tr_tests_off
+
 {
   tr_section 'non-database-specific'
 
@@ -74,11 +76,12 @@ tr_test 'create a WovDataBase to start' "wov-init-wovdb --context \"${USECLUSTER
 #  tr_test 'create a Wov database instance but missing secret files' \
 #    "wov-db --context ${USECLUSTER}-fail-${TESTME} Adb --wdb-create" 103 -1
 
-  echo "{}" > "wovtools/secrets/Adb.json"
-  echo "{}" > "wovtools/secrets/Adb_${TESTME}.json"
+  tr_run "delete Adb.json"       "echo '{}' > wovtools/secrets/Adb.json"
+  tr_run "blank Adb_testme.json" "echo '{}' > wovtools/secrets/Adb_${TESTME}.json"
+
   tr_h1 "NEED TO FIX NEXT LINE"
   tr_run  "since wov-env does not work" "touch wovtools/config.json"
-  wov-env --context ${USECLUSTER}-${PROJ}-${TESTME} | grep Adb
+  tr_run "Adb env vars" "wov-env --context ${USECLUSTER}-${PROJ}-${TESTME} | grep Adb"
   tr_test 'create a Wov database instance but missing secrets' \
     "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} Adb --wdb-create" 203 -1
 
@@ -180,13 +183,22 @@ tr_test 'create a WovDataBase to start' "wov-init-wovdb --context \"${USECLUSTER
   tr_section '/wov-db-data'
 }
 
+tr_tests_on
 {
   tr_section "wov-db-helm"
 
-  # tr_run "delete running chart" "helm "
-  tr_test "start" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --info"
+  tr_run  "turn off" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --stop"
+  tr_run  "delete any persistent data since passwords will be different now" "kubectl delete pvc data-${DB_name,,}-${TESTME}-postgresql-0"
 
-  tr_test "start" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --start"
+  tr_test "test" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --test" 1 -1
+
+  tr_test "info" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --info" 0 -1
+
+  tr_test "start (can take a while)" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --start" 0 -1
+
+  tr_test "test" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --test" 0 -1
+
+  tr_test "sql command" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb -c \"select 1\"" 0 -1
 
   tr_section "/wov-db-helm"
 }

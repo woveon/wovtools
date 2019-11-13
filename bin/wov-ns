@@ -30,6 +30,11 @@ function DoDisplay {
   echo 
   echo "- deployments -------------------------------------------------------"
   kubectl get --no-headers -n "$WOV_NS" deployments --show-labels=true
+
+  echo 
+  echo "- statefulsets ------------------------------------------------------"
+  kubectl get --no-headers -n "$WOV_NS" statefulsets --show-labels=true
+
   echo 
   echo "- services ----------------------------------------------------------"
   kubectl get --no-headers -n "$WOV_NS" services --show-labels=true

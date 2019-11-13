@@ -33,8 +33,11 @@ function wovdb_Docker_Postgres_Start()
 
     fi
 
-    l_debug "wait for it to be ready"
-    wovdb_Docker_Postgres_Wait   # wait until server ready tho since just started
+    if [ $retval -eq 2 ]; then
+      l_debug "wait for it to be ready"
+      wovdb_Docker_Postgres_Wait   # wait until server ready tho since just started
+      if [ $Re -ne 0 ]; then retval=1; fi
+    fi
 
 
     if [ $retval -eq 2 ]; then
