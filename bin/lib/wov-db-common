@@ -5,6 +5,7 @@ WOV_dbvars=( 'subhost' 'endpoint' 'password' 'username' 'version'  \
   'instanceAvailabilityZone' 'instanceAvailabilityZoneAlt' 'instance_class' \
   'instance_storage' )
 
+WOV_dboverride=( 'DATABASE' 'USERNAME' 'PASSWORD' )
 
 . wov-db-common-docker
 . wov-db-common-helm
@@ -133,6 +134,17 @@ function doDBConfigReadAndValidate()
     if [ ${retval} -eq 1 ]; then
       l_error "Failed to provide all Wov Database configuration values."
     else retval=0; fi
+
+    # override some variables via command line args
+    for v in ${WOV_dboverride[@]}; do
+      # l_ "override test of '${v}'."
+      vn="DB_${v}"
+      # l_debug "vn ${vn} is ${!vn}"
+      if [ "${!vn}" != "" ]; then
+        eval "DB_${v,,}=${!vn}"
+        # l_debug "DB_${v,,}=${!vn}"
+      fi
+    done
   fi
 
   return $retval

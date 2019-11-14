@@ -17,16 +17,18 @@ export PATH=$PATH:/usr/local/bin/wovlib
   #tr_protectfile "wovtools/config.json" 
   #tr_protectfile "wovtools/myconfig.json"
   tr_run 'set origin to here' 'wov-env --set-origin here'
-  rm -Rf wovtools/secrets/A*db.json
-  rm -Rf wovtools/db/archive/A*
+
+  tcWipeWovDB Adb
+#  rm -Rf wovtools/secrets/A*db.json
+#  rm -Rf wovtools/db/archive/A*
   # tcUseTestingContext
 
-  tr_run "remove entries from config for database in dev" \
-    "jq -r 'del( .secrets.dev[] | select( . == \"Adb.json\" or . == \"Adb_dev.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
-  tr_run "remove entries from config for database in prod" \
-    "jq -r 'del( .secrets.prod[] | select( . == \"Adb.json\" or . == \"Adb_prod.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
-  tr_run "remove entries from myconfig for database in testme" \
-    "jq -r 'del( .secrets.${TESTME}[] | select( . == \"Adb.json\" or . == \"Adb_${TESTME}.json\" ) )' wovtools/myconfig.json > wovtools/myconfig.json.1 ; mv wovtools/myconfig.json.1 wovtools/myconfig.json"
+#  tr_run "remove entries from config for database in dev" \
+#    "jq -r 'del( .secrets.dev[] | select( . == \"Adb.json\" or . == \"Adb_dev.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
+#  tr_run "remove entries from config for database in prod" \
+#    "jq -r 'del( .secrets.prod[] | select( . == \"Adb.json\" or . == \"Adb_prod.json\" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json"
+#  tr_run "remove entries from myconfig for database in testme" \
+#    "jq -r 'del( .secrets.${TESTME}[] | select( . == \"Adb.json\" or . == \"Adb_${TESTME}.json\" ) )' wovtools/myconfig.json > wovtools/myconfig.json.1 ; mv wovtools/myconfig.json.1 wovtools/myconfig.json"
 
   # tr_run "now it is: " "cat wovtools/config.json"
   tr_test "ensure wovdb not in dev secrets"  "jq -r '.secrets.dev[]' wovtools/config.json | grep Adb.json " 1 -1 
@@ -60,7 +62,7 @@ export PATH=$PATH:/usr/local/bin/wovlib
   # cat wovtools/myconfig.json
   # exit 1
   tr_test 'create a WovDataBase' "wov-init-wovdb --context \"${USECLUSTER}-${PROJ}-${TESTME}\" Adb" 0 -1 
-   tr_test "DELME wovtools/myconfig has .secrets.testme is only entry in secrets" \
+  tr_test "DELME wovtools/myconfig has .secrets.testme is only entry in secrets" \
     "cat wovtools/myconfig.json | jq -r '.secrets | length'" 0 1 1
 
   wov-env -e

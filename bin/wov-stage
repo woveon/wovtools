@@ -23,6 +23,7 @@ Switch stages. This involves changing the git branch and Kubernetes context. Fai
   --list-stages     : list stages
   --list-namespaces : list namespaces
   --test-stage X    : tests that a stage X is ready for development
+  -kc               : select Kubernetes context
   -s|--set X        : sets the stage to X (NOTE: -s assumed if no other command, so just X is enough)
   -q/-v : quiet/verbose
 
@@ -280,6 +281,43 @@ function doSetStage()
   return $retval
 }
 
+function doSelectKubernetesContext()
+{
+  local Re=
+  local cluster="${WOV_CLUSTER}"
+#  local clusters=()
+#
+#  if [ "${WOV_CLUSTER}" != "" ]; then clusters+=( "${WOV_CLUSTER}" ); fi
+#  if [ ${#clusters} -eq 0 ]; then
+#    local result=$(kops get clusters | tail -n +2) ; Re=$?
+#    if [ $Re -eq 0 ]; then
+#      clusters=( $result )
+#    fi
+#  fi
+#
+#  l_ "cluster ${clusters[@]}"
+
+  local contexts=$(kubectl config view -o json | jq -r '.contexts[] | [ .name,  .context.cluster, .context.namespace ] | @tsv' | grep "${cluster}" | awk '{print $1 " NS:" $3 }')
+
+#  echo "contexts : '${contexts}'"
+
+  local OPTIONS=""
+  for c in ${contexts[@]}; do
+#    echo "c : $c"
+    OPTIONS+=" ${c}"
+  done
+#  echo "options : '${OPTIONS}'"
+
+  exec 3>&1; result=$(dialog --keep-tite --title "Contexts for Cluster ${WOV_CLUSTER}" --menu 'Select a context:' 15 80 6 ${OPTIONS} 2>&1 1>&3); ret=$? ; exec 3>&-
+#  echo "result ($ret): ${result} "
+  if [ "$ret" == "0" ]; then
+    l_verbose "... setting context to ${result} : ${WOV_CONTEXT} -> ${result}"
+    kubectl config use-context "${result}"
+  else
+    exit $ret
+  fi
+}
+
 function doSelectStage()
 {
   local STAGES=$(cStage_List "${WOV_CLUSTER}" "${WOV_PROJECT}") ; Re=$?
@@ -342,6 +380,12 @@ while [[ $1 =~ ^- ]]; do
     shift
     doSetStage $1
     shift
+    WOV_DODEFAULTCOMMAND=0
+
+  elif [ "$1" == "-kc" ]; then
+    shift
+    l_ "call doSelectKubernetesContext"
+    doSelectKubernetesContext
     WOV_DODEFAULTCOMMAND=0
 
   elif [ "$1" == "-f" ]; then

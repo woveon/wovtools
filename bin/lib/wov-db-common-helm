@@ -111,6 +111,10 @@ function wovdb_Helm_Postgres_Wait()
       retval=0
       l_ "...success"
       break;
+    elif [ ${retval} -eq 100 ]; then
+      retval=1
+      l_ "...bad password"
+      break;
     fi
   done
 
@@ -122,7 +126,7 @@ function wovdb_Helm_Postgres_Wait()
 
 
 # --------------------------------------------------------------------- 
-# Return: 0 on success/found, 1 on not running
+# Return: 0 on success/found, 1 on not running, 100 bad password
 # --------------------------------------------------------------------- 
 function wovdb_Helm_Postgres_Test()
 {
@@ -144,7 +148,8 @@ function wovdb_Helm_Postgres_Test()
   if [ $retval -eq 2 ]; then
     l_verbose "  ...testing db connection"
     kubectl exec -it "${DB_name,,}-${WOV_STAGE}-postgresql-0" -- /bin/bash -c "PGPASSWORD=${DB_password} psql -h ${DB_endpoint} -U ${DB_username} -d ${DB_database,,} -c \"${cmd}\"" > /dev/null ; Re=$?
-    if [ $Re -ne 0 ]; then retval=1; fi
+    if [ $Re -eq 2 ]; then l_error "Bad password."; retval=100;
+    elif [ $Re -ne 0 ]; then retval=1; fi
   fi
 
   if [ $retval -eq 2 ]; then retval=0; fi

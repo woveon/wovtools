@@ -65,3 +65,34 @@ EOF
   fi
   kubectl config use-context "${USECLUSTER}-${TEST}-${TESTME}"
 }
+
+
+# --------------------------------------------------------------------- 
+# Completely wipes a WovDB
+# --------------------------------------------------------------------- 
+function tcWipeWovDB()
+{
+  local DB_name=$1
+
+  tr_h1 "tcWipeWovDB"
+
+  tr_comment "test wov-db Adb existence"
+  wov-db --context "${USECLUSTER}-${TEST}-${TESTME}"  ${DB_name} --test 2> /dev/null
+  if [ $? -eq 0 ]; then
+    tr_comment "...stopping WovDB ${DB_name} in '${USECLUSTER}-${TEST}-${TESTME}'"
+    wov-db --context "${USECLUSTER}-${TEST}-${TESTME}" ${DB_name} --stop
+  else
+    tr_comment "...no currently running Adb in '${USECLUSTER}-${TEST}-${TESTME}'"
+  fi
+
+  rm -Rf wovtools/secrets/${DB_name}_*.json
+  rm -Rf wovtools/db/archive/${DB_name}
+  rm -Rf wovtools/db/archive/${DB_name}.json
+  rm -Rf wovtools/db/${DB_name}.deltas
+
+  # remove entries from config for database in dev"
+  jq -r 'del( .secrets.dev[] | select( . == "'${DB_name}'.json" or . == "'${DB_name}'_dev.json" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json
+  jq -r 'del( .secrets.prod[] | select( . == "'${DB_name}'.json" or . == "'${DB_name}'_prod.json" ) )' wovtools/config.json > wovtools/config.json.1 ; mv wovtools/config.json.1 wovtools/config.json
+  jq -r 'del( .secrets.'${TESTME}'[] | select( . == "'${DB_name}'.json" or . == "'${DB_name}"_${TESTME}"'.json" ) )' wovtools/myconfig.json > wovtools/myconfig.json.1 ; mv wovtools/myconfig.json.1 wovtools/myconfig.json
+}
+

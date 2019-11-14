@@ -16,12 +16,13 @@ tr_protectfile "wovtools/config.json"
 tr_protectfile "wovtools/myconfig.json"
 
 
-tr_run  "rm Adb files"   "rm -Rf wovtools/db/archive/Adb"
-tr_run  "rm Adb files"   "rm -Rf wovtools/db/Adb.deltas"
-tr_run  "rm Adb secrets" "rm -Rf wovtools/secrets/Adb*.json"
+
+tcWipeWovDB Adb
+#tr_run  "rm Adb files"   "rm -Rf wovtools/db/archive/Adb"
+#tr_run  "rm Adb files"   "rm -Rf wovtools/db/Adb.deltas"
+#tr_run  "rm Adb secrets" "rm -Rf wovtools/secrets/Adb*.json"
 tr_test 'create a WovDataBase to start' "wov-init-wovdb --context \"${USECLUSTER}-${PROJ}-${TESTME}\" Adb" 0 -1
 
-tr_tests_off
 
 {
   tr_section 'non-database-specific'
@@ -60,6 +61,8 @@ tr_tests_off
   tr_run "make sure docker container is not running" "docker stop postgres-here"
 
   tr_test 'start a HERE WovDB' "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} Adb --start" 0 -1
+
+  tr_test "version test" "wov-db --context ${USECLUSTER}-${PROJ}-${TESTME} Adb --wdbver" 0 -1
 
   tr_test_skip 'wait for WovDB' "wov-db --context ${USECLUSTER}-test1-${TESTME} Adb --wait " 0 -1
 
@@ -187,10 +190,24 @@ tr_tests_on
 {
   tr_section "wov-db-helm"
 
+  # this will detele and return when stateful set is gone, but pod will still exist and it retains its control on PVC
   tr_run  "turn off" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --stop"
-  tr_run  "delete any persistent data since passwords will be different now" "kubectl delete pvc data-${DB_name,,}-${TESTME}-postgresql-0"
 
-  tr_test "test" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --test" 1 -1
+  # deleting this now, will retain it until pod is stopped
+  tr_run  "delete any persistent data since passwords will be different now" \
+    "kubectl delete pvc --selector=release=\"adb-${TESTME}\""
+  while [ true ]; do
+    echo "...looking for pvc adb-${TESTME}"
+    kubectl get pvc --selector="release=adb-${TESTME}" 2>&1 | grep "^No resources found in" > /dev/null ; Re=$?
+    if [ $Re -eq 0 ]; then echo "...no more resources"; break; else echo "...waiting for pvc to delete"; sleep 1; fi
+  done
+
+  tr_run  "show namespace" "wov-ns"
+  tr_run  "show pv, which should be going away" "kubectl get pv"
+  tr_run  "show pvc" "kubectl describe pvc data-adb-${TESTME}-postgresql-0"
+  tr_run  "show pv again, which should be going away" "kubectl get pv"
+
+  tr_test "test" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --test" 1 1 "Not running"
 
   tr_test "info" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --info" 0 -1
 

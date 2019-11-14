@@ -27,10 +27,10 @@ function wovdb_COMMON_Postgres_Init()
     R=$(eval "${ev} \"${cmd1}\"") ; Re=$?
     if [ $Re -ne 0 ]; then retval=1; l_error "Failed to connect to db";
     else 
-      l_ "R: $R"
+      # l_ "R: $R"
       echo $R | grep -q "(1 row)"
       Re=$?
-      l_ "Re: $Re"
+      # l_ "Re: $Re"
       if [ $Re -ne 0 ]; then
         l_verbose "Create wovtools database"
         eval "${ev} \"${cmd2}\"" ; Re=$?

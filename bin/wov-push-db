@@ -26,7 +26,7 @@ By default, checks all database delta files that exist.
 Switches:
   --checksum
   --skip-git-checks  : ignores unchecked git changes of secrets and code (dev and prod stages will override this). Does not skip archive checks.
-  --snapshot WOVDB SNAPSHOT : a snapshot to use for this push, for this Wov DB (i.e. a new checkpoint, not a delta)
+  --snapshot SNAPSHOT DBNAME : a snapshot to use for this push, for this Wov DB (i.e. a new checkpoint, not a delta)
   --check|-pc|--push-check|--any-push-blockage : checks if the database changes are checked in for pver, and ready to push to archive
   -h : this help
   -q/-v : quiet/verbose
@@ -50,8 +50,8 @@ function fFailedDBConnection()
   local RET=$1
   if [ "$2" != "" ]; then
     printf "  > Is db inited?\n"
-    printf "    - init>        'wov-db ${2} --wdb-init'\n"   
-    printf "    - get version> 'wov-db $2 --wdb-ver'\n"
+    printf "    - init>        'wov-db ${2} --init'\n"   
+    printf "    - get version> 'wov-db $2 --wdbver'\n"
     printf "\n"
     printf "\n"
   fi
@@ -106,7 +106,7 @@ function fFailedDBConnection()
 function doGetDBPVER()
 {
   local retval=1
-  R=$(wov-db $1 --wdb-ver 2>&1) ; Re=$?
+  R=$(wov-db $1 --wdbver 2>&1) ; Re=$?
   if [ $Re -eq 0 ]; then
     local DB_PVER=`echo ${R} | cut -d'|' -f5`
     retval=0;
@@ -180,7 +180,7 @@ function doPushCheck()
   if [ "$retval" == "0" ]; then
     if [ $DOECHO -ge 1 ]; then printf "... retrieve db hash.\n"; fi
     #DB_HASH=$(doHashDBSchema $1) ; local A=$?
-    local DB_HASH=$(wov-db $1 --schema-hash) ; Re=$?
+    local DB_HASH=$(wov-db $1 --schemahash) ; Re=$?
     if [ $Re -ne 0 ]; then
       echo "DB_HASH result ${Re} : '${DB_HASH}'"
       fFailedDBConnection 2 $1
@@ -269,7 +269,7 @@ function doPushCheck()
         printf "FAILED: if you have db schema changes, you need to have deltas in archive to account.\n"
         printf "\n  run: 'wov-push-db -v --any-push-blockage' for more info.\n"
         printf "\nTo get current schema of database X: 'wov-db DBNAME --schema' (ex. apidb)\n"
-        printf "To diff schema to old version X : 'wov-db DBNAME --schema-diff X'\n"
+        printf "To diff schema to old version X : 'wov-db DBNAME --schemadiff X'\n"
   #    elif [ "${chk_4}" == "T" ]; then # 1 is false then
   #      printf "FAILED: if you have deltas in archive, you need to have db schema changes to account.\n"
       fi
@@ -291,61 +291,46 @@ function doPushCheck()
   return $retval
 }
 
+
+# --------------------------------------------------------------------- 
+# Commit each database
+# --------------------------------------------------------------------- 
 function doCommit()
 {
-  # - 1 ----------------------------------------------------------------- 
-  # ensure main git repo checked in
-  # - this ensure that the code checked in (i.e. pver) is matched to this 
-  #   database using that pver.
-  R=$(wov-git-check ${WOV_BASEDIR})
-  if [ "$?" != "0" ] && [ $SKIPGITCHECKS -eq 0 ]; then
-    printf "\n\nERROR: check in main git repo, then continue with commit.\n"
-    fFailedDBConnection 1
-    exit 1
-  fi
+  local retval=2
 
-  # Ensure cache dir exists for these
-  mkdir -p ${WOV_BASEDIR}/wovtools/cache/db
-
-  # --------------------------------------------------------------------- 
-  # Commit each database
-  # --------------------------------------------------------------------- 
   for i in "${DATABASES[@]}"; do
     if [ -e ${WOV_BASEDIR}/wovtools/db/$i.deltas ]; then
       doCommitDB $i
+      if [ $? -ne 0 ]; then l_warn "Failed committing WovDB '${i}'."; retval=1; fi
     else
-      if [ "${DOECHO}" -ge 2 ]; then
-        echo "  ... no deltas for : ${i} : ok"
-      fi
+      l_verbose "  ... no deltas for : ${i} : ok"
     fi
   done
+
+  if [ $retval -eq 2 ]; then retval=0; fi
+
+  return $retval
 }
 
 
-# Add an entry to the deltas so it gets logged and then update the log 
-# $1 - dbname
-# $2 - snapshot
-function doSetSnapshot()
-{
-  DB_snapshot="${2}"
-  echo "# Snapshot : ${DB_snapshot}" >> "${WOV_BASEDIR}/wovtools/db/${1}.deltas"
-  # wov-env -e
-  # l__ "doUpdateDBArchiveLog with ${WOV_PVER} ${WOV_SVER}"
-  doUpdateDBArchiveLog "$1" "${WOV_PVER}" "${WOV_SVER}" "${2}"
-}
-
-
+# --------------------------------------------------------------------- 
+# Adds an entry to the wovtools database for the database instance
 # $1 - dbname
 # $2 - PVER
 # $3 - SVER
 # $4 - DB_snapshot
+# --------------------------------------------------------------------- 
 function doUpdateDBArchiveLog()
 {
-  echo "  ... update Database Archive logs :$1 $2 $3 $4"
-  R=$(wov-db $1 -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( '$1', '${WOV_VERSION}', '${2}_${3}', ${2}, ${3}, '${4}' );")
+  local DB_name=$1
+
+  l_ "  ... update Database Archive logs : ${DB_name} $2 $3 $4"
+  if [ "${DB_name}" == "" ]; then l_error "No WovDB name provided."; fi
+  R=$(wov-db $DB_name -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( '${DB_name}', '${WOV_VERSION}', '${2}_${3}', ${2}, ${3}, '${4}' );")
   if [ "$?" != "0" ]; then
     l_warn "${R}"
-    l_error "Failed updating archive database(${1}) ${2}_${3} snapshot(${4})."
+    l_error "Failed updating archive database(${DB_name}) ${2}_${3} snapshot(${4})."
     fFailedDBConnection 3 $1
   fi
 }
@@ -354,106 +339,114 @@ function doUpdateDBArchiveLog()
 # - 2-4 --------------------------------------------------------------- 
 # TODO: make these transactional, since if these don't complete, system 
 #       can be in a bad state
+#
+# $1 - WovDB name
+# $2 - Snapshot
+#
 # returns: 
 #   0 on success
 #   1-not inited
 #   2-database has no parent
 #   3-could not update database with this commit
 #   4-git issues in Database Archive
+
 # --------------------------------------------------------------------- 
 function doCommitDB()
 {
-  local retval=0
+  local retval=2
   local Re=
+  local R=
+  local DB_name=$1
+  local DB_snapshot=$2
 
-#  echo "commit db $1"
+  l_ "commit '${DN_name}'  snapshot:'${DB_snapshot}'"
 
-  # check deltas exist
-  deltafile="${WOV_BASEDIR}/wovtools/db/$1.deltas"
-  l_verbose "  ...deltafile : ${deltafile}"
-  if [ ! -e $deltafile ]; then
-    l_error "Can't find deltas file: 'wovtools/db/$1.deltas'."
-    fFailedDBConnection 1 $1
+  if [ "$DB_name" == "" ]; then l_error "no WovDB name given"; retval=1; fi
+
+  # - 1 -----------------------------------------------------------------
+  l_debug "  ...ensure main git repo checked in"
+  # - this ensure that the code checked in (i.e. pver) is matched to this
+  #   database using that pver.
+  R=$(wov-git-check ${WOV_BASEDIR})
+  if [ "$?" != "0" ] && [ $SKIPGITCHECKS -eq 0 ]; then
+    printf "\n\nERROR: check in main git repo, then continue with commit.\n"
+    fFailedDBConnection 1
+    retval=$?
   fi
 
-  # make sure directory exists for database
-  mkdir -p "${WOV_BASEDIR}/wovtools/db/archive/$1"
-
-  # get current db wovtools pver
-  DB_ENTRY=$(doGetDBLastLogEntry $1) ; Re=$?
-  l_verbose "  ...DB_ENTRY ${DB_ENTRY}"
-  if [ $Re -ne 0 ]; then
-    l_error "Database not inited."
-    fFailedDBConnection 1 $1
-  fi
-  l_ "\nDB_ENTRY '${DB_ENTRY}' DB_snapshot '${DB_snapshot}'"
-
-  # should have been at least a snapshot entry
-  if [ "${DB_ENTRY}" == "" ] && [ "${DB_snapshot}" == "" ]; then
-    l_error "Need to provide a snapshot for first commit of database. Use wov-db --snapshot X. ex. rds:wov-aws-va-ant-db-alywandev-2017-07-17-07-20."
-    fFailedDBConnection 3 $1
-    retval=3
+  # - 2 -----------------------------------------------------------------
+  if [ $retval -eq 2 ]; then
+    l_debug "  ...ensure directories exist"
+    # Ensure cache dir exists for these
+    mkdir -p ${WOV_BASEDIR}/wovtools/cache/db
+    # make sure directory exists for database
+    mkdir -p "${WOV_BASEDIR}/wovtools/db/archive/${DB_name}"
   fi
 
-  # look for existing data
-#  DB_ENTRY=( "${DB_ENTRY//|/ }" )
-#  printf "DB_ENTRY array '${DB_ENTRY[@]}'\n"
-  # DB_PVER="${DB_ENTRY[4]}"
-#  DB_snapshot="${DB_ENTRY[6]}"
+  # - 3 -----------------------------------------------------------------
+  if [ $retval -eq 2 ]; then
+    l_debug "  ...check deltas exist"
+    deltafile="${WOV_BASEDIR}/wovtools/db/${DB_name}.deltas"
+    l_verbose "  ...deltafile : ${deltafile}"
+    if [ ! -e $deltafile ]; then
+      l_error "Can't find deltas file: 'wovtools/db/${DB_name}.deltas'."
+      fFailedDBConnection 1 "${DB_name}"
+      retval=$?
+    fi
+  fi
 
-#    if [ "${DB_SNAPSHOT}" == "" ]; then
-#      l_error "ERROR: need to provide a snapshot for first commit of database. Use --snapshot X. ex. rds:wov-aws-va-ant-db-alywandev-2017-07-17-07-20."
-#      fFailedDBConnection 3 $1
-#    fi
-#    DB_PVER=${WOV_PVER}
-#    DB_snapshot="${DB_SNAPSHOT}"
-#  else
-#    DB_snapshot="${DB_SNAPSHOT}"
-#    #OLDIFS=$IFS
-#    #IFS='|'
-#    #DB_ENTRY=( $(echo "${DB_ENTRY[@]}") )
-#    #IFS=$OLDIFS
-#    DB_ENTRY=( "${DB_ENTRY//|/ }" )
-#    printf "DB_ENTRY array '${DB_ENTRY[@]}'\n"
-#    # DB_PVER="$( echo -e "${DB_ENTRY[4]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-#    # DB_snapshot="$( echo -e "${DB_ENTRY[6]}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-#    DB_PVER="${DB_ENTRY[4]}"
-#    DB_snapshot="${DB_ENTRY[6]}"
-#    if [ "${DB_SNAPSHOT}" != "" ]; then
-#      l_warn "  ... overwriting existing snapshot with '${DB_SNAPSHOT}'"
-#      DB_snapshot="${DB_SNAPSHOT}"
-#    fi
-#  fi
-#  echo "Using DB_snapshot ${DB_snapshot}"
+  # - 4 -----------------------------------------------------------------
+  if [ $retval -eq 2 ]; then
+    l_debug "  ...get current db wovtools pver"
+    DB_ENTRY=$(doGetDBLastLogEntry ${DB_name}) ; Re=$?
+    l_verbose "  ...DB_ENTRY ${DB_ENTRY}"
+    if [ $Re -ne 0 ]; then
+      l_error "Database not inited."
+      fFailedDBConnection 1 ${DB_name}
+      retval=$?
+    else
+      l_ "\nDB_ENTRY '${DB_ENTRY}' DB_snapshot '${DB_snapshot}'"
 
-  if [ $retval -eq 0 ]; then
+      l_debug "  ...if first entry, should have a snapshot entry"
+      if [ "${DB_ENTRY}" == "" ] && [ "${DB_snapshot}" == "" ]; then
+        l_error "Need to provide a snapshot for first commit of database. Use wov-db --snapshot X DBNAME. ex. rds:wov-aws-va-ant-db-alywandev-2017-07-17-07-20."
+        fFailedDBConnection 3 ${DB_name}
+        retval=3
+      fi
+    fi
+  fi
 
-    # validate json file first
-    R=$(cat ${WOV_BASEDIR}/wovtools/db/archive/$1.json | jq empty 2>&1) ; Re=$?
+  # - 5 -----------------------------------------------------------------
+  if [ $retval -eq 2 ]; then
+    l_debug "  ...validate json file"
+    R=$(cat ${WOV_BASEDIR}/wovtools/db/archive/${DB_name}.json | jq empty 2>&1) ; Re=$?
     if [ $Re != 0 ]; then
       l_ "${R}"
-      l_error "wovtools/db/archive/$1.json file is not valid JSON. Exiting."
-      exit 3
+      l_error "wovtools/db/archive/${DB_name}.json file is not valid JSON. Exiting."
+      retval=3
     fi
+  fi
 
-    # get current db checksum
-    #CHKSUM=$(doHashDBSchema $1)
-    local CHKSUM=$(wov-db $1 --schema-hash) ; Re=$?
+  # - 6 -----------------------------------------------------------------
+  if [ $retval -eq 2 ]; then
+    l_debug "  ...get current db checksum"
+    local CHKSUM=$(wov-db ${DB_name} --schemahash) ; Re=$?
     if [ $Re -ne 0 ]; then l_error "Failed getting database hash."; exit $Re; fi
-    DB_PVER=$(doGetDBPVER $1)
+    DB_PVER=$(doGetDBPVER ${DB_name})
     if [ "$?" != "0" ]; then
       l_error "failed connecting to db."
-      fFailedDBConnection 1 $1
+      fFailedDBConnection 1 ${DB_name}
+      retval=$?
     fi
-
     l_ "Chksum : ${CHKSUM}  DBPVER: ${DB_PVER}  PVER: ${WOV_PVER}"
+  fi
 
-    # - 2 ----------------------------------------------------------------- 
-    # --------------------------------------------------------------------- 
+  # - 7 ----------------------------------------------------------------- 
+  if [ $retval -eq 2 ]; then
     l_ "  ... move deltas into archive"
 
     # append delta to file
-    appendfile=${WOV_BASEDIR}/wovtools/db/archive/$1/${WOV_PVER}.deltas
+    appendfile=${WOV_BASEDIR}/wovtools/db/archive/${DB_name}/${WOV_PVER}.deltas
     cat <<EOF >> ${appendfile}
 
 # - wov-push-db -------------------------------------------------------
@@ -464,27 +457,28 @@ function doCommitDB()
 EOF
     cat ${deltafile} >> ${appendfile}
 
-    l_ "  ... cache deltas locally (in case of screw up): wovtools/cache/db/$1.${WOV_PVER}.$(date +%s).deltas"
-    mv ${deltafile} ${WOV_BASEDIR}/wovtools/cache/db/$1.${WOV_PVER}.$(date +%s).deltas
+    l_ "  ... cache deltas locally (in case of screw up): wovtools/cache/db/${DB_name}.${WOV_PVER}.$(date +%s).deltas"
+    mv ${deltafile} ${WOV_BASEDIR}/wovtools/cache/db/${DB_name}.${WOV_PVER}.$(date +%s).deltas
+  fi
 
-
-    # - 2.1 save schema ---------------------------------------------------
-    # --------------------------------------------------------------------- 
-    mkdir -p ${WOV_BASEDIR}/wovtools/db/archive/$1/schemas
+  # - 8 - save schema ---------------------------------------------------
+  if [ $retval -eq 2 ]; then
+    mkdir -p "${WOV_BASEDIR}/wovtools/db/archive/${DB_name}/schemas"
     wov-db ${1} --schema > ${WOV_BASEDIR}/wovtools/db/archive/$1/schemas/${WOV_PVER}.schema
-    r=$?
-    if [ "$r" != "0" ]; then
-      printf "\n\nERROR: failed to write schemas to regsitry.\n\n"
-      fFailedDBConnection 1 $1
+    Re=$?
+    if [ ${Re} -ne 0 ]; then
+      l_error "Failed to write schemas to regsitry.\n\n"
+      fFailedDBConnection 1 $DB_name
+      retval=$?
     fi
+  fi
 
-
-    # - 3. update db archive entry for this pver -------------------------
-    # --------------------------------------------------------------------- 
-    echo "  ... updating db archive entry for this pver"
-    if [ ! -e ${WOV_BASEDIR}/wovtools/db/archive/$1.json ]; then
-      echo "    ... building archive for $1."
-      cat <<EOF > ${WOV_BASEDIR}/wovtools/db/archive/$1.json
+  # - 9. update db local archive entry for this pver -------------------------
+  if [ $retval -eq 2 ]; then
+    l_ "  ...updating db archive entry for this pver"
+    if [ ! -e "${WOV_BASEDIR}/wovtools/db/archive/${DB_name}.json" ]; then
+      l_ "    ... building initial archive for $DB_name."
+      cat <<EOF > "${WOV_BASEDIR}/wovtools/db/archive/${DB_name}.json"
 {
   "wovtoolsversion": "$WOV_VERSION",
   "versions"       : {}
@@ -492,66 +486,79 @@ EOF
 EOF
     fi
 
-
-    # append this entry
+    l_debug "  ...append this entry"
     jq " .versions.\"${WOV_PVER}\"={ \"checksum\": \"${CHKSUM}\", \"parent\": { \"type\": \"pver\", \"pver\": \"${DB_PVER}\" } }" \
-       ${WOV_BASEDIR}/wovtools/db/archive/$1.json > ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/archive/$1.json && rm ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$
-    #echo "DBENTRY snapshot : ${DB_snapshot}" 1>&2
-    if [ "$DB_snapshot" != "" ]; then
-      echo "    ... append snapshot : ${DB_snapshot}" 1>&2
-      jq " .versions.\"${WOV_PVER}\".parent.snapshot=\"${DB_snapshot}\"" \
-       ${WOV_BASEDIR}/wovtools/db/archive/$1.json > ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$ ${WOV_BASEDIR}/wovtools/db/archive/$1.json && rm ${WOV_BASEDIR}/wovtools/db/archive/.$1.json.$$
+       ${WOV_BASEDIR}/wovtools/db/archive/${DB_name}.json > ${WOV_BASEDIR}/wovtools/db/archive/.${DB_name}.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/archive/.${DB_name}.json.$$ ${WOV_BASEDIR}/wovtools/db/archive/${DB_name}.json && rm ${WOV_BASEDIR}/wovtools/db/archive/.${DB_name}.json.$$  ; Re=$?
+    if [ $Re -ne 0 ]; then l_error "Failed appending this WovDB entry to local archive."; retval=2;
+    else
+      #echo "DBENTRY snapshot : ${DB_snapshot}" 1>&2
+      if [ "$DB_snapshot" != "" ]; then
+        echo "    ... append snapshot : ${DB_snapshot}" 1>&2
+        jq " .versions.\"${WOV_PVER}\".parent.snapshot=\"${DB_snapshot}\"" \
+          ${WOV_BASEDIR}/wovtools/db/archive/${DB_name}.json > ${WOV_BASEDIR}/wovtools/db/archive/.${DB_name}.json.$$ && cp ${WOV_BASEDIR}/wovtools/db/archive/.${DB_name}.json.$$ ${WOV_BASEDIR}/wovtools/db/archive/${DB_name}.json && rm ${WOV_BASEDIR}/wovtools/db/archive/.${DB_name}.json.$$ ; Re=$?
+        if [ $Re -ne 0 ]; then l_error "Failed appending snapshot to this WovDB entry in local archive."; retval=2; fi
+      fi
     fi
+  fi
 
 
-    # - 4. update archive database log pver number, snapshot, checksum ----
-    # --------------------------------------------------------------------- 
-#    echo "  ... update archive database logs"
-#    R=$(wov-db $1 -q -d wovtools -c "INSERT INTO logs (database, wovtoolsver, label, pver, sver, snapshot ) VALUES ( '$1', '${WOV_VERSION}', '${WOV_PVER}_${WOV_SVER}', ${WOV_PVER}, ${WOV_SVER}, '${DB_snapshot}' );")
-#    if [ "$?" != "0" ]; then
-#      printf "${R}"
-#      printf "\n\nERROR: failed updating archive database pver number with checksum.\n"
-#      fFailedDBConnection 3 $1
-#    fi
-    l_ "doUpdateDBArchiveLog with ${WOV_PVER} ${WOV_SVER}"
-    doUpdateDBArchiveLog "${1}" ${WOV_PVER} ${WOV_SVER} "${DB_snapshot}"
+  # - 10 ----------------------------------------------------------------
+  if [ $retval -eq 2 ]; then
+    l_ "update DB Local Archive entry for ${DB_name} as: ${WOV_PVER}_${WOV_SVER} ${DB_snapshot} "
+    doUpdateDBArchiveLog "${DB_name}" ${WOV_PVER} ${WOV_SVER} "${DB_snapshot}"
+  fi
 
-    # - 5. push db git repo
 
-    if [ ${DOECHO} -ge 1 ]; then echo "  ... commit changes to Database Archive (git repo)"; fi
-    if [ ${DOECHO} -ge 1 ]; then echo "    ... add ${1}/schemas/${WOV_PVER}.schema"; fi
-    local R=$(cd ${WOV_BASEDIR}/wovtools/db/archive ; git add ${1}/schemas/${WOV_PVER}.schema) ; Re=$?
-    if [ $Re != 0 ]; then
-      echo "ERROR: failed to add schemas file : ${1}/schemas/${WOV_PVER}.schema"
-      echo "${R}"
+  # - 11 - Git ----------------------------------------------------------
+  if [ $retval -eq 2 ]; then
+    l_debug "  ... push db git repo"
+    l_ "  ... commit changes to Database Archive (git repo)"
+
+    l_verbose "    ... git add ${DB_name}/schemas/${WOV_PVER}.schema"
+    R=$(cd ${WOV_BASEDIR}/wovtools/db/archive ; git add ${DB_name}/schemas/${WOV_PVER}.schema) ; Re=$?
+    if [ $Re -ne 0 ]; then
+      l_ "${R}"
+      l_error "Failed to add schemas file : wovtools/db/archive/${DB_name}/schemas/${WOV_PVER}.schema"
       fFailedDBConnection 4 $1
+      retval=$?
     fi
+  fi
 
-    if [ ${DOECHO} -ge 1 ]; then echo "    ... add ${1}/${WOV_PVER}.deltas"; fi
-    local R=$(cd ${WOV_BASEDIR}/wovtools/db/archive ; git add ${1}/${WOV_PVER}.deltas) ; Re=$?
-    if [ $Re != 0 ]; then
-      echo "ERROR: failed to add deltas file : ${1}/${WOV_PVER}.deltas"
-      echo "${R}"
+  # - 11.1 --------------------------------------------------------------
+  if [ $retval -eq 2 ]; then
+    l_verbose "    ... git add ${DB_name}/${WOV_PVER}.deltas"
+    R=$(cd ${WOV_BASEDIR}/wovtools/db/archive ; git add ${DB_name}/${WOV_PVER}.deltas) ; Re=$?
+    if [ $Re -ne 0 ]; then
+      l_ "${R}"
+      l_errro "Failed to add deltas file : ${DB_name}/${WOV_PVER}.deltas"
       fFailedDBConnection 4 $1
+      retval=$?
     fi
+  fi
 
-    if [ ${DOECHO} -ge 1 ]; then echo "    ... git commit Database Archive"; fi
+  # - 11.2 --------------------------------------------------------------
+  if [ $retval -eq 2 ]; then
+    l_verbose "    ... git commit Database Archive"
     git -C ${WOV_BASEDIR}/wovtools/db/archive commit -a -m "Version ${WOV_ME}_${WOV_PVER}" ; Re=$?
-    if [ $Re != 0 ]; then
+    if [ $Re -ne 0 ]; then
       echo "ERROR: failed to commit Database Archive git repo in: ${WOV_BASEDIR}/wovtools/db/archive"
       fFailedDBConnection 4 $1
+      retval=$?
     fi
-
-    if [ ${DOECHO} -ge 1 ]; then echo "    ... git push Database Archive"; fi
-    git -C ${WOV_BASEDIR}/wovtools/db/archive push  > /dev/null; Re=$?
-    if [ $Re != 0 ]; then
-      echo "ERROR: failed to push Database Archive git repo in: ${WOV_BASEDIR}/wovtools/db/archive"
-      fFailedDBConnection 4 $1
-    fi
-
-    if [ ${DOECHO} -ge 1 ]; then echo "    ... git success"; fi
-
   fi
+
+  # - 11.3 --------------------------------------------------------------
+  if [ $retval -eq 2 ]; then
+    l_verbose "    ... git push Database Local Archive"
+    git -C ${WOV_BASEDIR}/wovtools/db/archive push  > /dev/null; Re=$?
+    if [ $Re -ne 0 ]; then
+      l_error "Failed to push Database Archive git repo in: ${WOV_BASEDIR}/wovtools/db/archive"
+      fFailedDBConnection 4 $1
+      retval=$?
+    fi
+  fi
+
+  if [ $retval -eq 2 ]; then retval=0; l_verbose "  ...success"; fi
 
   return $retval
 }
@@ -578,8 +585,9 @@ while [[ $1 =~ ^- ]]; do
 
   elif [ "$1" == "--snapshot" ]; then
     shift
-    doSetSnapshot $1 $2
-    # echo "WovDB $1 SNAPSHOT $2"
+    doCommitDB $2 $1
+    # doSetSnapshot $1 $2
+    # l_debug "SNAPSHOT $1 WOVDB $2"
     shift
     shift
 
@@ -648,7 +656,7 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
       for i in "${DATABASES[@]}"; do
         printf "  ... check db '$i'\n"
         #CHKSUM=$(doHashDBSchema $i)
-        local CHKSUM=$(wov-db $i --schema-hash) ; Re=$?
+        local CHKSUM=$(wov-db $i --schemahash) ; Re=$?
         # printf "    ... CHKSUM ${CHKSUM}\n"
         if [ $Re -ne 0 ]; then exitval=1; fi
         LLE=$(doGetDBLastLogEntry $i)
@@ -671,7 +679,7 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
       exitval=0
       for i in "${DATABASES[@]}"; do
         #CHKSUM=$(doHashDBSchema $i)
-        local CHKSUM=$(wov-db $i --schema-hash) ; Re=$?
+        local CHKSUM=$(wov-db $i --schemahash) ; Re=$?
         if [ $Re -ne 0 ]; then exitval=1; fi
         echo "${CHKSUM} $i"
       done
@@ -679,7 +687,7 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
     elif [ "$DOACTION" == "commit" ]; then
 
       DATABASES=( $(doFindDatabases $*) )
-      #  echo "DATABASES: ${DATABASES[@]}"
+      l_verbose "DATABASES: ${DATABASES[@]}"
       #  if [ "${#DATABASES[@]}" == "0" ]; then
       #    echo "no databases found"
       #  fi

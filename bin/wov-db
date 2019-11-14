@@ -62,15 +62,15 @@ COMMANDS:
   --schema        : return the Wov DB's schema
   --schemahash    : return the Wov DB's schema hash
   --schemadiff v  : compare the wov database's current schema against a past schema version v
+  --wdbver        : returns the current version
 
  WovDB Interal Commands
   --wbd-init      : initializes as a WovDB server ; called automatically in --start
   --wdb-create    : create the database instance in the database server ; called automatically in --start
 
  ?Unimplemented?
-  --wdb-ver       : returns the current version
-  --wdb-log       : returns the log of commits for the database
-  --wdb-edit      : edit the current wov database schema deltas file (i.e. add SQL that you use to change things)
+  --wdblog       : returns the log of commits for the database
+  --wdbedit      : edit the current wov database schema deltas file (i.e. add SQL that you use to change things)
 
  DataSets : non-production data management: stored in wovtools/ds with consts in wovtools/ds/const
   -lds               : list all DataSets
@@ -666,6 +666,7 @@ while [[ $1 =~ ^- ]]; do
   if [ "$1" == "-p" ]; then
     shift
     read DB_PASSWORD
+    doDBConfigReadAndValidate ${WOVDBNAME} ; Re=$?
     shift
 
   elif [ "$1" == "--info" ]; then
@@ -689,9 +690,6 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--test" ]; then
     DB_OP='test'
     shift
-  elif [ "$1" == "--create" ]; then
-    DB_OP='create'
-    shift
   elif [ "$1" == "--connect" ]; then
     DB_OP='connect'
     shift
@@ -701,6 +699,9 @@ while [[ $1 =~ ^- ]]; do
   # ---------------------------------------------------------------------
   elif [ "$1" == "--wdb-init" ]; then
     DB_OP='init'
+    shift
+  elif [ "$1" == "--wdb-create" ]; then
+    DB_OP='create'
     shift
 
   elif [ "$1" == "--wdb-createinstance" ]; then
@@ -725,11 +726,13 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "-U" ]; then
     shift
     DB_USERNAME="$1"
+    doDBConfigReadAndValidate ${WOVDBNAME} ; Re=$?
     shift
 
   elif [ "$1" == "-d" ]; then
     shift
     DB_DATABASE="$1"
+    doDBConfigReadAndValidate ${WOVDBNAME} ; Re=$?
     shift
 
   elif [ "$1" == "-f" ]; then
@@ -766,6 +769,10 @@ while [[ $1 =~ ^- ]]; do
     DB_OP="schemadiff"
     SCHEMADIFFVER=$1
     shift
+
+  elif [ "$1" == "--wdbver" ]; then
+    shift
+    DB_OP="version"
 
   elif [ "$1" == "--ds-schema" ] || [ "$1" == "-ds" ]; then
     shift
@@ -827,10 +834,6 @@ while [[ $1 =~ ^- ]]; do
 #    WOV_DODEFAULTCOMMAND=0
 
 
-  elif [ "$1" == "--wdb-ver" ]; then
-    shift
-    doDBGetVer
-    exit 0
 
   elif [ "$1" == "--wdb-log" ] || [ "$1" == "--wdb-logs" ]; then
     shift
@@ -920,7 +923,8 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
         R=$(type -t "${funcname}") ; Re=$?
         if [ "$R" == "function" ] && [ $Re -eq 0 ]; then
           l_debug "Calling : '${funcname}'."
-          eval "${funcname}" ;  Re=$? ; if [ $Re -eq 0 ]; then exit 0; else exit 1; fi
+          eval "${funcname}" ;  Re=$? # ; if [ $Re -eq 0 ]; then exit 0; else exit 1; fi
+          exit $Re
         else
           l_error "Unknown/Unhandled function '${funcname}'. Tell devs to add it. If you are a dev, stop being lazy."
           exit 1
