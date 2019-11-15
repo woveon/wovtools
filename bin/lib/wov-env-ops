@@ -102,6 +102,18 @@ if [ "${WOV_ENV_COMMONCMDS}" != "1" ]; then
         export WOV_ORIGIN="$1"
         WOV_METAARGS="${WOV_METAARGS} --origin ${1} "
         shift
+      elif [ "$1" == "--external" ]; then
+        shift
+        export WOV_ORIGIN="external"
+        WOV_METAARGS="${WOV_METAARGS} --external "
+      elif [ "$1" == "--internal" ]; then
+        shift
+        export WOV_ORIGIN="internal"
+        WOV_METAARGS="${WOV_METAARGS} --internal "
+      elif [ "$1" == "--here" ]; then
+        shift
+        export WOV_ORIGIN="here"
+        WOV_METAARGS="${WOV_METAARGS} --here "
 
       else
         newparams+=( "$1" )
