@@ -158,7 +158,11 @@ function wovdb_Docker_Postgres_Connect()
   local Re=
   local retval=
 
-  PGPASSWORD=${DB_password} psql -h localhost -U ${DB_username} -p ${DB_extport} "${DB_database}" ; Re=$?
+  if [ "$1" == "test" ]; then
+    PGPASSWORD=${DB_password} pg_isready -h localhost -U ${DB_username} -p ${DB_extport} -d "${DB_database}"  ; Re=$?
+  else
+    PGPASSWORD=${DB_password} psql -h localhost -U ${DB_username} -p ${DB_extport} "${DB_database}" ; Re=$?
+  fi
   if [ $Re -ne 0 ]; then l_error "Failed to connect"; retval=1; else retval=0; fi
  
   return $retval
@@ -193,14 +197,27 @@ function wovdb_Docker_Postgres_File()
 # --------------------------------------------------------------------- 
 function wovdb_Docker_Postgres_Schema()
 {
-  wovdb_COMMON_Postgres_Schema
-  return $?
+  local Re=
+  local retval=1
+
+  l_debug 'wovdb_Docker_Postgres_Schema'
+  PGPASSWORD="${DB_password}" pg_dump -p ${DB_extport} -h "${DB_endpoint}" -U "${DB_username}" -d "${DB_database,,}" -s ; Re=$?
+  if [ $Re -ne 0 ]; then
+    l_error "...failed to connect to WovDB"
+    wovdb_ConnectionIssue "${DB_extport}" "${DB_port}"
+  else
+    retval=0
+  fi
+
+  return $retval
 }
 
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
 function wovdb_Docker_Postgres_Schemahash()
 {
   local Re=
-  wovdb_COMMON_Postgres_Schemahash ; Re=$?
+  wovdb_COMMON_Postgres_Schemahash "Docker" ; Re=$?
   return $Re
 }
 
@@ -240,6 +257,35 @@ function wovdb_Docker_Postgres_Version()
   return $retval
 }
 
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Docker_Postgres_Log()
+{
+  local R=
+  local Re=
+  local retval=2
+
+  R=$(DB_database="wovtools" wovdb_Docker_Postgres_Command "SELECT * from logs order by id DESC limit 1;") ; Re=$?
+  if [ ${Re} -eq 0 ] ; then
+    if [ "${R}" == "" ]; then echo "None";
+    else
+      # trim header and footer from SQL
+      RR=$(echo "${R}" | tail -n +3 | head -n +1 )
+      RR=${RR//|/}
+      # echo "RR: ${RR}"
+      echo "$RR" | grep "(0 rows)" > /dev/null
+      if [ $? -eq 0 ]; then echo "None";
+      else l_ "${RR}"; fi
+    fi
+    retval=0
+  else
+    l_ "${R}"
+    l_error "Failed finding WovDB version."
+  fi
+
+  return $retval
+}
 
 # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ 
 #  DOCKER - POSTGRES

@@ -87,11 +87,39 @@ function wovdb_Helm_Postgres_Start()
 # --------------------------------------------------------------------- 
 function wovdb_Helm_Postgres_Stop()
 {
-  local retval=
+  local retval=2
   local Re=
 
   helm delete --purge "${DB_name,,}-${WOV_STAGE}" ; Re=$?
-  if [ $Re -eq 0 ]; then l_ "  ...stopped database server"; retval=0; else l_error "Failed to stop"; retval=1; fi
+  if [ $Re -eq 0 ]; then l_ "  ...stopped database server"; retval=0; else l_warn "  ...nothing to stop."; retval=1; fi
+
+  return $retval
+}
+
+
+# --------------------------------------------------------------------- 
+# --------------------------------------------------------------------- 
+function wovdb_Helm_Postgres_Stopandpurgedata()
+{
+  local retval=2
+  local Re=
+
+  wovdb_Helm_Postgres_Stop
+
+  if [ $retval -eq 2 ]; then
+    l_debug "  ...purging persistent data."
+    set -x
+    kubectl delete pvc --selector=release=${DB_name,,}-${WOV_STAGE} ; Re=$?
+    if [ $Re -ne 0 ]; then l_warn "No PVC to delete? Ok. Continuing."; fi
+    set +x
+    while [ true ]; do
+      # l_ "  ...looking for pvc adb-${TESTME}"
+      kubectl get pvc --selector=release=${DB_name,,}-${WOV_STAGE} 2>&1 | grep "^No resources found in" > /dev/null ; Re=$?
+      if [ $Re -eq 0 ]; then echo "...no more resources"; break; else l_ "  ...waiting for pvc to delete"; sleep 1; fi
+    done
+  fi
+
+  if [ $retval -eq 2 ]; then retval=0; fi
 
   return $retval
 }
@@ -228,6 +256,104 @@ function wovdb_Helm_Postgres_Command()
 
   return $retval
 }
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function wovdb_Helm_Postgres_Schema()
+{
+  local Re=
+  local retval=1
+
+  l_debug 'wovdb_Helm_Postgres_Schema'
+  kubectl exec -it "${DB_name,,}-${WOV_STAGE}-postgresql-0" -- /bin/bash -c "PGPASSWORD=${DB_password} pg_dump -h ${DB_endpoint} -U ${DB_username} -d ${DB_database,,} -p ${DB_port} -s" ; Re=$?
+  if [ $Re -ne 0 ]; then
+    l_error "...failed to connect to WovDB"
+    wovdb_ConnectionIssue "${DB_extport}" "${DB_port}"
+  else
+    retval=0
+  fi
+
+  return $retval
+}
+
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function wovdb_Helm_Postgres_Schemahash()
+{
+  local Re=
+  wovdb_COMMON_Postgres_Schemahash Helm ; Re=$?
+  return $Re
+}
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function wovdb_Helm_Postgres_Version()
+{
+  TODO
+  local R=
+  local Re=
+  local retval=2
+  #local tmpdb="${DB_database}"
+
+  #DB_database="wovtools"
+  R=$(DB_database="wovtools" wovdb_Helm_Postgres_Command "SELECT pver, sver from logs order by id DESC limit 1;") ; Re=$?
+  #DB_database="${tmpdb}"
+  if [ ${Re} -eq 0 ] ; then
+    if [ "${R}" == "" ]; then echo "None";
+    else
+      #echo "R: ${R}"
+      # trim header and footer from SQL, cut colum dividers, trim whitespace
+      # echo "${R}" | tail -n +3 | head -n +1 | cut -d'|' -f5 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+
+      # trim header and footer from SQL
+      RR=$(echo "${R}" | tail -n +3 | head -n +1 )
+      RR=${RR//|/}
+      # echo "RR: ${RR}"
+      echo "$RR" | grep "(0 rows)" > /dev/null
+      if [ $? -eq 0 ]; then echo "None";
+      else l_ "${RR}"; fi
+    fi
+    retval=0
+  else
+    l_ "${R}"
+    l_error "Failed finding WovDB version."
+  fi
+
+  return $retval
+}
+
+# ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+function wovdb_Helm_Postgres_Log()
+{
+  local R=
+  local Re=
+  local retval=2
+
+  R=$(DB_database="wovtools" wovdb_Helm_Postgres_Command "SELECT * from logs order by id DESC limit 1;") ; Re=$?
+  if [ ${Re} -eq 0 ] ; then
+    if [ "${R}" == "" ]; then echo "None";
+    else
+      # trim header and footer from SQL
+      RR=$(echo "${R}" | tail -n +3 | head -n +1 )
+      RR=${RR//|/}
+      # echo "RR: ${RR}"
+      echo "$RR" | grep "(0 rows)" > /dev/null
+      if [ $? -eq 0 ]; then echo "None";
+      else l_ "${RR}"; fi
+    fi
+    retval=0
+  else
+    l_ "${R}"
+    l_error "Failed finding WovDB version."
+  fi
+
+  return $retval
+}
+
+
 
 # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ 
 #  HELM - POSTGRES

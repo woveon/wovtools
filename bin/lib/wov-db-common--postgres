@@ -15,7 +15,7 @@ function wovdb_COMMON_Postgres_Init()
   local ev="wovdb_${DB_generator^}_Postgres_Command"
   local cmd1="SELECT 1 FROM pg_database WHERE datname = 'wovtools'"
   local cmd2="CREATE DATABASE wovtools"
-  local cmd3="CREATE TABLE IF NOT EXISTS logs (id SERIAL NOT NULL PRIMARY KEY, database varchar, wovtoolsver varchar, label varchar, pver integer, sver integer, snapshot varchar, schema varchar DEFAULT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() );"
+  local cmd3="CREATE TABLE IF NOT EXISTS logs (id SERIAL NOT NULL PRIMARY KEY, database varchar, wovtoolsver varchar, label varchar, pver integer, sver integer, snapshot varchar, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW() );"
 
 
   mkdir -p ${WOV_BASEDIR}/wovtools/db/archive ; Re=$?
@@ -112,35 +112,18 @@ EOF
 
 
 # ---------------------------------------------------------------------
-# ---------------------------------------------------------------------
-function wovdb_COMMON_Postgres_Schema()
-{
-  local Re=
-  local retval=1
-
-  l_debug 'wovdb_COMMON_Postgres_Schema'
-
-  PGPASSWORD="${DB_password}" pg_dump -p ${DB_extport} -h "${DB_endpoint}" -U "${DB_username}" -d "${DB_database,,}" -s ; Re=$?
-  if [ $Re -ne 0 ]; then
-    l_error "...failed to connect to WovDB"
-    wovdb_ConnectionIssue "${DB_extport}" "${DB_port}"
-  else
-    retval=0
-  fi
-
-  return $retval
-}
-
-
-# ---------------------------------------------------------------------
+# $1 - generator name
 # ---------------------------------------------------------------------
 function wovdb_COMMON_Postgres_Schemahash()
 {
   local Re=
   local retval=1
+  local generator="$1"
+
+  if [ "$generator" == "" ]; then l_error "COMMON_POstgres_Schemahash requires \$1 to be the generator"; exit 1; fi
 
   l_debug 'wovdb_COMMON_Postgres_Schemahash'
-  R=$(wovdb_COMMON_Postgres_Schema | \
+  R=$(wovdb_${generator}_Postgres_Schema | \
     sed 's/^\(-- Dumped from database version\) \([0-9]*.[0-9]*.[0-9]*\)/\1 X.X.X/g' | \
     sed 's/^\(-- Dumped by pg_dump version\) \([0-9]*.[0-9]*.[0-9]*\)/\1 X.X.X/g' ) ; Re=$?
   if [ $Re -eq 0 ]; then

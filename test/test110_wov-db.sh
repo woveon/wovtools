@@ -144,7 +144,7 @@ tr_test 'create a WovDataBase to start' "wov-init-wovdb --context \"${USECLUSTER
     "wov-db --context ${USECLUSTER}-test1-${TESTME} Adb -c \"select 1\"" 0 -1
 
   tr_test 'Create and init Wov database' \
-    "wov-db --context ${USECLUSTER}-test1-${TESTME} Adb --wdb-init" 0 -1
+    "wov-db --context ${USECLUSTER}-test1-${TESTME} Adb --wdbinit" 0 -1
 
   tr_section '/wov-db-create-and-init'
 }
@@ -191,16 +191,16 @@ tr_tests_on
   tr_section "wov-db-helm"
 
   # this will detele and return when stateful set is gone, but pod will still exist and it retains its control on PVC
-  tr_run  "turn off" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --stop"
+  tr_run  "turn off" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --stopandpurgedata"
 
-  # deleting this now, will retain it until pod is stopped
-  tr_run  "delete any persistent data since passwords will be different now" \
-    "kubectl delete pvc --selector=release=\"adb-${TESTME}\""
-  while [ true ]; do
-    echo "...looking for pvc adb-${TESTME}"
-    kubectl get pvc --selector="release=adb-${TESTME}" 2>&1 | grep "^No resources found in" > /dev/null ; Re=$?
-    if [ $Re -eq 0 ]; then echo "...no more resources"; break; else echo "...waiting for pvc to delete"; sleep 1; fi
-  done
+#  # deleting this now, will retain it until pod is stopped
+#  tr_run  "delete any persistent data since passwords will be different now" \
+#    "kubectl delete pvc --selector=release=\"adb-${TESTME}\""
+#  while [ true ]; do
+#    echo "...looking for pvc adb-${TESTME}"
+#    kubectl get pvc --selector="release=adb-${TESTME}" 2>&1 | grep "^No resources found in" > /dev/null ; Re=$?
+#    if [ $Re -eq 0 ]; then echo "...no more resources"; break; else echo "...waiting for pvc to delete"; sleep 1; fi
+#  done
 
   tr_run  "show namespace" "wov-ns"
   tr_run  "show pv, which should be going away" "kubectl get pv"
@@ -216,6 +216,9 @@ tr_tests_on
   tr_test "test" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --test" 0 -1
 
   tr_test "sql command" "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb -c \"select 1\"" 0 -1
+
+  tr_test "shut down any external postgres server and delete data so no costs continue" \
+    "wov-db --context external:${USECLUSTER}-${PROJ}-${TESTME} Adb --stopandpurgedata" 0 -1
 
   tr_section "/wov-db-helm"
 }

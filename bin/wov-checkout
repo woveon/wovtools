@@ -134,6 +134,7 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--local-archives" ]; then
     shift
     WOV_LOCALARCHIVEBASE="${1}"
+    l_warn "Shouldn't this be 'sea' and not 'searchive'?"  # TODO
     WOV_SEADIR="${WOV_LOCALARCHIVEBASE}/searchive"
     WOV_DBADIR="${WOV_LOCALARCHIVEBASE}/dbarchive"
     WOV_DSADIR="${WOV_LOCALARCHIVEBASE}/dsarchive"

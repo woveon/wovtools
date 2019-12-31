@@ -28,7 +28,7 @@ ex. 'wov-db'.
 ex. 'wov-db --schema-diff 32'
  Diffs the current Wov database schema to version 32.
 
-ex. 'wov-db --wdb-init'
+ex. 'wov-db --wdbinit'
  For the current environment, initializes the Wov Database and creates if necessary.
 
 
@@ -54,10 +54,11 @@ COMMANDS:
  WovDB Commands
   --info          : reports about the wov database
   --start         : starts the server for the WovDB
-  --stop          : starts the server for the WovDB
+  --stop          : stops the server for the WovDB
   --wait          : wait for server to become available
   --test          : test that it is running
   --connect       : connects
+  --test-connect  : connects and exits
   --file          : runs a file
   --schema        : return the Wov DB's schema
   --schemahash    : return the Wov DB's schema hash
@@ -65,6 +66,7 @@ COMMANDS:
   --wdbver        : returns the current version
 
  WovDB Interal Commands
+  --stopandpurgedata : stops the server for the WovDB AND DELETES ALL PERSISTENT DATA FOR THE WobDB Server!
   --wbd-init      : initializes as a WovDB server ; called automatically in --start
   --wdb-create    : create the database instance in the database server ; called automatically in --start
 
@@ -75,6 +77,7 @@ COMMANDS:
  DataSets : non-production data management: stored in wovtools/ds with consts in wovtools/ds/const
   -lds               : list all DataSets
   --ds-schema/-ds X : with DataSet X, reloads the database schema (clearing existing data)
+                      --TODO: integrate with versioning
   --ds-clear/-dc  X : with DataSet X, clears data in the database
   --ds-data/-dd   X : with DataSet X, loads the database data
   --ds-reload/-dr X : with DataSet X, reloads the database data (clear and data)
@@ -155,6 +158,7 @@ WOVDBNAME=               # NOTE: badly named variable. it's the datbase name, or
 WOVDATABASES=
 DB_COMMAND=
 DB_OP="connect"
+DB_FUNCPARAMS=
 DB_FILE=
 DB_HEADEROPTIONS=
 DATASETFILES=( 'schema' 'data' 'clear' )
@@ -254,12 +258,12 @@ function doDBDataSetCommand()
     echo "ERROR: Unknown command for doDBDataSetCommand of '${2}'. Should be one of 'schema', 'clear', or 'data'."
     exit 1
   fi
-
-  R=$(PGPASSWORD=${DB_PASSWORD} psql --quiet -P "footer=off" -p ${DB_PORT} -h ${DB_HOST} -U ${DB_USERNAME} -d ${DB_DATABASE,,} -f "${WOV_BASEDIR}/wovtools/cache/ds/${1}_${2}.sql") ; Re=$?
+  
+  R=$(PGPASSWORD=${DB_password} psql --quiet -P "footer=off" -p ${DB_port} -h ${DB_endpoint} -U ${DB_username} -d ${DB_database,,} -f "${WOV_BASEDIR}/wovtools/cache/ds/${1}_${2}.sql") ; Re=$?
   if [ ${DOECHO} -ge 2 ]; then echo "${R}"; fi
   if [ ${DOECHO} -ge 1 ]; then echo "  ... loaded ${1}_${2}.sql"; fi
   if [ "$Re" != "0" ]; then
-    showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n  : have you created the datbase : 'wov-db --wdb-createinstance\n'"
+    showConnectionFailure "${DB_port}" "ERROR: could not connect\n  : have you created the datbase : 'wov-db --wdb-createinstance\n'"
     exit 1
   fi
 }
@@ -291,11 +295,12 @@ function doDatabaseConnectMessage()
   figlet "${WOV_NS}"
   printf "  DBServer : ${WOVDBNAME}\n"
   printf "  Origin   : ${WOV_ORIGIN}\n"
-  printf "  Type     : ${DB_TYPE}\n"
-  printf "  User     : ${DB_USERNAME}\n"
-  printf "  Host     : ${DB_HOST}\n"
-  printf "  Port     : ${DB_PORT}\n"
-  printf "  Database : ${DB_DATABASE}\n\n"
+  printf "  Type     : ${DB_type}\n"
+  printf "  Generator: ${DB_generator}\n"
+  printf "  User     : ${DB_username}\n"
+  printf "  Host     : ${DB_endpoint}\n"
+  printf "  Port     : ${DB_port}\n"
+  printf "  Database : ${DB_database}\n\n"
 }
 
 
@@ -305,7 +310,7 @@ function setAsAdmin()
 {
   DB_USERNAME="$(wov-env --var WOV_${WOVDBNAME}_admin_username)"
   DB_PASSWORD="$(wov-env --var WOV_${WOVDBNAME}_admin_password)"
-  if [ "${DB_USERNAME}" == "" ] || [ "${DB_PASSWORD}" == "" ]; then
+  if [ "${DB_username}" == "" ] || [ "${DB_password}" == "" ]; then
     printf "\n\nERROR: Setting as admin, but you have no admin configured. Ensure WOV_${WOVDBNAME}_admin_[username/password] is configured in your secrets.\n\n"
     exit 1
   fi
@@ -402,14 +407,14 @@ function doDBGetVer()
 {
   local retval=1
 
-  if [ "$DB_TYPE" != "postgres" ]; then >&2 echo "ERROR: only setup for postgres! Can not wov-db doDBGetVer to get version."; retval=2; fi
-  if [ "$DB_PORT" == "" ]; then >&2 echo "ERROR: no port specified."; retval=2; fi
-  if [ "$DB_USERNAME" == "" ]; then >&2 echo "ERROR: no username specified."; retval=2; fi
-  if [ "$DB_PASSWORD" == "" ]; then >&2 echo "ERROR: no password specified."; retval=2; fi
+  if [ "$DB_type" != "postgres" ]; then >&2 echo "ERROR: only setup for postgres! Can not wov-db doDBGetVer to get version."; retval=2; fi
+  if [ "$DB_port" == "" ]; then >&2 echo "ERROR: no port specified."; retval=2; fi
+  if [ "$DB_username" == "" ]; then >&2 echo "ERROR: no username specified."; retval=2; fi
+  if [ "$DB_password" == "" ]; then >&2 echo "ERROR: no password specified."; retval=2; fi
 
   if [ $retval -eq 2 ]; then exit 1; fi
 
-  R=$(PGPASSWORD=${DB_PASSWORD} psql -h localhost -d wovtools -p ${DB_PORT} -U ${DB_USERNAME} --tuples-only -c "SELECT * from logs order by id DESC limit 1;" 2> /dev/null ) ; Re=$?
+  R=$(PGPASSWORD=${DB_password} psql -h localhost -d wovtools -p ${DB_port} -U ${DB_username} --tuples-only -c "SELECT * from logs order by id DESC limit 1;" 2> /dev/null ) ; Re=$?
   if [ ${Re} == "0" ] ; then
     if [ "${R}" == "" ]; then echo "None"; 
     else 
@@ -417,9 +422,9 @@ function doDBGetVer()
     fi
     retval=0
   else
-    wov-bastion-connection -q --test-port "${DB_PORT}" ; Re=$?
+    wov-bastion-connection -q --test-port "${DB_port}" ; Re=$?
     if [ $Re -eq 1 ]; then
-      >&2 echo "ERROR: DB port ${DB_PORT} is not open. Is your bastion connection open?"
+      >&2 echo "ERROR: DB port ${DB_port} is not open. Is your bastion connection open?"
     elif [ $Re -eq 2 ]; then
       >&2 echo "ERROR: Failed testing bastion connection."
     else
@@ -438,7 +443,7 @@ function doDBGetLog()
 {
   local retval=1
 
-  R=$(PGPASSWORD=${DB_PASSWORD} psql -h localhost -d wovtools -p ${DB_PORT} -U ${DB_USERNAME} --tuples-only -c "SELECT * from logs order by id DESC LIMIT 1;" 2> /dev/null ) ; Re=$?
+  R=$(PGPASSWORD=${DB_password} psql -h localhost -d wovtools -p ${DB_port} -U ${DB_username} --tuples-only -c "SELECT * from logs order by id DESC LIMIT 1;" 2> /dev/null ) ; Re=$?
   if [ ${Re} == "0" ] ; then
     if [ "${R}" == "" ]; then echo "None"; 
     else echo $R; fi
@@ -462,13 +467,13 @@ function doInfo()
 
 DB Information
 ---------------------------------------------------------------------
-  AWS Server : $(doResName DB ${WOV_CLUSTER} ${DB_SUBHOST}):$([ "${DB_PORT}" != "" ] && echo ${DB_PORT} || echo "undefined")
-    Database : $(EUndef ${DB_DATABASE,,})  User: ${DB_USERNAME} PASSWORD: ${DB_PASSWORD}
-        Type : $(EUndef ${DB_TYPE})  Ver: $(EUndef ${DB_VERSION})  Storage: $(EUndef ${DB_INSTANCE_CLASS}), $(EUndef ${DB_INSTANCE_STORAGE}) GB, zones: $(EUndef "${AWS_REGION}${DB_INSTANCEAVAILABILITYZONE}") $(EUndef "${AWS_REGION}${DB_INSTANCEAVAILABILITYZONEALT}")
+  AWS Server : $(doResName DB ${WOV_CLUSTER} ${DB_subhost}):$([ "${DB_port}" != "" ] && echo ${DB_port} || echo "undefined")
+    Database : $(EUndef ${DB_database,,})  User: ${DB_username} PASSWORD: ${DB_password}
+        Type : $(EUndef ${DB_type}) Generator: ${DB_generator}  Ver: $(EUndef ${DB_version})  Storage: $(EUndef ${DB_instance_class}), $(EUndef ${DB_instance_storage}) GB, zones: $(EUndef "${AWS_REGION}${DB_instanceAvailabilityZone}") $(EUndef "${AWS_REGION}${DB_instanceAvailabilityZoneAlt}")
 
   WovTools Version: $(EUndef $(doDBGetVer))
 
-  ConnectString: 'PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USERNAME} -d ${DB_DATABASE,,}'
+  ConnectString: 'PGPASSWORD=${DB_password} psql -h ${DB_endpoint} -p ${DB_port} -U ${DB_username} -d ${DB_database,,}'
   
 EOF
   
@@ -684,6 +689,9 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--stop" ]; then
     DB_OP='stop'
     shift
+  elif [ "$1" == "--stopandpurgedata" ]; then
+    DB_OP='stopandpurgedata'
+    shift
   elif [ "$1" == "--wait" ]; then
     DB_OP='wait'
     shift
@@ -693,11 +701,15 @@ while [[ $1 =~ ^- ]]; do
   elif [ "$1" == "--connect" ]; then
     DB_OP='connect'
     shift
+  elif [ "$1" == "--test-connect" ]; then
+    DB_OP='connect'
+    DB_FUNCPARAMS='test'
+    shift
 
   # ---------------------------------------------------------------------
   # Wov Database
   # ---------------------------------------------------------------------
-  elif [ "$1" == "--wdb-init" ]; then
+  elif [ "$1" == "--wdbinit" ]; then
     DB_OP='init'
     shift
   elif [ "$1" == "--wdb-create" ]; then
@@ -774,6 +786,10 @@ while [[ $1 =~ ^- ]]; do
     shift
     DB_OP="version"
 
+  elif [ "$1" == "--wdblog" ]; then
+    shift
+    DB_OP="log"
+
   elif [ "$1" == "--ds-schema" ] || [ "$1" == "-ds" ]; then
     shift
     exitIfProd
@@ -823,7 +839,7 @@ while [[ $1 =~ ^- ]]; do
   # Wov Database
   # --------------------------------------------------------------------- 
 
-#  elif [ "$1" == "--wdb-init" ]; then
+#  elif [ "$1" == "--wdbinit" ]; then
 #    shift
 #    doWovDBInit
 #    WOV_DODEFAULTCOMMAND=0
@@ -835,10 +851,6 @@ while [[ $1 =~ ^- ]]; do
 
 
 
-  elif [ "$1" == "--wdb-log" ] || [ "$1" == "--wdb-logs" ]; then
-    shift
-    doDBGetLog
-    exit 0
 
   elif [ "$1" == "--wdb-edit" ]; then
     shift
@@ -910,7 +922,9 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
       if [ "${DB_OP}" == "start" ] ||
          [ "${DB_OP}" == "init" ] ||
          [ "${DB_OP}" == "version" ] ||
+         [ "${DB_OP}" == "log" ] ||
          [ "${DB_OP}" == "stop" ] ||
+         [ "${DB_OP}" == "stopandpurgedata" ] ||
          [ "${DB_OP}" == "wait" ] ||
          [ "${DB_OP}" == "create" ] ||
          [ "${DB_OP}" == "test" ] ||
@@ -923,7 +937,7 @@ if [ ${WOV_DODEFAULTCOMMAND} != 0 ]; then
         R=$(type -t "${funcname}") ; Re=$?
         if [ "$R" == "function" ] && [ $Re -eq 0 ]; then
           l_debug "Calling : '${funcname}'."
-          eval "${funcname}" ;  Re=$? # ; if [ $Re -eq 0 ]; then exit 0; else exit 1; fi
+          eval "${funcname} ${DB_FUNCPARAMS}" ;  Re=$? # ; if [ $Re -eq 0 ]; then exit 0; else exit 1; fi
           exit $Re
         else
           l_error "Unknown/Unhandled function '${funcname}'. Tell devs to add it. If you are a dev, stop being lazy."
@@ -1062,7 +1076,7 @@ fi
 #        if [ $? -ne 0 ]; then 
 #          l_error "Port is not open. Did you give the wrong port? Is your bastion connection open?"
 #        elif [ "$R" == "psql: FATAL:  database \"wovtools\" does not exist" ]; then
-#          printf "\n${R}\nERROR: did you init the database? 'wov-db ${WOVDBNAME} --wdb-init'\n"
+#          printf "\n${R}\nERROR: did you init the database? 'wov-db ${WOVDBNAME} --wdbinit'\n"
 #          exit 1
 #        else
 #          l_ "${R}\n"
@@ -1081,7 +1095,7 @@ fi
 #        if [ $? -ne 0 ]; then 
 #          l_error "Port is not open. Did you give the wrong port? Is your bastion connection open?"
 #        elif [ "$R" == "psql: FATAL:  database \"wovtools\" does not exist" ]; then
-#          printf "\n${R}\nERROR: did you init the database? 'wov-db ${WOVDBNAME} --wdb-init'\n"
+#          printf "\n${R}\nERROR: did you init the database? 'wov-db ${WOVDBNAME} --wdbinit'\n"
 #          exit 1
 #        else
 #          l_ "${R}\n"
@@ -1108,7 +1122,7 @@ fi
 #      #  l_error "Port is not open. Did you give the wrong port? Is your bastion connection open?"
 #
 #      if [ $Re -ne 0 ]; then
-#        showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n  : is the db inited? 'wov-db --wdb-init'\n  : is the db created? 'wov-db --wdb-createinstance'\n"
+#        showConnectionFailure "${DB_PORT}" "ERROR: could not connect\n  : is the db inited? 'wov-db --wdbinit'\n  : is the db created? 'wov-db --wdb-createinstance'\n"
 #        exit 1
 #      fi
 #    else

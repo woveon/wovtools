@@ -26,8 +26,8 @@ endif
 
 all:
 	@echo ""
-	@echo "  test    - "
 	@echo "  install - "
+	@echo "  test    - "
 	@echo "  wovbase - builds the Docker container"
 	@echo "  #vh      - builds the vh Docker container"
 	@echo ""

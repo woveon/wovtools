@@ -73,16 +73,19 @@ EOF
 function tcWipeWovDB()
 {
   local DB_name=$1
+  local USEORIGIN=$2
+
+  if [ "$USEORIGIN" == "" ]; then USEORIGIN="here"; fi
 
   tr_h1 "tcWipeWovDB"
 
   tr_comment "test wov-db Adb existence"
-  wov-db --context "${USECLUSTER}-${TEST}-${TESTME}"  ${DB_name} --test 2> /dev/null
+  wov-db --context "${USEORIGIN}:${USECLUSTER}-${TEST}-${TESTME}"  ${DB_name} --test 2> /dev/null
   if [ $? -eq 0 ]; then
-    tr_comment "...stopping WovDB ${DB_name} in '${USECLUSTER}-${TEST}-${TESTME}'"
-    wov-db --context "${USECLUSTER}-${TEST}-${TESTME}" ${DB_name} --stop
+    tr_comment "...stopping WovDB ${DB_name} in '${USEORIGIN}:${USECLUSTER}-${TEST}-${TESTME}'"
+    wov-db --context "${USEORIGIN}:${USECLUSTER}-${TEST}-${TESTME}" ${DB_name} --stop
   else
-    tr_comment "...no currently running Adb in '${USECLUSTER}-${TEST}-${TESTME}'"
+    tr_comment "...no currently running Adb in '${USEORIGIN}:${USECLUSTER}-${TEST}-${TESTME}'"
   fi
 
   rm -Rf wovtools/secrets/${DB_name}_*.json

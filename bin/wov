@@ -150,12 +150,43 @@ function doDisplayStatus()
     echo " Persistent Storage:"
     echo " ---"
     echo "  Data Sets : $(wov-db -lds)"
-    echo "  Databases :"
     DBS=( ${WOV_DATABASES} )
+    echo "  Databases : ${DBS[@]}"
     for k in ${DBS[@]}; do
       local dd=
       if [ -e "${WOV_BASEDIR}/wovtools/db/${k}.deltas" ]; then dd="no"; else dd="has"; fi
-      echo "    ${k} running(v$(wov-db ${k} --wdb-ver)) : ${dd} deltas"
+
+      local dbcont=1
+      local Re=
+      local dbv=
+      local dbstatus=
+      local dbconnect=
+
+      dbstatus=$(wov-db ${k} --test &> /dev/null ) ; Re=$?
+      if [ $Re -ne 0 ]; then echo "    ${k} - not running : ${dd} deltas"; dbcont=0; fi
+
+      if [ $dbcont -eq 1 ]; then
+        dbconnect=$(wov-db ${k} --test-connect &> /dev/null ) ; Re=$?
+        if [ $Re -ne 0 ]; then echo "    ${k} - running, failed to connect: ${dd} deltas"; dbcont=0; fi
+      fi
+
+      if [ $dbcont -eq 1 ]; then
+        dbv=$(wov-db ${k} --wdbver) ; Re=$?
+        if [ $Re -ne 0 ]; then echo "    ${k} - running, connectable, not WovDatabase inited: ${dd} deltas"; dbcont=0; fi
+      fi
+
+      if [ $dbcont -eq 1 ]; then
+        if [ "${dbv}" == "None" ]; then
+          printf "    %${#k}s - running, connectable, inited, not versioned: ${dd} deltas\n" $k
+          printf "    %${#k}s - run 'wov-db -lds' to show Data Sets and 'wov-db ${k} -ds-full X' to load DataSet X\n" ' '
+          dbcont=0
+        fi
+      fi
+
+      if [ $dbcont -eq 1 ]; then
+        echo "    ${k} - ok(v${dbv}) : ${dd} deltas"
+      fi
+
     done
   fi
 
