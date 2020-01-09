@@ -115,10 +115,19 @@ readInputStream(process.stdin, function(err, tmpl) {
               }[operator];
     });
 
+    h.registerHelper('JSON', function(_o) {
+      let retval = new h.SafeString('\''+JSON.stringify(_o)+'\''); // safe so no escape
+      // console.error('JSON: ', retval);
+      return retval;
+    });
+
 
     // This does 2 passes, so stage can be handled.
+    // console.error('tmpl: ', tmpl.toString());
+    // console.error('args: ', args.C.data.channels);
     let pass1template= h.compile(tmpl.toString(), {strict : true});
     let pass1result = pass1template(args);
+    // console.error('pass1result: ', pass1result);
     let pass2template= h.compile(pass1result, {strict : true});
     let pass2result = pass2template(args);
     return pass2result;
