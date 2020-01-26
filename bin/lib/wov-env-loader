@@ -120,6 +120,8 @@ function WOV_getClusterConfigDir()
 function getWovProjectVars() 
 {
   local Re=
+  local tmp=
+
   # --------------------------------------------------------------------- 
   # git vars
   # --------------------------------------------------------------------- 
@@ -131,7 +133,9 @@ function getWovProjectVars()
     ( IFS=$'\n'; echo "${R[*]}" )
     exit 1
   fi
-  export WOV_PVER="$(git rev-list --count $(git rev-parse --abbrev-ref HEAD))" ; Re=$?
+  tmp="$(git rev-list --count $(git rev-parse --abbrev-ref HEAD))" ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "repo is not a git repo or has uncommitted changes."; exit 1; fi
+  export WOV_PVER="${tmp}"
   WOV_SVER="$(cd ${WOV_BASEDIR}/wovtools/secrets && git rev-list --count $(git rev-parse --abbrev-ref HEAD 2> /dev/null) 2> /dev/null)" ; Re=$?
   if [ $Re -ne 0 ]; then l_error "wovtools/secrets is not a git repo or has uncommitted changes."; exit 1; fi
   export WOV_SVER
@@ -144,7 +148,9 @@ function getWovProjectVars()
   # --------------------------------------------------------------------- 
   # global config file and dir
   # --------------------------------------------------------------------- 
-  export WOV_ME=$(cat ${WOVCONFIGF} | jq -r '.me')
+  tmp=$(cat ${WOVCONFIGF} | jq -r '.me') ; Re=$?
+  if [ $Re -ne 0 ]; then l_error "parsing error in wovtools config file: ${WOVCONFIGF}"; exit 1; fi
+  export WOV_ME=${tmp}
   if [ "${WOV_ME}" == "null" ] ; then
     printf "\n\nERROR: You need to set 'me' in the ${WOV_CONFIGFILE_MINE} file.\n"
     printf "  - This is a unique code in this project, to represent yourself. Try using your initials (assuming they are unique to your team).\n\n"
